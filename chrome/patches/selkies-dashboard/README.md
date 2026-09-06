@@ -65,5 +65,6 @@ Image clipboard stays on input JSON / JSON frame. Cursor shape is the same JSON-
 | `0014-persist-mic-webcam-toggle.patch` | persist mic/webcam sidebar toggle + restart capture after refresh |
 | `0015-mic-webcam-restore-status-guard.patch` | ignore premature mic/webcam false status during restore |
 | `0016-stable-storage-prefix-restore-guard.patch` | stable localStorage prefix + restore guard without wiping prefs |
+| `0017-mic-webcam-user-off-beats-restore.patch` | user OFF beats delayed restore enable + late status=true |
 
 See also `docs/chrome.md`.

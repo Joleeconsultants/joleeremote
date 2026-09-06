@@ -12,3 +12,4 @@
 0014-persist-mic-webcam-toggle.patch
 0015-mic-webcam-restore-status-guard.patch
 0016-stable-storage-prefix-restore-guard.patch
+0017-mic-webcam-user-off-beats-restore.patch

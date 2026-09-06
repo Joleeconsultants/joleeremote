@@ -68,7 +68,7 @@ Recommended split:
 
 - **Operator tier** — full product UI and device pick (path or picker).
 - **End-user tier** — Access identity is enough to enter the session HTML origin. Worker maps identity → linked device(s) and mints only what they are allowed (or refuses).
-- **Single linked device** — if the user has exactly one device linked, the portal should take them straight into that session (mint + hop join) with **no device path** in the URL. Multiple linked devices may need a picker; operators keep an explicit device path or admin UI.
+- **Single linked device (default for now)** — portal takes them straight into that session (mint + hop join) with **no device path**. Assume one device per end-user/client until a multi-device case appears; a selection screen can wait until then. Operators may still use an explicit device path or admin UI.
 
 Bind shared state (D1/KV/service binding) so the hop or portal can police mint without relying on Access policy changes for every one-off user. The browser join URL stays hop-style: `/?session=<id>#token=<browserToken>` (no device id required in the hop URL).
 

@@ -69,7 +69,10 @@ export default {
     const party = await routePartykitRequest(request, env);
     if (party) return party;
 
-    if (env.ASSETS) return env.ASSETS.fetch(request);
+    if (env.ASSETS) {
+      const asset = await env.ASSETS.fetch(request);
+      return withMediaPermissions(asset, url.pathname);
+    }
     return new Response("Not found", { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
@@ -142,6 +145,24 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json; charset=utf-8" },
   });
+}
+
+/** Ensure HTML shells advertise mic/camera for the Selkies iframe allow list. */
+function withMediaPermissions(response: Response, pathname: string): Response {
+  const lower = pathname.toLowerCase();
+  const isHtml =
+    lower === "/" ||
+    lower.endsWith(".html") ||
+    (response.headers.get("content-type") || "").includes("text/html");
+  if (!isHtml) return response;
+  const headers = new Headers(response.headers);
+  if (!headers.has("Permissions-Policy")) {
+    headers.set(
+      "Permissions-Policy",
+      "microphone=(self), camera=(self), fullscreen=(self)",
+    );
+  }
+  return new Response(response.body, { status: response.status, headers });
 }
 
 function withCors(response: Response): Response {

@@ -47,7 +47,7 @@ let hop=params.get("hop")||"";
 let socket=null, videoDecoder=null, scaleLocally=true, antiAliasing=true;
 let audioEnabled=true, videoEnabled=true, audioSinkId="", playingAudio=null, audioUrl=null;
 let pendingAudioPayload=null, audioFailLogged=false;
-let microphoneStream=null, microphoneRecorder=null, webcamStream=null, webcamTimer=null;
+let microphoneStream=null, microphoneRecorder=null, microphoneGen=0, audioInputDeviceId="", webcamStream=null, webcamTimer=null;
 let frameCount=0, statsStartedAt=performance.now(), bytesSinceStats=0;
 let agentStats={};
 const printJobChunks=new Map();
@@ -190,30 +190,106 @@ function postPipelineStatus(pipeline,enabled,error){
   if(error) msg.error=error;
   if(window.parent!==window) window.parent.postMessage(msg,window.location.origin);
 }
-function stopMicrophone(error){
-  if(microphoneRecorder&&microphoneRecorder.state!=="inactive") try{microphoneRecorder.stop();}catch(e){}
+function clearMicrophoneResources(){
+  // Bump gen first so in-flight start/chunk/stop handlers ignore teardown.
+  microphoneGen++;
+  const rec=microphoneRecorder;
   microphoneRecorder=null;
+  if(rec&&rec.state!=="inactive") try{rec.stop();}catch(e){}
   if(microphoneStream) microphoneStream.getTracks().forEach((track)=>track.stop());
   microphoneStream=null;
+}
+function stopMicrophone(error){
+  clearMicrophoneResources();
   postPipelineStatus("microphone",false,error);
+}
+function createMicrophoneRecorder(stream){
+  if(typeof MediaRecorder==="undefined"){
+    const err=new Error("MediaRecorder unavailable");
+    err.name="NotSupportedError";
+    throw err;
+  }
+  // isTypeSupported can lie on some Windows Chrome builds; try each mime, then bare.
+  const preferred=["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus"];
+  let lastErr=null;
+  for(const mime of preferred){
+    if(!MediaRecorder.isTypeSupported(mime)) continue;
+    try{return new MediaRecorder(stream,{mimeType:mime});}catch(e){lastErr=e;}
+  }
+  try{return new MediaRecorder(stream);}catch(e){throw lastErr||e;}
 }
 async function setMicrophoneEnabled(enabled){
   if(!enabled){stopMicrophone();return;}
   if(microphoneRecorder&&microphoneRecorder.state==="recording") return;
+  // Drop leftover inactive recorder/stream without posting false (avoids UI flicker).
+  if(microphoneRecorder||microphoneStream) clearMicrophoneResources();
+  const gen=++microphoneGen;
   try{
-    microphoneStream=await navigator.mediaDevices.getUserMedia({audio:true});
-    const preferred=["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus"];
-    const mime=preferred.find((type)=>typeof MediaRecorder!=="undefined"&&MediaRecorder.isTypeSupported(type))||"";
-    microphoneRecorder=new MediaRecorder(microphoneStream,mime?{mimeType:mime}:undefined);
-    microphoneRecorder.addEventListener("dataavailable",async(event)=>{
-      if(!event.data||!event.data.size) return;
-      const data=bytesToBase64(new Uint8Array(await event.data.arrayBuffer()));
-      sendInput({t:"mic",mime:event.data.type||microphoneRecorder?.mimeType||"audio/webm",data});
+    const audio=audioInputDeviceId&&audioInputDeviceId!=="default"
+      ?{deviceId:{ideal:audioInputDeviceId}}
+      :true;
+    microphoneStream=await navigator.mediaDevices.getUserMedia({audio});
+    if(gen!==microphoneGen){
+      microphoneStream.getTracks().forEach((track)=>track.stop());
+      microphoneStream=null;
+      return;
+    }
+    let recorder=null;
+    let startErr=null;
+    try{
+      recorder=createMicrophoneRecorder(microphoneStream);
+      recorder.start(250);
+    }catch(e){
+      startErr=e;
+      // Preferred mime/start failed: tear down typed recorder and retry bare once.
+      try{if(recorder&&recorder.state!=="inactive") recorder.stop();}catch(ignore){}
+      try{
+        recorder=new MediaRecorder(microphoneStream);
+        recorder.start(250);
+        startErr=null;
+      }catch(e2){startErr=e2;recorder=null;}
+    }
+    if(startErr||!recorder) throw startErr||new Error("MediaRecorder start failed");
+    if(gen!==microphoneGen){
+      try{if(recorder.state!=="inactive") recorder.stop();}catch(e){}
+      if(microphoneStream){microphoneStream.getTracks().forEach((track)=>track.stop());microphoneStream=null;}
+      return;
+    }
+    microphoneRecorder=recorder;
+    recorder.addEventListener("dataavailable",async(event)=>{
+      if(gen!==microphoneGen||!event.data||!event.data.size) return;
+      try{
+        const data=bytesToBase64(new Uint8Array(await event.data.arrayBuffer()));
+        if(gen!==microphoneGen) return;
+        sendInput({t:"mic",mime:event.data.type||recorder.mimeType||"audio/webm",data});
+      }catch(chunkErr){
+        console.warn("[jolee] microphone chunk failed", chunkErr&&chunkErr.name, chunkErr&&chunkErr.message);
+      }
     });
-    microphoneRecorder.addEventListener("stop",()=>postPipelineStatus("microphone",false),{once:true});
-    microphoneRecorder.start(250);
+    recorder.addEventListener("error",(event)=>{
+      if(gen!==microphoneGen) return;
+      const err=event&&event.error;
+      console.warn("[jolee] microphone recorder error", err&&err.name, err&&err.message);
+      stopMicrophone((err&&err.name)||"MediaRecorderError");
+    });
+    // Unexpected stop (stream ended) — do not use an unconditional stop→false
+    // listener that can race a fresh start after stopMicrophone().
+    recorder.addEventListener("stop",()=>{
+      if(gen!==microphoneGen) return;
+      if(microphoneRecorder!==recorder) return;
+      microphoneRecorder=null;
+      if(microphoneStream){
+        microphoneStream.getTracks().forEach((track)=>track.stop());
+        microphoneStream=null;
+      }
+      postPipelineStatus("microphone",false,"RecorderStopped");
+    },{once:true});
     postPipelineStatus("microphone",true);
-  }catch(e){console.warn("[jolee] microphone start failed", e && e.name, e && e.message);stopMicrophone(e&&e.name);}
+  }catch(e){
+    if(gen!==microphoneGen) return;
+    console.warn("[jolee] microphone start failed", e && e.name, e && e.message);
+    stopMicrophone(e&&e.name);
+  }
 }
 function stopWebcam(error){
   if(webcamTimer!==null) clearInterval(webcamTimer);
@@ -636,6 +712,14 @@ window.addEventListener("message",(event)=>{
     case "audioDeviceSelected":
       if(typeof msg.context==="string"){
         sendInput({t:"audioDevice",context:msg.context,deviceId:msg.deviceId});
+      }
+      if(msg.context==="input"){
+        audioInputDeviceId=typeof msg.deviceId==="string"?msg.deviceId:"";
+        // Live swap: restart capture with the newly selected input if mic is on.
+        if(microphoneRecorder&&microphoneRecorder.state==="recording"){
+          clearMicrophoneResources();
+          setMicrophoneEnabled(true);
+        }
       }
       if(msg.context==="output"){
         audioSinkId=typeof msg.deviceId==="string"?msg.deviceId:"";

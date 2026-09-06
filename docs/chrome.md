@@ -80,8 +80,8 @@ Same-origin `window` messages from the parent shell to `iframe#jolee-core`.
 | `clipboardUpdateFromUI` | `{text}` | input envelope `{t:clipboard, text}` if connected |
 | `clipboardImageUpdate` | `{imageBlob}` | Blob/File from the sidebar; viewer base64-encodes and sends `{t:clipboard, mime, data}` if the envelope is ≤ 1 MiB |
 | `fileUpload` | `{file}` | base64-encode a parent-picked File and send `{t:"file", name, mime, data}` if the envelope is ≤ 1 MiB |
-| `pipelineControl` | `{pipeline, enabled}` | `video`: gate canvas paint + status; `audio`: mute/stop playback + status; `microphone`/`webcam`: capture start/stop (`{t:mic}` / `{t:webcam}`). Also input `{t:pipeline, pipeline, enabled}` |
-| `audioDeviceSelected` | `{context, deviceId}` | output uses `setSinkId` if present; also `sendInput({t:"audioDevice", context, deviceId})` |
+| `pipelineControl` | `{pipeline, enabled}` | `video`: gate canvas paint + status; `audio`: mute/stop playback + status; `microphone`/`webcam`: capture start/stop (`{t:mic}` / `{t:webcam}`). Mic tries preferred MediaRecorder mimes then bare recorder; failures post `pipelineStatusUpdate` with `error` (no silent no-op). Also input `{t:pipeline, pipeline, enabled}` |
+| `audioDeviceSelected` | `{context, deviceId}` | input applied to next/live mic `getUserMedia`; output uses `setSinkId` if present; also `sendInput({t:"audioDevice", context, deviceId})` |
 | `setManualResolution` | `{width, height}` | `sendInput({t:"resize", w, h})` |
 | `resetResolutionToWindow` | | `sendInput({t:"resize", w:round(innerWidth), h:round(innerHeight), reset:true})` |
 | `setUseCssScaling` | `{value: boolean}` | `sendInput({t:"cssScaling", value})` |

@@ -314,4 +314,76 @@ describe("session hop", () => {
     browser.close(1000, "done");
     agent.close(1000, "done");
   });
+
+  it("keeps the session alive on browser refresh so the same id can resume", async () => {
+    const minted = await mint();
+    const browser = await openWs(browserJoinPath(minted.sessionId, minted.browserToken));
+    const agent = await openWs(minted.joins.agent);
+    await waitUntilState(minted.sessionId, "paired");
+
+    const agentEnded = new Promise<{ code: number }>((resolve) => {
+      agent.addEventListener("close", (ev) => resolve({ code: ev.code }), { once: true });
+    });
+
+    browser.close(1000, "refresh");
+    await waitUntilState(minted.sessionId, "waiting");
+
+    const statusRes = await SELF.fetch("https://example.com/sessions/" + minted.sessionId);
+    expect(statusRes.status).toBe(200);
+    const status = (await statusRes.json()) as {
+      state?: string;
+      browserConnected?: boolean;
+      agentConnected?: boolean;
+    };
+    expect(status.state).toBe("waiting");
+    expect(status.browserConnected).toBe(false);
+    expect(status.agentConnected).toBe(true);
+
+    // Agent must stay up — teardown would close it with 4000.
+    await expect(
+      Promise.race([
+        agentEnded.then((c) => {
+          throw new Error("agent closed unexpectedly with " + c.code);
+        }),
+        new Promise((resolve) => setTimeout(resolve, 150)),
+      ]),
+    ).resolves.toBeUndefined();
+
+    const browser2 = await openWs(browserJoinPath(minted.sessionId, minted.browserToken));
+    await waitUntilState(minted.sessionId, "paired");
+
+    const frame = encodeEnvelope("frame", new Uint8Array([11, 22]));
+    agent.send(frame);
+    const toBrowser = decodeEnvelope(await waitBinary(browser2));
+    expect(toBrowser?.kind).toBe("frame");
+    expect(Array.from(toBrowser?.payload ?? [])).toEqual([11, 22]);
+
+    browser2.close(1000, "done");
+    agent.close(1000, "done");
+  });
+
+  it("tears down when the agent disconnects and rejects later browser joins", async () => {
+    const minted = await mint();
+    const browser = await openWs(browserJoinPath(minted.sessionId, minted.browserToken));
+    const agent = await openWs(minted.joins.agent);
+    await waitUntilState(minted.sessionId, "paired");
+
+    const browserEnded = new Promise<number>((resolve) => {
+      browser.addEventListener("close", (ev) => resolve(ev.code), { once: true });
+    });
+
+    agent.close(1000, "agent gone");
+    const browserCode = await browserEnded;
+    expect(browserCode).toBe(4000);
+
+    const statusRes = await SELF.fetch("https://example.com/sessions/" + minted.sessionId);
+    expect(statusRes.status).toBe(404);
+
+    const join = await SELF.fetch(
+      "https://example.com" + browserJoinPath(minted.sessionId, minted.browserToken),
+      { headers: { Upgrade: "websocket" } },
+    );
+    expect(join.status).toBe(404);
+    expect(join.webSocket).toBeNull();
+  });
 });

@@ -117,6 +117,7 @@ export async function startParentMicrophone() {
       }
     }
     if (gen !== micGen) {
+      console.warn("Dashboard: microphone start aborted after getUserMedia (superseded)");
       micStream.getTracks().forEach((track) => track.stop());
       micStream = null;
       return false;
@@ -180,11 +181,21 @@ export async function startParentMicrophone() {
     recorder.addEventListener("error", (event) => {
       if (gen !== micGen) return;
       const err = event && event.error;
-      console.error(
-        "Dashboard: microphone recorder error",
-        err && err.name,
-        err && err.message
-      );
+      const name = (err && err.name) || "Error";
+      const message = (err && err.message) || "MediaRecorder error";
+      console.error("Dashboard: microphone recorder error", name, message);
+      try {
+        window.postMessage(
+          {
+            type: "pipelineStatusUpdate",
+            microphone: false,
+            error: name + ": " + message,
+          },
+          window.location.origin
+        );
+      } catch (postErr) {
+        /* ignore */
+      }
       clearMicrophoneResources();
     });
     recorder.addEventListener(
@@ -202,8 +213,29 @@ export async function startParentMicrophone() {
     );
     return true;
   } catch (e) {
-    if (gen !== micGen) return false;
-    console.error("Dashboard: microphone start failed", e && e.name, e && e.message);
+    if (gen !== micGen) {
+      console.warn(
+        "Dashboard: microphone start aborted (superseded)",
+        e && e.name,
+        e && e.message
+      );
+      return false;
+    }
+    const name = (e && e.name) || "Error";
+    const message = (e && e.message) || String(e);
+    console.error("Dashboard: microphone start failed", name, message);
+    try {
+      window.postMessage(
+        {
+          type: "pipelineStatusUpdate",
+          microphone: false,
+          error: name + ": " + message,
+        },
+        window.location.origin
+      );
+    } catch (postErr) {
+      /* ignore */
+    }
     clearMicrophoneResources();
     return false;
   }

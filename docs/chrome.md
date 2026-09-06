@@ -38,6 +38,8 @@ Do **not** add dynamic gutter JS or large Sidebar rewrites for this. Prefer stoc
 
 ## Join
 
+**Tab titles (noVNC-style):** the shell sets `document.title` to `Jolee Remote - {device}` when `?device=` is present (else `Jolee Remote`). This is hop/shell glue, not Selkies static title or Sidebar patches.
+
 The one browser join URL opens Selkies chrome:
 
 ```
@@ -55,6 +57,7 @@ https://remote.example.com/?session=<id>&hop=<worker-host>#token=<browserToken>
 | `session` | session id from `POST /sessions` |
 | `token` | browser join token (prefer `#token=` fragment; `?token=` is fallback) |
 | `hop` | Worker host; default this origin. HTML can live on any host you control (docs placeholder: `remote.example.com`) |
+| `device` | optional display name for the browser tab (`Jolee Remote - {name}`); set by the host mint redirect (noVNC-style). Not a Selkies static/manifest title — shell/hop glue reads `?device=` in `public/index.html` and may strip it via `history.replaceState`. Do not put secrets here. |
 
 `joins.browser` from mint is a path on the hop Worker (`viewerPath`): `/?session=<id>&hop=<worker-host>#token=<browserToken>`. If HTML is on `https://remote.example.com` and the Worker is elsewhere, prefix that origin and keep `hop`. `public/index.html` copies search params except `token` onto the iframe query, and puts the token on the iframe hash (hash first, then query fallback). The hop core auto-connects. A host app can also postMessage `connect` / `disconnect` to the iframe.
 

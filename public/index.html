@@ -7,7 +7,7 @@
 <link rel="shortcut icon" href="/favicon.ico" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="stylesheet" href="/dashboard/dashboard.css?v=jo-ui-25" />
+<link rel="stylesheet" href="/dashboard/dashboard.css?v=jo-ui-26" />
 <style>
 html,body{margin:0;height:100%;background:#000;overflow:hidden}
 #jolee-core{position:fixed;inset:0;width:100%;height:100%;border:0;background:#000}
@@ -26,6 +26,11 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
   var hash = new URLSearchParams((location.hash || "").replace(/^#/, ""));
   var token = hash.get("token") || search.get("token") || "";
   var session = search.get("session") || "";
+  // noVNC-style tab title from hop/shell glue (?device=), not Selkies Sidebar.
+  var deviceName = (search.get("device") || "").trim();
+  if (deviceName) {
+    document.title = "Jolee Remote - " + deviceName;
+  }
   function readCookie(name) {
     try {
       var parts = document.cookie.split(";");
@@ -53,7 +58,19 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
     document.cookie = "jolee_browser_token=" + encodeURIComponent(token) + "; Path=/; SameSite=Lax" + secure;
   }
   search.delete("token");
+  search.delete("device");
   search.set("embedded", "1");
+  // Strip display-only ?device= (and query ?token=) from the address bar.
+  try {
+    var cleanSearch = new URLSearchParams(location.search);
+    cleanSearch.delete("token");
+    cleanSearch.delete("device");
+    var cleanQs = cleanSearch.toString();
+    var cleanUrl = location.pathname + (cleanQs ? "?" + cleanQs : "") + location.hash;
+    if (cleanUrl !== location.pathname + location.search + location.hash) {
+      history.replaceState(null, "", cleanUrl);
+    }
+  } catch (e) {}
   var src = "/viewer.html?" + search.toString();
   if (token) src += "#token=" + encodeURIComponent(token);
   var iframe = document.getElementById("jolee-core");
@@ -104,6 +121,6 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
   });
 })();
 </script>
-<script type="module" src="/dashboard/dashboard.js?v=jo-ui-25"></script>
+<script type="module" src="/dashboard/dashboard.js?v=jo-ui-26"></script>
 </body>
 </html>

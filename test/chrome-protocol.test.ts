@@ -19,6 +19,7 @@ describe("dashboard postMessage protocol", () => {
 
   it("handles audio playback and screen-size hops", () => {
     expect(classifyDashboardMessage({ type: "pipelineControl", pipeline: "audio", enabled: false })).toBe("pipelineControl");
+    expect(classifyDashboardMessage({ type: "micChunk", mime: "audio/webm", data: "YQ==" })).toBe("micChunk");
     expect(classifyDashboardMessage({ type: "audioDeviceSelected", context: "output", deviceId: "default" })).toBe("audioDeviceSelected");
     expect(classifyDashboardMessage({ type: "setManualResolution", width: 1920, height: 1080 })).toBe("setManualResolution");
     expect(classifyDashboardMessage({ type: "resetResolutionToWindow" })).toBe("resetResolutionToWindow");

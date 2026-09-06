@@ -70,6 +70,12 @@ import {
   writeInstalledApps,
 } from "../jolee-shims/app-commands.js";
 import { postToCore } from "../jolee-bridge.js";
+import {
+  startParentMicrophone,
+  stopParentMicrophone,
+  setParentMicDeviceId,
+  isParentMicrophoneActive,
+} from "../jolee-mic-capture.js";
 import { JOLEE_SERVER_SETTINGS } from "../jolee-settings.js";
 import * as yaml from "js-yaml";
 
@@ -2140,13 +2146,29 @@ function Sidebar() {
   const handleRateControlChange = (event) => {
     writeConditional(RATE_CONTROL_SPEC, event.target.value, setRateControlMode, { persist: true });
   };
-  const handleAudioInputChange = (event) => {
+  const handleAudioInputChange = async (event) => {
     const deviceId = event.target.value;
     setSelectedInputDeviceId(deviceId);
+    setParentMicDeviceId(deviceId);
     postToCore(
       { type: "audioDeviceSelected", context: "input", deviceId: deviceId },
       window.location.origin
     );
+    if (isMicrophoneActive || isParentMicrophoneActive()) {
+      stopParentMicrophone();
+      const ok = await startParentMicrophone();
+      if (!ok) {
+        setIsMicrophoneActive(false);
+        postToCore(
+          {
+            type: "pipelineControl",
+            pipeline: "microphone",
+            enabled: false,
+          },
+          window.location.origin
+        );
+      }
+    }
   };
   const handleAudioOutputChange = (event) => {
     const deviceId = event.target.value;
@@ -2330,25 +2352,31 @@ function Sidebar() {
   };
   const handleMicrophoneToggle = async () => {
     const enabled = !isMicrophoneActive;
-    setIsMicrophoneActive(enabled);
-    if (enabled) {
-      try {
-        const md = navigator["media"+"Devices"];
-        const gum = md && md["get"+"User"+"Media"];
-        if (!gum) throw new Error("unavailable");
-        const stream = await gum.call(md, { audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-      } catch (err) {
-        console.warn("Dashboard: microphone permission failed", err && err.name, err && err.message);
-        setIsMicrophoneActive(false);
-        return;
-      }
+    if (!enabled) {
+      stopParentMicrophone();
+      setIsMicrophoneActive(false);
+      postToCore(
+        {
+          type: "pipelineControl",
+          pipeline: "microphone",
+          enabled: false,
+        },
+        window.location.origin
+      );
+      return;
+    }
+    setIsMicrophoneActive(true);
+    setParentMicDeviceId(selectedInputDeviceId);
+    const ok = await startParentMicrophone();
+    if (!ok) {
+      setIsMicrophoneActive(false);
+      return;
     }
     postToCore(
       {
         type: "pipelineControl",
         pipeline: "microphone",
-        enabled,
+        enabled: true,
       },
       window.location.origin
     );
@@ -2693,8 +2721,7 @@ function Sidebar() {
         if (message.type === "pipelineStatusUpdate") {
           if (message.video !== undefined) setIsVideoActive(message.video);
           if (message.audio !== undefined) setIsAudioActive(message.audio);
-          if (message.microphone !== undefined)
-            setIsMicrophoneActive(message.microphone);
+          // Microphone UI is owned by parent capture (jolee-mic-capture); ignore core snaps.
           if (message.webcam !== undefined)
             setIsWebcamActive(message.webcam);
         } else if (message.type === "effectiveCursorState" && typeof message.value === "boolean") {
@@ -2717,8 +2744,7 @@ function Sidebar() {
         } else if (message.type === "sidebarButtonStatusUpdate") {
           if (message.video !== undefined) setIsVideoActive(message.video);
           if (message.audio !== undefined) setIsAudioActive(message.audio);
-          if (message.microphone !== undefined)
-            setIsMicrophoneActive(message.microphone);
+          // Microphone UI owned by parent capture; ignore core snaps.
           if (message.webcam !== undefined)
             setIsWebcamActive(message.webcam);
           if (message.gamepad !== undefined)

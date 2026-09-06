@@ -1,0 +1,111 @@
+From: Zach <zach@jolee.dev>
+Subject: Parent-window mic capture; viewer only forwards micChunk
+
+Move getUserMedia + MediaRecorder into the top-window dashboard on
+Enable Microphone (same user activation). Viewer forwards micChunk
+as {t:mic} and no longer captures in the iframe.
+
+---
+--- a/src/components/Sidebar.jsx	2026-09-06 17:50:40.911217346 +0000
++++ b/src/components/Sidebar.jsx	2026-09-06 17:50:40.911217346 +0000
+@@ -70,6 +70,12 @@
+   writeInstalledApps,
+ } from "../jolee-shims/app-commands.js";
+ import { postToCore } from "../jolee-bridge.js";
++import {
++  startParentMicrophone,
++  stopParentMicrophone,
++  setParentMicDeviceId,
++  isParentMicrophoneActive,
++} from "../jolee-mic-capture.js";
+ import { JOLEE_SERVER_SETTINGS } from "../jolee-settings.js";
+ import * as yaml from "js-yaml";
+ 
+@@ -2140,13 +2146,29 @@
+   const handleRateControlChange = (event) => {
+     writeConditional(RATE_CONTROL_SPEC, event.target.value, setRateControlMode, { persist: true });
+   };
+-  const handleAudioInputChange = (event) => {
++  const handleAudioInputChange = async (event) => {
+     const deviceId = event.target.value;
+     setSelectedInputDeviceId(deviceId);
++    setParentMicDeviceId(deviceId);
+     postToCore(
+       { type: "audioDeviceSelected", context: "input", deviceId: deviceId },
+       window.location.origin
+     );
++    if (isMicrophoneActive || isParentMicrophoneActive()) {
++      stopParentMicrophone();
++      const ok = await startParentMicrophone();
++      if (!ok) {
++        setIsMicrophoneActive(false);
++        postToCore(
++          {
++            type: "pipelineControl",
++            pipeline: "microphone",
++            enabled: false,
++          },
++          window.location.origin
++        );
++      }
++    }
+   };
+   const handleAudioOutputChange = (event) => {
+     const deviceId = event.target.value;
+@@ -2328,14 +2350,33 @@
+       window.location.origin
+     );
+   };
+-  const handleMicrophoneToggle = () => {
++  const handleMicrophoneToggle = async () => {
+     const enabled = !isMicrophoneActive;
+-    setIsMicrophoneActive(enabled);
++    if (!enabled) {
++      stopParentMicrophone();
++      setIsMicrophoneActive(false);
++      postToCore(
++        {
++          type: "pipelineControl",
++          pipeline: "microphone",
++          enabled: false,
++        },
++        window.location.origin
++      );
++      return;
++    }
++    setIsMicrophoneActive(true);
++    setParentMicDeviceId(selectedInputDeviceId);
++    const ok = await startParentMicrophone();
++    if (!ok) {
++      setIsMicrophoneActive(false);
++      return;
++    }
+     postToCore(
+       {
+         type: "pipelineControl",
+         pipeline: "microphone",
+-        enabled,
++        enabled: true,
+       },
+       window.location.origin
+     );
+@@ -2680,8 +2721,7 @@
+         if (message.type === "pipelineStatusUpdate") {
+           if (message.video !== undefined) setIsVideoActive(message.video);
+           if (message.audio !== undefined) setIsAudioActive(message.audio);
+-          if (message.microphone !== undefined)
+-            setIsMicrophoneActive(message.microphone);
++          // Microphone UI is owned by parent capture (jolee-mic-capture); ignore core snaps.
+           if (message.webcam !== undefined)
+             setIsWebcamActive(message.webcam);
+         } else if (message.type === "effectiveCursorState" && typeof message.value === "boolean") {
+@@ -2704,8 +2744,7 @@
+         } else if (message.type === "sidebarButtonStatusUpdate") {
+           if (message.video !== undefined) setIsVideoActive(message.video);
+           if (message.audio !== undefined) setIsAudioActive(message.audio);
+-          if (message.microphone !== undefined)
+-            setIsMicrophoneActive(message.microphone);
++          // Microphone UI owned by parent capture; ignore core snaps.
+           if (message.webcam !== undefined)
+             setIsWebcamActive(message.webcam);
+           if (message.gamepad !== undefined)

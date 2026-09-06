@@ -47,7 +47,7 @@ let hop=params.get("hop")||"";
 let socket=null, videoDecoder=null, scaleLocally=true, antiAliasing=true;
 let audioEnabled=true, videoEnabled=true, audioSinkId="", playingAudio=null, audioUrl=null;
 let pendingAudioPayload=null, audioFailLogged=false;
-let microphoneStream=null, microphoneRecorder=null, microphoneGen=0, audioInputDeviceId="", webcamStream=null, webcamTimer=null;
+let microphoneStream=null, microphoneRecorder=null, microphoneGen=0, microphoneForwarding=false, audioInputDeviceId="", webcamStream=null, webcamTimer=null;
 let frameCount=0, statsStartedAt=performance.now(), bytesSinceStats=0;
 let agentStats={};
 const printJobChunks=new Map();
@@ -217,6 +217,17 @@ function createMicrophoneRecorder(stream){
     try{return new MediaRecorder(stream,{mimeType:mime});}catch(e){lastErr=e;}
   }
   try{return new MediaRecorder(stream);}catch(e){throw lastErr||e;}
+}
+function setMicrophoneForwarding(enabled){
+  // Parent dashboard owns getUserMedia + MediaRecorder; viewer only forwards micChunk.
+  if(!enabled){
+    microphoneForwarding=false;
+    clearMicrophoneResources();
+    return;
+  }
+  microphoneForwarding=true;
+  // Drop any leftover iframe capture without snapping parent UI.
+  if(microphoneRecorder||microphoneStream) clearMicrophoneResources();
 }
 async function setMicrophoneEnabled(enabled){
   if(!enabled){stopMicrophone();return;}
@@ -712,10 +723,15 @@ window.addEventListener("message",(event)=>{
       useBrowserCursors=!!msg.value;
       applyCursorMode();
       break;
+    case "micChunk":
+      if(microphoneForwarding && typeof msg.mime==="string" && typeof msg.data==="string" && msg.data){
+        sendInput({t:"mic",mime:msg.mime,data:msg.data});
+      }
+      break;
     case "pipelineControl":
       if(msg.pipeline==="video") setVideoEnabled(!!msg.enabled);
       if(msg.pipeline==="audio") setAudioEnabled(!!msg.enabled);
-      if(msg.pipeline==="microphone") setMicrophoneEnabled(!!msg.enabled);
+      if(msg.pipeline==="microphone") setMicrophoneForwarding(!!msg.enabled);
       if(msg.pipeline==="webcam") setWebcamEnabled(!!msg.enabled);
       if(typeof msg.pipeline==="string") sendInput({t:"pipeline",pipeline:msg.pipeline,enabled:!!msg.enabled});
       break;
@@ -725,11 +741,7 @@ window.addEventListener("message",(event)=>{
       }
       if(msg.context==="input"){
         audioInputDeviceId=typeof msg.deviceId==="string"?msg.deviceId:"";
-        // Live swap: restart capture with the newly selected input if mic is on.
-        if(microphoneRecorder&&microphoneRecorder.state==="recording"){
-          clearMicrophoneResources();
-          setMicrophoneEnabled(true);
-        }
+        // Parent owns live mic capture + device swap; viewer only tracks the id.
       }
       if(msg.context==="output"){
         audioSinkId=typeof msg.deviceId==="string"?msg.deviceId:"";

@@ -9,6 +9,7 @@ export const HANDLED_DASHBOARD_TYPES = [
   "setAntiAliasing",
   "setUseBrowserCursors",
   "pipelineControl",
+  "micChunk",
   "audioDeviceSelected",
   "setManualResolution",
   "resetResolutionToWindow",
@@ -42,6 +43,7 @@ export type DashboardAction =
   | "setAntiAliasing"
   | "setUseBrowserCursors"
   | "pipelineControl"
+  | "micChunk"
   | "audioDeviceSelected"
   | "setManualResolution"
   | "resetResolutionToWindow"

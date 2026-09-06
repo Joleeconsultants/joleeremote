@@ -63,5 +63,6 @@ Image clipboard stays on input JSON / JSON frame. Cursor shape is the same JSON-
 | `0012-jolee-theme-import.patch` | load Jolee blue brand tokens after Overlay.css |
 | `0013-persist-audio-devices-fab-positions.patch` | persist mic/speaker device ids + keyboard/gamepad FAB positions |
 | `0014-persist-mic-webcam-toggle.patch` | persist mic/webcam sidebar toggle + restart capture after refresh |
+| `0015-mic-webcam-restore-status-guard.patch` | ignore premature mic/webcam false status during restore |
 
 See also `docs/chrome.md`.

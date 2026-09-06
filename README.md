@@ -118,7 +118,7 @@ Session HTML is served from your chosen origin (placeholder in docs: `https://re
 - **Agent join** (any WebSocket client; PartySocket not required): prefer first text `{"type":"join","token":"..."}` or `Authorization: Bearer` on the upgrade. Query `?token=` remains fallback (`joins.agent`: `wss://<worker-host>/sessions/<id>/agent?token=`).
 - PartySocket `/parties/session/:id?role=browser&token=...` is how the canvas hole (`/viewer.html`) opens the browser socket — not a second product join.
 
-Auth in this repo is the mint secret plus mint-time join tokens. No tenants, device directory, portal, or fleet agent. Pairing is 1:1; N browsers is a later consumer need.
+Auth in this repo is the mint secret plus mint-time join tokens. No tenants, device directory, portal, or fleet agent. Pairing is 1:1; N browsers is a later consumer need. For tiered product access (Access for identity, Workers for ACL/mint), see [docs/architecture.md](docs/architecture.md#host-authorization-tiers).
 
 ## Building the agent
 

@@ -51,3 +51,23 @@ flowchart TB
   Worker --> DO[Session Durable Object MIT]
   Agent[Outbound agent] --> DO
 ```
+
+## Host authorization (tiers)
+
+This hop does **not** implement tenants, Access policies, or device ACLs. Production policing belongs in **your** Workers.
+
+Recommended split:
+
+| Layer | Role |
+| --- | --- |
+| Cloudflare Access + IdP (optional) | Identity only — prove who signed in. Prefer a wide / multitenant allow; do **not** use Access allow-lists as the real ACL. |
+| Portal / control Worker | Users, devices, one-off grants, tier rules (e.g. operator full product vs end-user assigned device only). |
+| Hop Worker (this repo) | Mint, pair, forward, TTL. Accept mint only with `MINT_SECRET` (or a service binding from the portal). Issue join tokens; do not interpret Access policies. |
+
+**Tiered access** is enforced when your portal decides whether to mint and for which device — before `POST /sessions`. Examples:
+
+- **Operator tier** — full product UI and device pick.
+- **End-user tier** — Access identity is enough to enter; Worker maps email → assigned device and mints only that session (or refuses).
+
+Bind shared state (D1/KV/service binding) so the hop or portal can police mint without relying on Access policy changes for every one-off user. The browser join URL stays hop-style: `/?session=<id>#token=<browserToken>` (no device id required in the hop URL).
+

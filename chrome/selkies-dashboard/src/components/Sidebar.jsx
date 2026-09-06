@@ -50,7 +50,7 @@
  * @module
  */
 import { useState, useEffect, useCallback, useId, useMemo, useRef } from "react";
-import { displayLabel, decodableEncoders, canDecodeFullColor, getRoutePrefix, getStorageAppName, getLegacyStorageAppName, isMobileClient } from "../jolee-shims/util.js";
+import { displayLabel, decodableEncoders, canDecodeFullColor, getRoutePrefix, getStorageAppName, isMobileClient } from "../jolee-shims/util.js";
 import { sessionAuthHeaders, withSessionToken } from "../jolee-shims/session-token.js";
 import { resolveSpec, isSettingPinned, HIDPI_SPEC, RATE_CONTROL_SPEC,
   USE_BROWSER_CURSORS_SPEC, VIDEO_FULLCOLOR_SPEC, VIDEO_STREAMING_MODE_SPEC,
@@ -820,9 +820,8 @@ function AppsModal({ isOpen, onClose, t, commandsAvailable, commandsKnown,
 }
 
 const storageAppName = getStorageAppName();
-const legacyStorageAppName = getLegacyStorageAppName();
 /**
- * The localStorage key for a setting: stable product prefix, plus the
+ * The localStorage key for a setting: the session prefix, plus the
  * `_display2` suffix for per-display settings on the secondary display.
  * @param {string} key
  * @returns {string}
@@ -834,54 +833,9 @@ const getPrefixedKey = (key) => {
   }
   return prefixedKey;
 };
-/**
- * One-shot move of a legacy origin+path key onto the stable product key so
- * prefs survive across refreshes after the prefix stabilization.
- */
-const migrateLegacyStorageKey = (key) => {
-  if (legacyStorageAppName === storageAppName) return;
-  const modern = getPrefixedKey(key);
-  try {
-    if (localStorage.getItem(modern) != null) return;
-    const legacyKey =
-      displayId === "display2" && PER_DISPLAY_SETTINGS.includes(key)
-        ? `${legacyStorageAppName}_${key}_display2`
-        : `${legacyStorageAppName}_${key}`;
-    const legacyVal = localStorage.getItem(legacyKey);
-    if (legacyVal == null) return;
-    localStorage.setItem(modern, legacyVal);
-    localStorage.removeItem(legacyKey);
-  } catch {
-    // Persistence is best-effort.
-  }
-};
 
 /** Reads a setting's stored value under its prefixed key. */
-const readStored = (key) => {
-  migrateLegacyStorageKey(key);
-  return localStorage.getItem(getPrefixedKey(key));
-};
-// Warm-migrate common chrome prefs (incl. mic/cam + device ids) before React state inits.
-[
-  "microphone_enabled",
-  "webcam_enabled",
-  "audio_input_device_id",
-  "audio_output_device_id",
-  "keyboardButtonPosition",
-  "sidebarToggleTopPct",
-  "encoder",
-  "framerate",
-  "video_bitrate",
-  "audio_bitrate",
-  "scaleLocallyManual",
-  "antiAliasingEnabled",
-  "enable_binary_clipboard",
-  "manual_width",
-  "manual_height",
-  "scaling_dpi",
-  "stream_mode",
-  "webcam_encoder",
-].forEach(migrateLegacyStorageKey);
+const readStored = (key) => localStorage.getItem(getPrefixedKey(key));
 
 /**
  * Marker written beside a value the user chose explicitly. The cores persist
@@ -1438,40 +1392,8 @@ function Sidebar() {
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [isVideoActive, setIsVideoActive] = useState(true);
   const [isAudioActive, setIsAudioActive] = useState(true);
-  const [isMicrophoneActive, setIsMicrophoneActive] = useState(() => {
-    try {
-      const v = localStorage.getItem(getPrefixedKey("microphone_enabled"));
-      return v === "1" || v === "true";
-    } catch {
-      return false;
-    }
-  });
-  const [isWebcamActive, setIsWebcamActive] = useState(() => {
-    try {
-      const v = localStorage.getItem(getPrefixedKey("webcam_enabled"));
-      return v === "1" || v === "true";
-    } catch {
-      return false;
-    }
-  });
-  /**
-   * While true, ignore premature pipeline/sidebar false status for that
-   * device so localStorage-initialized UI is not wiped before restore's
-   * pipelineControl enable lands.
-   */
-  const mediaRestoreGuardRef = useRef({ mic: false, cam: false });
-  /**
-   * Last explicit user mic/webcam intent. Delayed restore / late status=true
-   * must not re-enable after the user toggled OFF (storage false + intent false).
-   * null means no toggle yet this session — fall back to localStorage.
-   */
-  const userMediaIntentRef = useRef({ mic: null, cam: null });
-  /**
-   * True after restore has posted pipelineControl enable for that device.
-   * Premature false before this is ignored; the next false after is definitive
-   * (permission deny / getUserMedia fail) and clears the guard immediately.
-   */
-  const mediaRestorePostedRef = useRef({ mic: false, cam: false });
+  const [isMicrophoneActive, setIsMicrophoneActive] = useState(false);
+  const [isWebcamActive, setIsWebcamActive] = useState(false);
   const [isGamepadEnabled, setIsGamepadEnabled] = useState(true);
   const [dashboardClipboardContent, setDashboardClipboardContent] =
     useState("");
@@ -1484,20 +1406,9 @@ function Sidebar() {
     useState(false);
   const [audioInputDevices, setAudioInputDevices] = useState([]);
   const [audioOutputDevices, setAudioOutputDevices] = useState([]);
-  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState(() => {
-    try {
-      return localStorage.getItem(getPrefixedKey("audio_input_device_id")) || "default";
-    } catch {
-      return "default";
-    }
-  });
-  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState(() => {
-    try {
-      return localStorage.getItem(getPrefixedKey("audio_output_device_id")) || "default";
-    } catch {
-      return "default";
-    }
-  });
+  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState("default");
+  const [selectedOutputDeviceId, setSelectedOutputDeviceId] =
+    useState("default");
   const [isOutputSelectionSupported, setIsOutputSelectionSupported] =
     useState(false);
   const [audioDeviceError, setAudioDeviceError] = useState(null);
@@ -1521,20 +1432,7 @@ function Sidebar() {
   const notificationTimeouts = useRef({});
   const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
   const [isAppsModalOpen, setIsAppsModalOpen] = useState(false);
-  const [keyboardButtonPosition, setKeyboardButtonPosition] = useState(() => {
-    try {
-      const raw = localStorage.getItem(getPrefixedKey("keyboardButtonPosition"));
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Number.isFinite(parsed?.bottom) && Number.isFinite(parsed?.right)) {
-          return { bottom: parsed.bottom, right: parsed.right };
-        }
-      }
-    } catch {
-      // ignore corrupt / blocked storage
-    }
-    return { bottom: 20, right: 20 };
-  });
+  const [keyboardButtonPosition, setKeyboardButtonPosition] = useState({ bottom: 20, right: 20 });
   const dragInfo = useRef({
     isDragging: false,
     hasDragged: false,
@@ -1543,8 +1441,6 @@ function Sidebar() {
     startY: 0,
     initialBottom: 0,
     initialRight: 0,
-    lastBottom: 20,
-    lastRight: 20,
   });
   /**
    * Toggle handle position as a percentage of the viewport height, so a
@@ -1841,8 +1737,6 @@ function Sidebar() {
     dragInfo.current.startY = e.clientY;
     dragInfo.current.initialBottom = keyboardButtonPosition.bottom;
     dragInfo.current.initialRight = keyboardButtonPosition.right;
-    dragInfo.current.lastBottom = keyboardButtonPosition.bottom;
-    dragInfo.current.lastRight = keyboardButtonPosition.right;
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
@@ -1857,13 +1751,10 @@ function Sidebar() {
     }
 
     if (dragInfo.current.hasDragged) {
-      const next = {
+      setKeyboardButtonPosition({
         bottom: dragInfo.current.initialBottom - dy,
         right: dragInfo.current.initialRight - dx,
-      };
-      dragInfo.current.lastBottom = next.bottom;
-      dragInfo.current.lastRight = next.right;
-      setKeyboardButtonPosition(next);
+      });
     }
   };
 
@@ -1871,23 +1762,8 @@ function Sidebar() {
     if (e.currentTarget.hasPointerCapture(dragInfo.current.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
-    const didDrag = dragInfo.current.hasDragged;
-    const finalPos = {
-      bottom: dragInfo.current.lastBottom,
-      right: dragInfo.current.lastRight,
-    };
     dragInfo.current.isDragging = false;
     dragInfo.current.pointerId = null;
-    if (didDrag) {
-      try {
-        localStorage.setItem(
-          getPrefixedKey("keyboardButtonPosition"),
-          JSON.stringify(finalPos)
-        );
-      } catch {
-        // A blocked/full storage write only loses persistence for this drag.
-      }
-    }
   };
 
   const onKeyboardButtonClick = (e) => {
@@ -2068,36 +1944,6 @@ function Sidebar() {
       console.log(
         `Dashboard: Populated ${inputs.length} inputs, ${outputs.length} outputs.`
       );
-      // Re-apply last-picked devices once the list is known so the hop core
-      // gets audioDeviceSelected with an id that still exists on this machine.
-      try {
-        const storedInput =
-          localStorage.getItem(getPrefixedKey("audio_input_device_id")) || "default";
-        const storedOutput =
-          localStorage.getItem(getPrefixedKey("audio_output_device_id")) || "default";
-        const inputOk =
-          storedInput === "default" ||
-          inputs.some((d) => d.deviceId === storedInput);
-        const outputOk =
-          storedOutput === "default" ||
-          outputs.some((d) => d.deviceId === storedOutput);
-        const inputId = inputOk ? storedInput : "default";
-        const outputId = outputOk ? storedOutput : "default";
-        setSelectedInputDeviceId(inputId);
-        postToCore(
-          { type: "audioDeviceSelected", context: "input", deviceId: inputId },
-          window.location.origin
-        );
-        if (supportsSinkId) {
-          setSelectedOutputDeviceId(outputId);
-          postToCore(
-            { type: "audioDeviceSelected", context: "output", deviceId: outputId },
-            window.location.origin
-          );
-        }
-      } catch {
-        // Storage or post failure must not block the device list UI.
-      }
     } catch (err) {
       console.error(
         "Dashboard: Error getting media devices or permissions:",
@@ -2286,11 +2132,6 @@ function Sidebar() {
   const handleAudioInputChange = (event) => {
     const deviceId = event.target.value;
     setSelectedInputDeviceId(deviceId);
-    try {
-      localStorage.setItem(getPrefixedKey("audio_input_device_id"), deviceId);
-    } catch {
-      // Persistence is best-effort.
-    }
     postToCore(
       { type: "audioDeviceSelected", context: "input", deviceId: deviceId },
       window.location.origin
@@ -2299,11 +2140,6 @@ function Sidebar() {
   const handleAudioOutputChange = (event) => {
     const deviceId = event.target.value;
     setSelectedOutputDeviceId(deviceId);
-    try {
-      localStorage.setItem(getPrefixedKey("audio_output_device_id"), deviceId);
-    } catch {
-      // Persistence is best-effort.
-    }
     postToCore(
       { type: "audioDeviceSelected", context: "output", deviceId: deviceId },
       window.location.origin
@@ -2483,18 +2319,7 @@ function Sidebar() {
   };
   const handleMicrophoneToggle = () => {
     const enabled = !isMicrophoneActive;
-    mediaRestoreGuardRef.current.mic = false;
-    mediaRestorePostedRef.current.mic = false;
-    userMediaIntentRef.current.mic = enabled;
     setIsMicrophoneActive(enabled);
-    try {
-      localStorage.setItem(
-        getPrefixedKey("microphone_enabled"),
-        enabled ? "true" : "false"
-      );
-    } catch {
-      // Persistence is best-effort.
-    }
     postToCore(
       {
         type: "pipelineControl",
@@ -2506,18 +2331,7 @@ function Sidebar() {
   };
   const handleWebcamToggle = () => {
     const enabled = !isWebcamActive;
-    mediaRestoreGuardRef.current.cam = false;
-    mediaRestorePostedRef.current.cam = false;
-    userMediaIntentRef.current.cam = enabled;
     setIsWebcamActive(enabled);
-    try {
-      localStorage.setItem(
-        getPrefixedKey("webcam_enabled"),
-        enabled ? "true" : "false"
-      );
-    } catch {
-      // Persistence is best-effort.
-    }
     postToCore(
       {
         type: "pipelineControl",
@@ -2846,147 +2660,6 @@ function Sidebar() {
     return () => clearInterval(intervalId);
   }, [isOpen]);
 
-  /**
-   * After refresh, reinstate mic/webcam capture in the hop core when the
-   * iframe is ready. UI highlight from localStorage alone is not enough —
-   * pipelineControl must restart getUserMedia.
-   *
-   * mediaRestoreGuardRef ignores premature false until restore posts enable
-   * (mediaRestorePostedRef). After that, the next false is definitive —
-   * clear guard and dim UI immediately (permission deny). A short ~2s
-   * fallback still accepts reality if no status arrives. Storage wanted=true
-   * is kept so a later permission grant + refresh retries. Delayed
-   * postRestore timers re-read localStorage + userMediaIntentRef so a user
-   * OFF during the 50–2000ms window cannot be overridden by enable.
-   */
-  useEffect(() => {
-    let cancelled = false;
-    let restored = false;
-    let micWanted = false;
-    let camWanted = false;
-    try {
-      const mic = localStorage.getItem(getPrefixedKey("microphone_enabled"));
-      const cam = localStorage.getItem(getPrefixedKey("webcam_enabled"));
-      micWanted = mic === "1" || mic === "true";
-      camWanted = cam === "1" || cam === "true";
-    } catch {
-      return undefined;
-    }
-    if (!micWanted && !camWanted) return undefined;
-
-    if (micWanted) {
-      mediaRestoreGuardRef.current.mic = true;
-      mediaRestorePostedRef.current.mic = false;
-    }
-    if (camWanted) {
-      mediaRestoreGuardRef.current.cam = true;
-      mediaRestorePostedRef.current.cam = false;
-    }
-
-    const acceptReality = () => {
-      if (cancelled) return;
-      const guard = mediaRestoreGuardRef.current;
-      const posted = mediaRestorePostedRef.current;
-      // Drop the guard and dim the buttons, but keep localStorage wanted=true.
-      // getUserMedia often needs a gesture / permission prompt and can fail on
-      // cold restore; wiping storage made refresh look randomly forgetful.
-      if (guard.mic) {
-        guard.mic = false;
-        posted.mic = false;
-        setIsMicrophoneActive(false);
-      }
-      if (guard.cam) {
-        guard.cam = false;
-        posted.cam = false;
-        setIsWebcamActive(false);
-      }
-    };
-
-    let realityTimer = null;
-    const armRealityTimeout = () => {
-      if (realityTimer != null) return;
-      // Short fallback after enable posts; post-restore false clears sooner.
-      realityTimer = window.setTimeout(acceptReality, 2000);
-    };
-
-    const stillWantsMedia = (kind, storageKey) => {
-      if (userMediaIntentRef.current[kind] === false) return false;
-      try {
-        const v = localStorage.getItem(getPrefixedKey(storageKey));
-        return v === "1" || v === "true";
-      } catch {
-        return false;
-      }
-    };
-
-    const postRestore = () => {
-      if (cancelled || restored) return false;
-      const iframe = document.getElementById("jolee-core");
-      if (!iframe || !iframe.contentWindow) return false;
-      // Avoid posting into about:blank before viewer.html has loaded.
-      try {
-        const href = iframe.contentWindow.location.href;
-        if (!href || href === "about:blank") return false;
-      } catch {
-        // Cross-origin during navigation — treat as not ready.
-        return false;
-      }
-      // Re-check at post time — mount-time flags go stale if the user toggled OFF.
-      const micStill = stillWantsMedia("mic", "microphone_enabled");
-      const camStill = stillWantsMedia("cam", "webcam_enabled");
-      if (!micStill) mediaRestoreGuardRef.current.mic = false;
-      if (!camStill) mediaRestoreGuardRef.current.cam = false;
-      if (!micStill && !camStill) {
-        restored = true;
-        return true;
-      }
-      if (micStill) {
-        postToCore(
-          { type: "pipelineControl", pipeline: "microphone", enabled: true },
-          window.location.origin
-        );
-        mediaRestorePostedRef.current.mic = true;
-      }
-      if (camStill) {
-        postToCore(
-          { type: "pipelineControl", pipeline: "webcam", enabled: true },
-          window.location.origin
-        );
-        mediaRestorePostedRef.current.cam = true;
-      }
-      restored = true;
-      armRealityTimeout();
-      return true;
-    };
-
-    if (postRestore()) {
-      return () => {
-        cancelled = true;
-        if (realityTimer != null) window.clearTimeout(realityTimer);
-      };
-    }
-
-    const iframe = document.getElementById("jolee-core");
-    const onLoad = () => {
-      postRestore();
-    };
-    if (iframe) iframe.addEventListener("load", onLoad);
-    const timers = [50, 200, 500, 1000, 2000].map((ms) =>
-      window.setTimeout(() => {
-        postRestore();
-      }, ms)
-    );
-    // If post never lands, still drop the guard so status is not ignored forever.
-    const fallbackTimer = window.setTimeout(acceptReality, 4000);
-    return () => {
-      cancelled = true;
-      if (iframe) iframe.removeEventListener("load", onLoad);
-      timers.forEach((id) => window.clearTimeout(id));
-      if (realityTimer != null) window.clearTimeout(realityTimer);
-      window.clearTimeout(fallbackTimer);
-    };
-  }, []);
-
   /** The core message listener; the module docblock lists the message types handled. */
   useEffect(() => {
     const handleWindowMessage = (event) => {
@@ -2996,126 +2669,10 @@ function Sidebar() {
         if (message.type === "pipelineStatusUpdate") {
           if (message.video !== undefined) setIsVideoActive(message.video);
           if (message.audio !== undefined) setIsAudioActive(message.audio);
-          if (message.microphone !== undefined) {
-            if (message.microphone === true) {
-              let storageWants = false;
-              try {
-                const v = localStorage.getItem(
-                  getPrefixedKey("microphone_enabled")
-                );
-                storageWants = v === "1" || v === "true";
-              } catch {
-                storageWants = false;
-              }
-              if (userMediaIntentRef.current.mic === false) storageWants = false;
-              if (storageWants) {
-                setIsMicrophoneActive(true);
-                mediaRestoreGuardRef.current.mic = false;
-                mediaRestorePostedRef.current.mic = false;
-              } else {
-                // User-off is authoritative — late enable status must not flip UI on.
-                setIsMicrophoneActive(false);
-                mediaRestoreGuardRef.current.mic = false;
-                mediaRestorePostedRef.current.mic = false;
-                postToCore(
-                  {
-                    type: "pipelineControl",
-                    pipeline: "microphone",
-                    enabled: false,
-                  },
-                  window.location.origin
-                );
-              }
-            } else {
-              let storageWants = false;
-              try {
-                const v = localStorage.getItem(
-                  getPrefixedKey("microphone_enabled")
-                );
-                storageWants = v === "1" || v === "true";
-              } catch {
-                storageWants = false;
-              }
-              if (mediaRestoreGuardRef.current.mic && storageWants) {
-                // Ignore premature false until restore has posted enable (or
-                // viewer reports a definitive permission/device error).
-                const err =
-                  typeof message.error === "string" ? message.error : "";
-                const definitive =
-                  mediaRestorePostedRef.current.mic ||
-                  err === "NotAllowedError" ||
-                  err === "NotFoundError" ||
-                  err === "SecurityError";
-                if (definitive) {
-                  mediaRestoreGuardRef.current.mic = false;
-                  mediaRestorePostedRef.current.mic = false;
-                  setIsMicrophoneActive(false);
-                }
-              } else {
-                setIsMicrophoneActive(false);
-              }
-            }
-          }
-          if (message.webcam !== undefined) {
-            if (message.webcam === true) {
-              let storageWants = false;
-              try {
-                const v = localStorage.getItem(
-                  getPrefixedKey("webcam_enabled")
-                );
-                storageWants = v === "1" || v === "true";
-              } catch {
-                storageWants = false;
-              }
-              if (userMediaIntentRef.current.cam === false) storageWants = false;
-              if (storageWants) {
-                setIsWebcamActive(true);
-                mediaRestoreGuardRef.current.cam = false;
-                mediaRestorePostedRef.current.cam = false;
-              } else {
-                // User-off is authoritative — late enable status must not flip UI on.
-                setIsWebcamActive(false);
-                mediaRestoreGuardRef.current.cam = false;
-                mediaRestorePostedRef.current.cam = false;
-                postToCore(
-                  {
-                    type: "pipelineControl",
-                    pipeline: "webcam",
-                    enabled: false,
-                  },
-                  window.location.origin
-                );
-              }
-            } else {
-              let storageWants = false;
-              try {
-                const v = localStorage.getItem(
-                  getPrefixedKey("webcam_enabled")
-                );
-                storageWants = v === "1" || v === "true";
-              } catch {
-                storageWants = false;
-              }
-              if (mediaRestoreGuardRef.current.cam && storageWants) {
-                // Ignore premature false until restore has posted enable (or
-                // viewer reports a definitive permission/device error).
-                const err =
-                  typeof message.error === "string" ? message.error : "";
-                const definitive =
-                  mediaRestorePostedRef.current.cam ||
-                  err === "NotAllowedError" ||
-                  err === "NotFoundError" ||
-                  err === "SecurityError";
-                if (definitive) {
-                  mediaRestoreGuardRef.current.cam = false;
-                  mediaRestorePostedRef.current.cam = false;
-                  setIsWebcamActive(false);
-                }
-              } else {
-                setIsWebcamActive(false);
-              }
-            }
-          }
+          if (message.microphone !== undefined)
+            setIsMicrophoneActive(message.microphone);
+          if (message.webcam !== undefined)
+            setIsWebcamActive(message.webcam);
         } else if (message.type === "effectiveCursorState" && typeof message.value === "boolean") {
           setEffectiveCursor(message.value);
         } else if (message.type === 'clientRoleUpdate') {
@@ -3136,126 +2693,10 @@ function Sidebar() {
         } else if (message.type === "sidebarButtonStatusUpdate") {
           if (message.video !== undefined) setIsVideoActive(message.video);
           if (message.audio !== undefined) setIsAudioActive(message.audio);
-          if (message.microphone !== undefined) {
-            if (message.microphone === true) {
-              let storageWants = false;
-              try {
-                const v = localStorage.getItem(
-                  getPrefixedKey("microphone_enabled")
-                );
-                storageWants = v === "1" || v === "true";
-              } catch {
-                storageWants = false;
-              }
-              if (userMediaIntentRef.current.mic === false) storageWants = false;
-              if (storageWants) {
-                setIsMicrophoneActive(true);
-                mediaRestoreGuardRef.current.mic = false;
-                mediaRestorePostedRef.current.mic = false;
-              } else {
-                // User-off is authoritative — late enable status must not flip UI on.
-                setIsMicrophoneActive(false);
-                mediaRestoreGuardRef.current.mic = false;
-                mediaRestorePostedRef.current.mic = false;
-                postToCore(
-                  {
-                    type: "pipelineControl",
-                    pipeline: "microphone",
-                    enabled: false,
-                  },
-                  window.location.origin
-                );
-              }
-            } else {
-              let storageWants = false;
-              try {
-                const v = localStorage.getItem(
-                  getPrefixedKey("microphone_enabled")
-                );
-                storageWants = v === "1" || v === "true";
-              } catch {
-                storageWants = false;
-              }
-              if (mediaRestoreGuardRef.current.mic && storageWants) {
-                // Ignore premature false until restore has posted enable (or
-                // viewer reports a definitive permission/device error).
-                const err =
-                  typeof message.error === "string" ? message.error : "";
-                const definitive =
-                  mediaRestorePostedRef.current.mic ||
-                  err === "NotAllowedError" ||
-                  err === "NotFoundError" ||
-                  err === "SecurityError";
-                if (definitive) {
-                  mediaRestoreGuardRef.current.mic = false;
-                  mediaRestorePostedRef.current.mic = false;
-                  setIsMicrophoneActive(false);
-                }
-              } else {
-                setIsMicrophoneActive(false);
-              }
-            }
-          }
-          if (message.webcam !== undefined) {
-            if (message.webcam === true) {
-              let storageWants = false;
-              try {
-                const v = localStorage.getItem(
-                  getPrefixedKey("webcam_enabled")
-                );
-                storageWants = v === "1" || v === "true";
-              } catch {
-                storageWants = false;
-              }
-              if (userMediaIntentRef.current.cam === false) storageWants = false;
-              if (storageWants) {
-                setIsWebcamActive(true);
-                mediaRestoreGuardRef.current.cam = false;
-                mediaRestorePostedRef.current.cam = false;
-              } else {
-                // User-off is authoritative — late enable status must not flip UI on.
-                setIsWebcamActive(false);
-                mediaRestoreGuardRef.current.cam = false;
-                mediaRestorePostedRef.current.cam = false;
-                postToCore(
-                  {
-                    type: "pipelineControl",
-                    pipeline: "webcam",
-                    enabled: false,
-                  },
-                  window.location.origin
-                );
-              }
-            } else {
-              let storageWants = false;
-              try {
-                const v = localStorage.getItem(
-                  getPrefixedKey("webcam_enabled")
-                );
-                storageWants = v === "1" || v === "true";
-              } catch {
-                storageWants = false;
-              }
-              if (mediaRestoreGuardRef.current.cam && storageWants) {
-                // Ignore premature false until restore has posted enable (or
-                // viewer reports a definitive permission/device error).
-                const err =
-                  typeof message.error === "string" ? message.error : "";
-                const definitive =
-                  mediaRestorePostedRef.current.cam ||
-                  err === "NotAllowedError" ||
-                  err === "NotFoundError" ||
-                  err === "SecurityError";
-                if (definitive) {
-                  mediaRestoreGuardRef.current.cam = false;
-                  mediaRestorePostedRef.current.cam = false;
-                  setIsWebcamActive(false);
-                }
-              } else {
-                setIsWebcamActive(false);
-              }
-            }
-          }
+          if (message.microphone !== undefined)
+            setIsMicrophoneActive(message.microphone);
+          if (message.webcam !== undefined)
+            setIsWebcamActive(message.webcam);
           if (message.gamepad !== undefined)
             setIsGamepadEnabled(message.gamepad);
         } else if (message.type === "clipboardContentUpdate") {

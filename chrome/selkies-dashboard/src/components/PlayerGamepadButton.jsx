@@ -10,39 +10,13 @@
  */
 import React from "react";
 import { getTranslator } from "../translations";
-import { isMobileClient, getStorageAppName, getLegacyStorageAppName } from "../jolee-shims/util.js";
+import { isMobileClient } from "../jolee-shims/util.js";
 import { postToCore } from "../jolee-bridge.js";
 
 /** Id of the element the touch gamepad overlay is mounted in. */
 const TOUCH_GAMEPAD_HOST_DIV_ID = "touch-gamepad-host";
 /** Pointer travel in pixels beyond which a press is a drag rather than a click. */
 const DRAG_THRESHOLD = 10;
-
-const gamepadButtonPositionKey = () =>
-    `${getStorageAppName()}_playerGamepadButtonPosition`;
-
-const readStoredGamepadButtonPosition = () => {
-    try {
-        const modern = gamepadButtonPositionKey();
-        let raw = localStorage.getItem(modern);
-        if (raw == null) {
-            const legacy = `${getLegacyStorageAppName()}_playerGamepadButtonPosition`;
-            raw = localStorage.getItem(legacy);
-            if (raw != null) {
-                localStorage.setItem(modern, raw);
-                localStorage.removeItem(legacy);
-            }
-        }
-        if (!raw) return { bottom: 20, right: 20 };
-        const parsed = JSON.parse(raw);
-        if (Number.isFinite(parsed?.bottom) && Number.isFinite(parsed?.right)) {
-            return { bottom: parsed.bottom, right: parsed.right };
-        }
-    } catch {
-        // ignore corrupt / blocked storage
-    }
-    return { bottom: 20, right: 20 };
-};
 
 /** Resolved once: the browser language is fixed for the life of the document. */
 const { t } = getTranslator(typeof navigator !== "undefined" ? navigator.language : "en");
@@ -89,7 +63,7 @@ function PlayerGamepadButton({ touchOnly = false, isActive, onToggle }) {
         return () => window.removeEventListener("touchstart", detectTouch);
     }, [hasDetectedTouch]);
 
-    const [buttonPosition, setButtonPosition] = React.useState(readStoredGamepadButtonPosition);
+    const [buttonPosition, setButtonPosition] = React.useState({ bottom: 20, right: 20 });
     const dragInfo = React.useRef({
         isDragging: false,
         hasDragged: false,
@@ -98,8 +72,6 @@ function PlayerGamepadButton({ touchOnly = false, isActive, onToggle }) {
         startY: 0,
         initialBottom: 0,
         initialRight: 0,
-        lastBottom: 20,
-        lastRight: 20,
     });
 
     const handleToggleTouchGamepad = React.useCallback(() => {
@@ -133,8 +105,6 @@ function PlayerGamepadButton({ touchOnly = false, isActive, onToggle }) {
             startY: e.clientY,
             initialBottom: buttonPosition.bottom,
             initialRight: buttonPosition.right,
-            lastBottom: buttonPosition.bottom,
-            lastRight: buttonPosition.right,
         };
         e.currentTarget.setPointerCapture(e.pointerId);
     };
@@ -150,13 +120,10 @@ function PlayerGamepadButton({ touchOnly = false, isActive, onToggle }) {
         }
 
         if (dragInfo.current.hasDragged) {
-            const next = {
+            setButtonPosition({
                 bottom: dragInfo.current.initialBottom - dy,
                 right: dragInfo.current.initialRight - dx,
-            };
-            dragInfo.current.lastBottom = next.bottom;
-            dragInfo.current.lastRight = next.right;
-            setButtonPosition(next);
+            });
         }
     };
 
@@ -164,20 +131,8 @@ function PlayerGamepadButton({ touchOnly = false, isActive, onToggle }) {
         if (e.currentTarget.hasPointerCapture(dragInfo.current.pointerId)) {
             e.currentTarget.releasePointerCapture(dragInfo.current.pointerId);
         }
-        const didDrag = dragInfo.current.hasDragged;
-        const finalPos = {
-            bottom: dragInfo.current.lastBottom,
-            right: dragInfo.current.lastRight,
-        };
         dragInfo.current.isDragging = false;
         dragInfo.current.pointerId = null;
-        if (didDrag) {
-            try {
-                localStorage.setItem(gamepadButtonPositionKey(), JSON.stringify(finalPos));
-            } catch {
-                // A blocked/full storage write only loses persistence for this drag.
-            }
-        }
     };
 
     const onButtonClick = (e) => {

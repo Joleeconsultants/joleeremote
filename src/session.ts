@@ -4,8 +4,7 @@ import { fileFromFrame } from "./json-frame";
 import { timingSafeEqual } from "./tokens";
 import {
   DEFAULT_TTL_SECONDS,
-  MAX_TTL_SECONDS,
-  MIN_TTL_SECONDS,
+  clampTtlSeconds,
   type PublicStatus,
 } from "./types";
 
@@ -13,6 +12,8 @@ export type Env = {
   Session: DurableObjectNamespace<Session>;
   ASSETS?: Fetcher;
   MINT_SECRET?: string;
+  /** Default session TTL in seconds when mint omits ttlSeconds. Plaintext Worker var. */
+  SESSION_TTL_SECONDS?: string;
 };
 
 type SessionRow = {
@@ -475,11 +476,7 @@ export class Session extends Server<Env> {
 }
 
 function clampTtl(ttl?: number): number {
-  const n =
-    typeof ttl === "number" && Number.isFinite(ttl)
-      ? Math.floor(ttl)
-      : DEFAULT_TTL_SECONDS;
-  return Math.min(MAX_TTL_SECONDS, Math.max(MIN_TTL_SECONDS, n));
+  return clampTtlSeconds(ttl, DEFAULT_TTL_SECONDS);
 }
 
 function roleFromRequest(request: Request): Role | null {

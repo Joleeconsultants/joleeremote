@@ -8,7 +8,7 @@ Join URL helpers live in `src/joins.ts` (`viewerPath` is the product browser joi
 
 Serve session HTML from any origin you control (docs placeholder: `https://remote.example.com`). Pass `hop` only when the Worker is on another host.
 
-Your app: `POST /sessions` on the hop Worker with optional JSON `{ "ttlSeconds": 900 }` (clamped 1..3600, default 900).
+Your app: `POST /sessions` on the hop Worker with optional JSON `{ "ttlSeconds": 900 }` (clamped 1..3600). Default when omitted: Worker var `SESSION_TTL_SECONDS` (default `"900"`).
 
 **Production requires a mint secret.** Set Worker env `MINT_SECRET` and send it as:
 

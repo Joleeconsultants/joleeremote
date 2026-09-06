@@ -1,6 +1,6 @@
 # Jolee Remote
 
-![Jolee Remote](docs/assets/jolee-remote.png)
+<img src="docs/assets/jolee-remote.png" alt="Jolee Remote" width="128" />
 
 Short-lived browser↔agent session pairing on Cloudflare Durable Objects.
 

@@ -7,6 +7,7 @@
 /**
  * Original Jolee session-token helpers for dashboard compiles. Not selkies-web-core.
  * The hop uses fragment `#token=` (query `?token=` fallback) and `?session=`.
+ * Cookie token is only used when it belongs to the same session as the page.
  * @module
  */
 
@@ -50,12 +51,17 @@ function cookieValue(name) {
 }
 
 function pageToken() {
-  return (
-    pageSearchParams().get("token") ||
-    pageHashParams().get("token") ||
-    cookieValue("jolee_browser_token") ||
-    ""
-  );
+  const fromUrl =
+    pageSearchParams().get("token") || pageHashParams().get("token") || "";
+  if (fromUrl) return fromUrl;
+
+  const pageSess = pageSearchParams().get("session") || "";
+  const cookieSess = cookieValue("jolee_session");
+  // Page session present but cookie session differs (or missing) → ignore cookie token.
+  if (pageSess && cookieSess !== pageSess) {
+    return "";
+  }
+  return cookieValue("jolee_browser_token") || "";
 }
 
 function pageSession() {

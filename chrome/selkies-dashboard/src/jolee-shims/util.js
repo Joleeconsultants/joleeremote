@@ -57,7 +57,19 @@ export function getRoutePrefix() {
   return dirPath.replace(/\/$/, "");
 }
 
+/**
+ * Stable localStorage app prefix for chrome settings.
+ * Must NOT include session id, query, or hash — those change every mint/refresh
+ * under UI_PREVIEW and would make prefs look randomly forgotten.
+ * Prefer a fixed product id; fall back to legacy origin+path keys on read
+ * via migrateLegacyStorageKey in Sidebar when present.
+ */
 export function getStorageAppName() {
+  return "jolee-remote";
+}
+
+/** Pre-stabilization prefix (origin + pathname). Used only to migrate old keys. */
+export function getLegacyStorageAppName() {
   if (typeof window === "undefined") return "jolee-remote";
   return (window.location.origin + window.location.pathname).replace(
     /[^a-zA-Z0-9._-]/g,

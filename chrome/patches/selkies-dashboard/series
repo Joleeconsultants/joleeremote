@@ -11,3 +11,4 @@
 0013-persist-audio-devices-fab-positions.patch
 0014-persist-mic-webcam-toggle.patch
 0015-mic-webcam-restore-status-guard.patch
+0016-stable-storage-prefix-restore-guard.patch

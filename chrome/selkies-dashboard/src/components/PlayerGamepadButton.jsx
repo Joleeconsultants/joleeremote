@@ -10,7 +10,7 @@
  */
 import React from "react";
 import { getTranslator } from "../translations";
-import { isMobileClient, getStorageAppName } from "../jolee-shims/util.js";
+import { isMobileClient, getStorageAppName, getLegacyStorageAppName } from "../jolee-shims/util.js";
 import { postToCore } from "../jolee-bridge.js";
 
 /** Id of the element the touch gamepad overlay is mounted in. */
@@ -23,7 +23,16 @@ const gamepadButtonPositionKey = () =>
 
 const readStoredGamepadButtonPosition = () => {
     try {
-        const raw = localStorage.getItem(gamepadButtonPositionKey());
+        const modern = gamepadButtonPositionKey();
+        let raw = localStorage.getItem(modern);
+        if (raw == null) {
+            const legacy = `${getLegacyStorageAppName()}_playerGamepadButtonPosition`;
+            raw = localStorage.getItem(legacy);
+            if (raw != null) {
+                localStorage.setItem(modern, raw);
+                localStorage.removeItem(legacy);
+            }
+        }
         if (!raw) return { bottom: 20, right: 20 };
         const parsed = JSON.parse(raw);
         if (Number.isFinite(parsed?.bottom) && Number.isFinite(parsed?.right)) {

@@ -50,7 +50,7 @@
  * @module
  */
 import { useState, useEffect, useCallback, useId, useMemo, useRef } from "react";
-import { displayLabel, decodableEncoders, canDecodeFullColor, getRoutePrefix, getStorageAppName, isMobileClient } from "../jolee-shims/util.js";
+import { displayLabel, decodableEncoders, canDecodeFullColor, getRoutePrefix, getStorageAppName, getLegacyStorageAppName, isMobileClient } from "../jolee-shims/util.js";
 import { sessionAuthHeaders, withSessionToken } from "../jolee-shims/session-token.js";
 import { resolveSpec, isSettingPinned, HIDPI_SPEC, RATE_CONTROL_SPEC,
   USE_BROWSER_CURSORS_SPEC, VIDEO_FULLCOLOR_SPEC, VIDEO_STREAMING_MODE_SPEC,
@@ -820,8 +820,9 @@ function AppsModal({ isOpen, onClose, t, commandsAvailable, commandsKnown,
 }
 
 const storageAppName = getStorageAppName();
+const legacyStorageAppName = getLegacyStorageAppName();
 /**
- * The localStorage key for a setting: the session prefix, plus the
+ * The localStorage key for a setting: stable product prefix, plus the
  * `_display2` suffix for per-display settings on the secondary display.
  * @param {string} key
  * @returns {string}
@@ -833,9 +834,54 @@ const getPrefixedKey = (key) => {
   }
   return prefixedKey;
 };
+/**
+ * One-shot move of a legacy origin+path key onto the stable product key so
+ * prefs survive across refreshes after the prefix stabilization.
+ */
+const migrateLegacyStorageKey = (key) => {
+  if (legacyStorageAppName === storageAppName) return;
+  const modern = getPrefixedKey(key);
+  try {
+    if (localStorage.getItem(modern) != null) return;
+    const legacyKey =
+      displayId === "display2" && PER_DISPLAY_SETTINGS.includes(key)
+        ? `${legacyStorageAppName}_${key}_display2`
+        : `${legacyStorageAppName}_${key}`;
+    const legacyVal = localStorage.getItem(legacyKey);
+    if (legacyVal == null) return;
+    localStorage.setItem(modern, legacyVal);
+    localStorage.removeItem(legacyKey);
+  } catch {
+    // Persistence is best-effort.
+  }
+};
 
 /** Reads a setting's stored value under its prefixed key. */
-const readStored = (key) => localStorage.getItem(getPrefixedKey(key));
+const readStored = (key) => {
+  migrateLegacyStorageKey(key);
+  return localStorage.getItem(getPrefixedKey(key));
+};
+// Warm-migrate common chrome prefs (incl. mic/cam + device ids) before React state inits.
+[
+  "microphone_enabled",
+  "webcam_enabled",
+  "audio_input_device_id",
+  "audio_output_device_id",
+  "keyboardButtonPosition",
+  "sidebarToggleTopPct",
+  "encoder",
+  "framerate",
+  "video_bitrate",
+  "audio_bitrate",
+  "scaleLocallyManual",
+  "antiAliasingEnabled",
+  "enable_binary_clipboard",
+  "manual_width",
+  "manual_height",
+  "scaling_dpi",
+  "stream_mode",
+  "webcam_encoder",
+].forEach(migrateLegacyStorageKey);
 
 /**
  * Marker written beside a value the user chose explicitly. The cores persist
@@ -2813,30 +2859,23 @@ function Sidebar() {
     const acceptReality = () => {
       if (cancelled) return;
       const guard = mediaRestoreGuardRef.current;
+      // Drop the guard and dim the buttons, but keep localStorage wanted=true.
+      // getUserMedia often needs a gesture / permission prompt and can fail on
+      // cold restore; wiping storage made refresh look randomly forgetful.
       if (guard.mic) {
         guard.mic = false;
         setIsMicrophoneActive(false);
-        try {
-          localStorage.setItem(getPrefixedKey("microphone_enabled"), "false");
-        } catch {
-          // Persistence is best-effort.
-        }
       }
       if (guard.cam) {
         guard.cam = false;
         setIsWebcamActive(false);
-        try {
-          localStorage.setItem(getPrefixedKey("webcam_enabled"), "false");
-        } catch {
-          // Persistence is best-effort.
-        }
       }
     };
 
     let realityTimer = null;
     const armRealityTimeout = () => {
       if (realityTimer != null) return;
-      realityTimer = window.setTimeout(acceptReality, 4500);
+      realityTimer = window.setTimeout(acceptReality, 8000);
     };
 
     const postRestore = () => {
@@ -2886,7 +2925,7 @@ function Sidebar() {
       }, ms)
     );
     // If post never lands, still drop the guard so status is not ignored forever.
-    const fallbackTimer = window.setTimeout(acceptReality, 7000);
+    const fallbackTimer = window.setTimeout(acceptReality, 12000);
     return () => {
       cancelled = true;
       if (iframe) iframe.removeEventListener("load", onLoad);

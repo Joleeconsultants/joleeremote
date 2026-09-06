@@ -180,15 +180,17 @@ function stopAudioPlayback(){
   }
   revokeAudioUrl();
 }
-function postPipelineStatus(pipeline,enabled){
-  if(window.parent!==window) window.parent.postMessage({type:"pipelineStatusUpdate",[pipeline]:!!enabled},window.location.origin);
+function postPipelineStatus(pipeline,enabled,error){
+  const msg={type:"pipelineStatusUpdate",[pipeline]:!!enabled};
+  if(error) msg.error=error;
+  if(window.parent!==window) window.parent.postMessage(msg,window.location.origin);
 }
-function stopMicrophone(){
+function stopMicrophone(error){
   if(microphoneRecorder&&microphoneRecorder.state!=="inactive") try{microphoneRecorder.stop();}catch(e){}
   microphoneRecorder=null;
   if(microphoneStream) microphoneStream.getTracks().forEach((track)=>track.stop());
   microphoneStream=null;
-  postPipelineStatus("microphone",false);
+  postPipelineStatus("microphone",false,error);
 }
 async function setMicrophoneEnabled(enabled){
   if(!enabled){stopMicrophone();return;}
@@ -206,14 +208,14 @@ async function setMicrophoneEnabled(enabled){
     microphoneRecorder.addEventListener("stop",()=>postPipelineStatus("microphone",false),{once:true});
     microphoneRecorder.start(250);
     postPipelineStatus("microphone",true);
-  }catch(e){console.warn("[jolee] microphone start failed", e && e.name, e && e.message);stopMicrophone();}
+  }catch(e){console.warn("[jolee] microphone start failed", e && e.name, e && e.message);stopMicrophone(e&&e.name);}
 }
-function stopWebcam(){
+function stopWebcam(error){
   if(webcamTimer!==null) clearInterval(webcamTimer);
   webcamTimer=null;
   if(webcamStream) webcamStream.getTracks().forEach((track)=>track.stop());
   webcamStream=null;
-  postPipelineStatus("webcam",false);
+  postPipelineStatus("webcam",false,error);
 }
 async function setWebcamEnabled(enabled){
   if(!enabled){stopWebcam();return;}
@@ -236,7 +238,7 @@ async function setWebcamEnabled(enabled){
     };
     capture(); webcamTimer=setInterval(capture,500);
     postPipelineStatus("webcam",true);
-  }catch(e){console.warn("[jolee] webcam start failed", e && e.name, e && e.message);stopWebcam();}
+  }catch(e){console.warn("[jolee] webcam start failed", e && e.name, e && e.message);stopWebcam(e&&e.name);}
 }
 function downloadFile(file){
   try{

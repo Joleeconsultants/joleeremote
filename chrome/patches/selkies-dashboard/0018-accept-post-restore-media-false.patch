@@ -1,0 +1,267 @@
+From: Remote Project <bots@joleeconsultants.com>
+Subject: Accept post-restore mic/webcam false immediately
+
+After restore posts pipelineControl enable, the next false status is
+definitive (permission deny / getUserMedia fail) — clear the guard and
+dim UI without waiting ~8s. Premature false before enable posts is still
+ignored. Optional viewer error names (NotAllowedError/NotFoundError/
+SecurityError) also accept false while the guard is active. Shorten
+reality fallbacks to ~2s/~4s. Keep localStorage wanted=true.
+
+---
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -1466,6 +1466,12 @@
+    * null means no toggle yet this session — fall back to localStorage.
+    */
+   const userMediaIntentRef = useRef({ mic: null, cam: null });
++  /**
++   * True after restore has posted pipelineControl enable for that device.
++   * Premature false before this is ignored; the next false after is definitive
++   * (permission deny / getUserMedia fail) and clears the guard immediately.
++   */
++  const mediaRestorePostedRef = useRef({ mic: false, cam: false });
+   const [isGamepadEnabled, setIsGamepadEnabled] = useState(true);
+   const [dashboardClipboardContent, setDashboardClipboardContent] =
+     useState("");
+@@ -2478,6 +2484,7 @@
+   const handleMicrophoneToggle = () => {
+     const enabled = !isMicrophoneActive;
+     mediaRestoreGuardRef.current.mic = false;
++    mediaRestorePostedRef.current.mic = false;
+     userMediaIntentRef.current.mic = enabled;
+     setIsMicrophoneActive(enabled);
+     try {
+@@ -2500,6 +2507,7 @@
+   const handleWebcamToggle = () => {
+     const enabled = !isWebcamActive;
+     mediaRestoreGuardRef.current.cam = false;
++    mediaRestorePostedRef.current.cam = false;
+     userMediaIntentRef.current.cam = enabled;
+     setIsWebcamActive(enabled);
+     try {
+@@ -2843,10 +2851,13 @@
+    * iframe is ready. UI highlight from localStorage alone is not enough —
+    * pipelineControl must restart getUserMedia.
+    *
+-   * mediaRestoreGuardRef stays true until status reports enabled, or a
+-   * short timeout accepts that enable failed (UI dimmed; storage kept).
+-   * Delayed postRestore timers re-read localStorage + userMediaIntentRef so
+-   * a user OFF during the 50–2000ms window cannot be overridden by enable.
++   * mediaRestoreGuardRef ignores premature false until restore posts enable
++   * (mediaRestorePostedRef). After that, the next false is definitive —
++   * clear guard and dim UI immediately (permission deny). A short ~2s
++   * fallback still accepts reality if no status arrives. Storage wanted=true
++   * is kept so a later permission grant + refresh retries. Delayed
++   * postRestore timers re-read localStorage + userMediaIntentRef so a user
++   * OFF during the 50–2000ms window cannot be overridden by enable.
+    */
+   useEffect(() => {
+     let cancelled = false;
+@@ -2863,21 +2874,30 @@
+     }
+     if (!micWanted && !camWanted) return undefined;
+ 
+-    if (micWanted) mediaRestoreGuardRef.current.mic = true;
+-    if (camWanted) mediaRestoreGuardRef.current.cam = true;
++    if (micWanted) {
++      mediaRestoreGuardRef.current.mic = true;
++      mediaRestorePostedRef.current.mic = false;
++    }
++    if (camWanted) {
++      mediaRestoreGuardRef.current.cam = true;
++      mediaRestorePostedRef.current.cam = false;
++    }
+ 
+     const acceptReality = () => {
+       if (cancelled) return;
+       const guard = mediaRestoreGuardRef.current;
++      const posted = mediaRestorePostedRef.current;
+       // Drop the guard and dim the buttons, but keep localStorage wanted=true.
+       // getUserMedia often needs a gesture / permission prompt and can fail on
+       // cold restore; wiping storage made refresh look randomly forgetful.
+       if (guard.mic) {
+         guard.mic = false;
++        posted.mic = false;
+         setIsMicrophoneActive(false);
+       }
+       if (guard.cam) {
+         guard.cam = false;
++        posted.cam = false;
+         setIsWebcamActive(false);
+       }
+     };
+@@ -2885,7 +2905,8 @@
+     let realityTimer = null;
+     const armRealityTimeout = () => {
+       if (realityTimer != null) return;
+-      realityTimer = window.setTimeout(acceptReality, 8000);
++      // Short fallback after enable posts; post-restore false clears sooner.
++      realityTimer = window.setTimeout(acceptReality, 2000);
+     };
+ 
+     const stillWantsMedia = (kind, storageKey) => {
+@@ -2924,12 +2945,14 @@
+           { type: "pipelineControl", pipeline: "microphone", enabled: true },
+           window.location.origin
+         );
++        mediaRestorePostedRef.current.mic = true;
+       }
+       if (camStill) {
+         postToCore(
+           { type: "pipelineControl", pipeline: "webcam", enabled: true },
+           window.location.origin
+         );
++        mediaRestorePostedRef.current.cam = true;
+       }
+       restored = true;
+       armRealityTimeout();
+@@ -2954,7 +2977,7 @@
+       }, ms)
+     );
+     // If post never lands, still drop the guard so status is not ignored forever.
+-    const fallbackTimer = window.setTimeout(acceptReality, 12000);
++    const fallbackTimer = window.setTimeout(acceptReality, 4000);
+     return () => {
+       cancelled = true;
+       if (iframe) iframe.removeEventListener("load", onLoad);
+@@ -2988,10 +3011,12 @@
+               if (storageWants) {
+                 setIsMicrophoneActive(true);
+                 mediaRestoreGuardRef.current.mic = false;
++                mediaRestorePostedRef.current.mic = false;
+               } else {
+                 // User-off is authoritative — late enable status must not flip UI on.
+                 setIsMicrophoneActive(false);
+                 mediaRestoreGuardRef.current.mic = false;
++                mediaRestorePostedRef.current.mic = false;
+                 postToCore(
+                   {
+                     type: "pipelineControl",
+@@ -3012,7 +3037,20 @@
+                 storageWants = false;
+               }
+               if (mediaRestoreGuardRef.current.mic && storageWants) {
+-                // Ignore premature false while restore enable is in flight.
++                // Ignore premature false until restore has posted enable (or
++                // viewer reports a definitive permission/device error).
++                const err =
++                  typeof message.error === "string" ? message.error : "";
++                const definitive =
++                  mediaRestorePostedRef.current.mic ||
++                  err === "NotAllowedError" ||
++                  err === "NotFoundError" ||
++                  err === "SecurityError";
++                if (definitive) {
++                  mediaRestoreGuardRef.current.mic = false;
++                  mediaRestorePostedRef.current.mic = false;
++                  setIsMicrophoneActive(false);
++                }
+               } else {
+                 setIsMicrophoneActive(false);
+               }
+@@ -3033,10 +3071,12 @@
+               if (storageWants) {
+                 setIsWebcamActive(true);
+                 mediaRestoreGuardRef.current.cam = false;
++                mediaRestorePostedRef.current.cam = false;
+               } else {
+                 // User-off is authoritative — late enable status must not flip UI on.
+                 setIsWebcamActive(false);
+                 mediaRestoreGuardRef.current.cam = false;
++                mediaRestorePostedRef.current.cam = false;
+                 postToCore(
+                   {
+                     type: "pipelineControl",
+@@ -3057,7 +3097,20 @@
+                 storageWants = false;
+               }
+               if (mediaRestoreGuardRef.current.cam && storageWants) {
+-                // Ignore premature false while restore enable is in flight.
++                // Ignore premature false until restore has posted enable (or
++                // viewer reports a definitive permission/device error).
++                const err =
++                  typeof message.error === "string" ? message.error : "";
++                const definitive =
++                  mediaRestorePostedRef.current.cam ||
++                  err === "NotAllowedError" ||
++                  err === "NotFoundError" ||
++                  err === "SecurityError";
++                if (definitive) {
++                  mediaRestoreGuardRef.current.cam = false;
++                  mediaRestorePostedRef.current.cam = false;
++                  setIsWebcamActive(false);
++                }
+               } else {
+                 setIsWebcamActive(false);
+               }
+@@ -3098,10 +3151,12 @@
+               if (storageWants) {
+                 setIsMicrophoneActive(true);
+                 mediaRestoreGuardRef.current.mic = false;
++                mediaRestorePostedRef.current.mic = false;
+               } else {
+                 // User-off is authoritative — late enable status must not flip UI on.
+                 setIsMicrophoneActive(false);
+                 mediaRestoreGuardRef.current.mic = false;
++                mediaRestorePostedRef.current.mic = false;
+                 postToCore(
+                   {
+                     type: "pipelineControl",
+@@ -3122,7 +3177,20 @@
+                 storageWants = false;
+               }
+               if (mediaRestoreGuardRef.current.mic && storageWants) {
+-                // Ignore premature false while restore enable is in flight.
++                // Ignore premature false until restore has posted enable (or
++                // viewer reports a definitive permission/device error).
++                const err =
++                  typeof message.error === "string" ? message.error : "";
++                const definitive =
++                  mediaRestorePostedRef.current.mic ||
++                  err === "NotAllowedError" ||
++                  err === "NotFoundError" ||
++                  err === "SecurityError";
++                if (definitive) {
++                  mediaRestoreGuardRef.current.mic = false;
++                  mediaRestorePostedRef.current.mic = false;
++                  setIsMicrophoneActive(false);
++                }
+               } else {
+                 setIsMicrophoneActive(false);
+               }
+@@ -3143,10 +3211,12 @@
+               if (storageWants) {
+                 setIsWebcamActive(true);
+                 mediaRestoreGuardRef.current.cam = false;
++                mediaRestorePostedRef.current.cam = false;
+               } else {
+                 // User-off is authoritative — late enable status must not flip UI on.
+                 setIsWebcamActive(false);
+                 mediaRestoreGuardRef.current.cam = false;
++                mediaRestorePostedRef.current.cam = false;
+                 postToCore(
+                   {
+                     type: "pipelineControl",
+@@ -3167,7 +3237,20 @@
+                 storageWants = false;
+               }
+               if (mediaRestoreGuardRef.current.cam && storageWants) {
+-                // Ignore premature false while restore enable is in flight.
++                // Ignore premature false until restore has posted enable (or
++                // viewer reports a definitive permission/device error).
++                const err =
++                  typeof message.error === "string" ? message.error : "";
++                const definitive =
++                  mediaRestorePostedRef.current.cam ||
++                  err === "NotAllowedError" ||
++                  err === "NotFoundError" ||
++                  err === "SecurityError";
++                if (definitive) {
++                  mediaRestoreGuardRef.current.cam = false;
++                  mediaRestorePostedRef.current.cam = false;
++                  setIsWebcamActive(false);
++                }
+               } else {
+                 setIsWebcamActive(false);
+               }

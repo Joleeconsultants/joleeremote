@@ -61,5 +61,6 @@ Image clipboard stays on input JSON / JSON frame. Cursor shape is the same JSON-
 | `0010-shortcuts-command.patch` | make Shortcuts send Ctrl+Alt+Del; remove out-of-scope gaming rows |
 | `0011-core-toggle-optimistic.patch` | optimistic active state for screen/speaker/mic/webcam toggles |
 | `0012-jolee-theme-import.patch` | load Jolee blue brand tokens after Overlay.css |
+| `0013-persist-audio-devices-fab-positions.patch` | persist mic/speaker device ids + keyboard/gamepad FAB positions |
 
 See also `docs/chrome.md`.

@@ -1406,9 +1406,20 @@ function Sidebar() {
     useState(false);
   const [audioInputDevices, setAudioInputDevices] = useState([]);
   const [audioOutputDevices, setAudioOutputDevices] = useState([]);
-  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState("default");
-  const [selectedOutputDeviceId, setSelectedOutputDeviceId] =
-    useState("default");
+  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState(() => {
+    try {
+      return localStorage.getItem(getPrefixedKey("audio_input_device_id")) || "default";
+    } catch {
+      return "default";
+    }
+  });
+  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState(() => {
+    try {
+      return localStorage.getItem(getPrefixedKey("audio_output_device_id")) || "default";
+    } catch {
+      return "default";
+    }
+  });
   const [isOutputSelectionSupported, setIsOutputSelectionSupported] =
     useState(false);
   const [audioDeviceError, setAudioDeviceError] = useState(null);
@@ -1432,7 +1443,20 @@ function Sidebar() {
   const notificationTimeouts = useRef({});
   const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
   const [isAppsModalOpen, setIsAppsModalOpen] = useState(false);
-  const [keyboardButtonPosition, setKeyboardButtonPosition] = useState({ bottom: 20, right: 20 });
+  const [keyboardButtonPosition, setKeyboardButtonPosition] = useState(() => {
+    try {
+      const raw = localStorage.getItem(getPrefixedKey("keyboardButtonPosition"));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Number.isFinite(parsed?.bottom) && Number.isFinite(parsed?.right)) {
+          return { bottom: parsed.bottom, right: parsed.right };
+        }
+      }
+    } catch {
+      // ignore corrupt / blocked storage
+    }
+    return { bottom: 20, right: 20 };
+  });
   const dragInfo = useRef({
     isDragging: false,
     hasDragged: false,
@@ -1441,6 +1465,8 @@ function Sidebar() {
     startY: 0,
     initialBottom: 0,
     initialRight: 0,
+    lastBottom: 20,
+    lastRight: 20,
   });
   /**
    * Toggle handle position as a percentage of the viewport height, so a
@@ -1737,6 +1763,8 @@ function Sidebar() {
     dragInfo.current.startY = e.clientY;
     dragInfo.current.initialBottom = keyboardButtonPosition.bottom;
     dragInfo.current.initialRight = keyboardButtonPosition.right;
+    dragInfo.current.lastBottom = keyboardButtonPosition.bottom;
+    dragInfo.current.lastRight = keyboardButtonPosition.right;
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
@@ -1751,10 +1779,13 @@ function Sidebar() {
     }
 
     if (dragInfo.current.hasDragged) {
-      setKeyboardButtonPosition({
+      const next = {
         bottom: dragInfo.current.initialBottom - dy,
         right: dragInfo.current.initialRight - dx,
-      });
+      };
+      dragInfo.current.lastBottom = next.bottom;
+      dragInfo.current.lastRight = next.right;
+      setKeyboardButtonPosition(next);
     }
   };
 
@@ -1762,8 +1793,23 @@ function Sidebar() {
     if (e.currentTarget.hasPointerCapture(dragInfo.current.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
+    const didDrag = dragInfo.current.hasDragged;
+    const finalPos = {
+      bottom: dragInfo.current.lastBottom,
+      right: dragInfo.current.lastRight,
+    };
     dragInfo.current.isDragging = false;
     dragInfo.current.pointerId = null;
+    if (didDrag) {
+      try {
+        localStorage.setItem(
+          getPrefixedKey("keyboardButtonPosition"),
+          JSON.stringify(finalPos)
+        );
+      } catch {
+        // A blocked/full storage write only loses persistence for this drag.
+      }
+    }
   };
 
   const onKeyboardButtonClick = (e) => {
@@ -1944,6 +1990,36 @@ function Sidebar() {
       console.log(
         `Dashboard: Populated ${inputs.length} inputs, ${outputs.length} outputs.`
       );
+      // Re-apply last-picked devices once the list is known so the hop core
+      // gets audioDeviceSelected with an id that still exists on this machine.
+      try {
+        const storedInput =
+          localStorage.getItem(getPrefixedKey("audio_input_device_id")) || "default";
+        const storedOutput =
+          localStorage.getItem(getPrefixedKey("audio_output_device_id")) || "default";
+        const inputOk =
+          storedInput === "default" ||
+          inputs.some((d) => d.deviceId === storedInput);
+        const outputOk =
+          storedOutput === "default" ||
+          outputs.some((d) => d.deviceId === storedOutput);
+        const inputId = inputOk ? storedInput : "default";
+        const outputId = outputOk ? storedOutput : "default";
+        setSelectedInputDeviceId(inputId);
+        postToCore(
+          { type: "audioDeviceSelected", context: "input", deviceId: inputId },
+          window.location.origin
+        );
+        if (supportsSinkId) {
+          setSelectedOutputDeviceId(outputId);
+          postToCore(
+            { type: "audioDeviceSelected", context: "output", deviceId: outputId },
+            window.location.origin
+          );
+        }
+      } catch {
+        // Storage or post failure must not block the device list UI.
+      }
     } catch (err) {
       console.error(
         "Dashboard: Error getting media devices or permissions:",
@@ -2132,6 +2208,11 @@ function Sidebar() {
   const handleAudioInputChange = (event) => {
     const deviceId = event.target.value;
     setSelectedInputDeviceId(deviceId);
+    try {
+      localStorage.setItem(getPrefixedKey("audio_input_device_id"), deviceId);
+    } catch {
+      // Persistence is best-effort.
+    }
     postToCore(
       { type: "audioDeviceSelected", context: "input", deviceId: deviceId },
       window.location.origin
@@ -2140,6 +2221,11 @@ function Sidebar() {
   const handleAudioOutputChange = (event) => {
     const deviceId = event.target.value;
     setSelectedOutputDeviceId(deviceId);
+    try {
+      localStorage.setItem(getPrefixedKey("audio_output_device_id"), deviceId);
+    } catch {
+      // Persistence is best-effort.
+    }
     postToCore(
       { type: "audioDeviceSelected", context: "output", deviceId: deviceId },
       window.location.origin

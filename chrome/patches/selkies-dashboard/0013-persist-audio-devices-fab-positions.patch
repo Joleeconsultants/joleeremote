@@ -1,0 +1,281 @@
+From: Remote Project <bots@joleeconsultants.com>
+Subject: Persist mic/speaker device and FAB positions
+
+Remember last audio input/output device ids and keyboard/gamepad
+floating-button positions in prefixed localStorage across reloads.
+
+---
+ src/components/PlayerGamepadButton.jsx | 44 +++++++++++++--
+ src/components/Sidebar.jsx             | 98 +++++++++++++++++++++++++++++++---
+ 2 files changed, 132 insertions(+), 10 deletions(-)
+
+diff --git a/src/components/PlayerGamepadButton.jsx b/src/components/PlayerGamepadButton.jsx
+index 662703e..68d7c24 100644
+--- a/src/components/PlayerGamepadButton.jsx
++++ b/src/components/PlayerGamepadButton.jsx
+@@ -10,7 +10,7 @@
+  */
+ import React from "react";
+ import { getTranslator } from "../translations";
+-import { isMobileClient } from "../jolee-shims/util.js";
++import { isMobileClient, getStorageAppName } from "../jolee-shims/util.js";
+ import { postToCore } from "../jolee-bridge.js";
+ 
+ /** Id of the element the touch gamepad overlay is mounted in. */
+@@ -18,6 +18,23 @@ const TOUCH_GAMEPAD_HOST_DIV_ID = "touch-gamepad-host";
+ /** Pointer travel in pixels beyond which a press is a drag rather than a click. */
+ const DRAG_THRESHOLD = 10;
+ 
++const gamepadButtonPositionKey = () =>
++    `${getStorageAppName()}_playerGamepadButtonPosition`;
++
++const readStoredGamepadButtonPosition = () => {
++    try {
++        const raw = localStorage.getItem(gamepadButtonPositionKey());
++        if (!raw) return { bottom: 20, right: 20 };
++        const parsed = JSON.parse(raw);
++        if (Number.isFinite(parsed?.bottom) && Number.isFinite(parsed?.right)) {
++            return { bottom: parsed.bottom, right: parsed.right };
++        }
++    } catch {
++        // ignore corrupt / blocked storage
++    }
++    return { bottom: 20, right: 20 };
++};
++
+ /** Resolved once: the browser language is fixed for the life of the document. */
+ const { t } = getTranslator(typeof navigator !== "undefined" ? navigator.language : "en");
+ 
+@@ -63,7 +80,7 @@ function PlayerGamepadButton({ touchOnly = false, isActive, onToggle }) {
+         return () => window.removeEventListener("touchstart", detectTouch);
+     }, [hasDetectedTouch]);
+ 
+-    const [buttonPosition, setButtonPosition] = React.useState({ bottom: 20, right: 20 });
++    const [buttonPosition, setButtonPosition] = React.useState(readStoredGamepadButtonPosition);
+     const dragInfo = React.useRef({
+         isDragging: false,
+         hasDragged: false,
+@@ -72,6 +89,8 @@ function PlayerGamepadButton({ touchOnly = false, isActive, onToggle }) {
+         startY: 0,
+         initialBottom: 0,
+         initialRight: 0,
++        lastBottom: 20,
++        lastRight: 20,
+     });
+ 
+     const handleToggleTouchGamepad = React.useCallback(() => {
+@@ -105,6 +124,8 @@ function PlayerGamepadButton({ touchOnly = false, isActive, onToggle }) {
+             startY: e.clientY,
+             initialBottom: buttonPosition.bottom,
+             initialRight: buttonPosition.right,
++            lastBottom: buttonPosition.bottom,
++            lastRight: buttonPosition.right,
+         };
+         e.currentTarget.setPointerCapture(e.pointerId);
+     };
+@@ -120,10 +141,13 @@ function PlayerGamepadButton({ touchOnly = false, isActive, onToggle }) {
+         }
+ 
+         if (dragInfo.current.hasDragged) {
+-            setButtonPosition({
++            const next = {
+                 bottom: dragInfo.current.initialBottom - dy,
+                 right: dragInfo.current.initialRight - dx,
+-            });
++            };
++            dragInfo.current.lastBottom = next.bottom;
++            dragInfo.current.lastRight = next.right;
++            setButtonPosition(next);
+         }
+     };
+ 
+@@ -131,8 +155,20 @@ function PlayerGamepadButton({ touchOnly = false, isActive, onToggle }) {
+         if (e.currentTarget.hasPointerCapture(dragInfo.current.pointerId)) {
+             e.currentTarget.releasePointerCapture(dragInfo.current.pointerId);
+         }
++        const didDrag = dragInfo.current.hasDragged;
++        const finalPos = {
++            bottom: dragInfo.current.lastBottom,
++            right: dragInfo.current.lastRight,
++        };
+         dragInfo.current.isDragging = false;
+         dragInfo.current.pointerId = null;
++        if (didDrag) {
++            try {
++                localStorage.setItem(gamepadButtonPositionKey(), JSON.stringify(finalPos));
++            } catch {
++                // A blocked/full storage write only loses persistence for this drag.
++            }
++        }
+     };
+ 
+     const onButtonClick = (e) => {
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index 2227168..f651353 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -1406,9 +1406,20 @@ function Sidebar() {
+     useState(false);
+   const [audioInputDevices, setAudioInputDevices] = useState([]);
+   const [audioOutputDevices, setAudioOutputDevices] = useState([]);
+-  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState("default");
+-  const [selectedOutputDeviceId, setSelectedOutputDeviceId] =
+-    useState("default");
++  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState(() => {
++    try {
++      return localStorage.getItem(getPrefixedKey("audio_input_device_id")) || "default";
++    } catch {
++      return "default";
++    }
++  });
++  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState(() => {
++    try {
++      return localStorage.getItem(getPrefixedKey("audio_output_device_id")) || "default";
++    } catch {
++      return "default";
++    }
++  });
+   const [isOutputSelectionSupported, setIsOutputSelectionSupported] =
+     useState(false);
+   const [audioDeviceError, setAudioDeviceError] = useState(null);
+@@ -1432,7 +1443,20 @@ function Sidebar() {
+   const notificationTimeouts = useRef({});
+   const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
+   const [isAppsModalOpen, setIsAppsModalOpen] = useState(false);
+-  const [keyboardButtonPosition, setKeyboardButtonPosition] = useState({ bottom: 20, right: 20 });
++  const [keyboardButtonPosition, setKeyboardButtonPosition] = useState(() => {
++    try {
++      const raw = localStorage.getItem(getPrefixedKey("keyboardButtonPosition"));
++      if (raw) {
++        const parsed = JSON.parse(raw);
++        if (Number.isFinite(parsed?.bottom) && Number.isFinite(parsed?.right)) {
++          return { bottom: parsed.bottom, right: parsed.right };
++        }
++      }
++    } catch {
++      // ignore corrupt / blocked storage
++    }
++    return { bottom: 20, right: 20 };
++  });
+   const dragInfo = useRef({
+     isDragging: false,
+     hasDragged: false,
+@@ -1441,6 +1465,8 @@ function Sidebar() {
+     startY: 0,
+     initialBottom: 0,
+     initialRight: 0,
++    lastBottom: 20,
++    lastRight: 20,
+   });
+   /**
+    * Toggle handle position as a percentage of the viewport height, so a
+@@ -1737,6 +1763,8 @@ function Sidebar() {
+     dragInfo.current.startY = e.clientY;
+     dragInfo.current.initialBottom = keyboardButtonPosition.bottom;
+     dragInfo.current.initialRight = keyboardButtonPosition.right;
++    dragInfo.current.lastBottom = keyboardButtonPosition.bottom;
++    dragInfo.current.lastRight = keyboardButtonPosition.right;
+     e.currentTarget.setPointerCapture(e.pointerId);
+   };
+ 
+@@ -1751,10 +1779,13 @@ function Sidebar() {
+     }
+ 
+     if (dragInfo.current.hasDragged) {
+-      setKeyboardButtonPosition({
++      const next = {
+         bottom: dragInfo.current.initialBottom - dy,
+         right: dragInfo.current.initialRight - dx,
+-      });
++      };
++      dragInfo.current.lastBottom = next.bottom;
++      dragInfo.current.lastRight = next.right;
++      setKeyboardButtonPosition(next);
+     }
+   };
+ 
+@@ -1762,8 +1793,23 @@ function Sidebar() {
+     if (e.currentTarget.hasPointerCapture(dragInfo.current.pointerId)) {
+       e.currentTarget.releasePointerCapture(e.pointerId);
+     }
++    const didDrag = dragInfo.current.hasDragged;
++    const finalPos = {
++      bottom: dragInfo.current.lastBottom,
++      right: dragInfo.current.lastRight,
++    };
+     dragInfo.current.isDragging = false;
+     dragInfo.current.pointerId = null;
++    if (didDrag) {
++      try {
++        localStorage.setItem(
++          getPrefixedKey("keyboardButtonPosition"),
++          JSON.stringify(finalPos)
++        );
++      } catch {
++        // A blocked/full storage write only loses persistence for this drag.
++      }
++    }
+   };
+ 
+   const onKeyboardButtonClick = (e) => {
+@@ -1944,6 +1990,36 @@ function Sidebar() {
+       console.log(
+         `Dashboard: Populated ${inputs.length} inputs, ${outputs.length} outputs.`
+       );
++      // Re-apply last-picked devices once the list is known so the hop core
++      // gets audioDeviceSelected with an id that still exists on this machine.
++      try {
++        const storedInput =
++          localStorage.getItem(getPrefixedKey("audio_input_device_id")) || "default";
++        const storedOutput =
++          localStorage.getItem(getPrefixedKey("audio_output_device_id")) || "default";
++        const inputOk =
++          storedInput === "default" ||
++          inputs.some((d) => d.deviceId === storedInput);
++        const outputOk =
++          storedOutput === "default" ||
++          outputs.some((d) => d.deviceId === storedOutput);
++        const inputId = inputOk ? storedInput : "default";
++        const outputId = outputOk ? storedOutput : "default";
++        setSelectedInputDeviceId(inputId);
++        postToCore(
++          { type: "audioDeviceSelected", context: "input", deviceId: inputId },
++          window.location.origin
++        );
++        if (supportsSinkId) {
++          setSelectedOutputDeviceId(outputId);
++          postToCore(
++            { type: "audioDeviceSelected", context: "output", deviceId: outputId },
++            window.location.origin
++          );
++        }
++      } catch {
++        // Storage or post failure must not block the device list UI.
++      }
+     } catch (err) {
+       console.error(
+         "Dashboard: Error getting media devices or permissions:",
+@@ -2132,6 +2208,11 @@ function Sidebar() {
+   const handleAudioInputChange = (event) => {
+     const deviceId = event.target.value;
+     setSelectedInputDeviceId(deviceId);
++    try {
++      localStorage.setItem(getPrefixedKey("audio_input_device_id"), deviceId);
++    } catch {
++      // Persistence is best-effort.
++    }
+     postToCore(
+       { type: "audioDeviceSelected", context: "input", deviceId: deviceId },
+       window.location.origin
+@@ -2140,6 +2221,11 @@ function Sidebar() {
+   const handleAudioOutputChange = (event) => {
+     const deviceId = event.target.value;
+     setSelectedOutputDeviceId(deviceId);
++    try {
++      localStorage.setItem(getPrefixedKey("audio_output_device_id"), deviceId);
++    } catch {
++      // Persistence is best-effort.
++    }
+     postToCore(
+       { type: "audioDeviceSelected", context: "output", deviceId: deviceId },
+       window.location.origin

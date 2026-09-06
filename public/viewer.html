@@ -220,15 +220,25 @@ function createMicrophoneRecorder(stream){
 }
 async function setMicrophoneEnabled(enabled){
   if(!enabled){stopMicrophone();return;}
-  if(microphoneRecorder&&microphoneRecorder.state==="recording") return;
+  if(microphoneRecorder&&microphoneRecorder.state==="recording"){postPipelineStatus("microphone",true);return;}
   // Drop leftover inactive recorder/stream without posting false (avoids UI flicker).
   if(microphoneRecorder||microphoneStream) clearMicrophoneResources();
   const gen=++microphoneGen;
   try{
-    const audio=audioInputDeviceId&&audioInputDeviceId!=="default"
-      ?{deviceId:{ideal:audioInputDeviceId}}
-      :true;
-    microphoneStream=await navigator.mediaDevices.getUserMedia({audio});
+    let audioConstraints=true;
+    if(audioInputDeviceId&&audioInputDeviceId!=="default"){
+      audioConstraints={deviceId:{ideal:audioInputDeviceId}};
+    }
+    try{
+      microphoneStream=await navigator.mediaDevices.getUserMedia({audio:audioConstraints});
+    }catch(constraintErr){
+      const n=constraintErr&&constraintErr.name;
+      if(audioConstraints!==true&&(n==="OverconstrainedError"||n==="NotFoundError"||n==="NotReadableError")){
+        microphoneStream=await navigator.mediaDevices.getUserMedia({audio:true});
+      }else{
+        throw constraintErr;
+      }
+    }
     if(gen!==microphoneGen){
       microphoneStream.getTracks().forEach((track)=>track.stop());
       microphoneStream=null;

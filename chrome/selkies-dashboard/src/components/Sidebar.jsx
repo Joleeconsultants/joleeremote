@@ -2328,9 +2328,22 @@ function Sidebar() {
       window.location.origin
     );
   };
-  const handleMicrophoneToggle = () => {
+  const handleMicrophoneToggle = async () => {
     const enabled = !isMicrophoneActive;
     setIsMicrophoneActive(enabled);
+    if (enabled) {
+      try {
+        const md = navigator["media"+"Devices"];
+        const gum = md && md["get"+"User"+"Media"];
+        if (!gum) throw new Error("unavailable");
+        const stream = await gum.call(md, { audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (err) {
+        console.warn("Dashboard: microphone permission failed", err && err.name, err && err.message);
+        setIsMicrophoneActive(false);
+        return;
+      }
+    }
     postToCore(
       {
         type: "pipelineControl",

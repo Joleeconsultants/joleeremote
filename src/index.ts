@@ -159,7 +159,7 @@ function withMediaPermissions(response: Response, pathname: string): Response {
   if (!headers.has("Permissions-Policy")) {
     headers.set(
       "Permissions-Policy",
-      "microphone=(self), camera=(self), fullscreen=(self)",
+      "microphone=*, camera=*, fullscreen=*",
     );
   }
   return new Response(response.body, { status: response.status, headers });

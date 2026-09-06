@@ -12,6 +12,9 @@ Dashboard chrome is MPL-2.0 (see `chrome/selkies-dashboard/LICENSE`). The hop (`
 
 ## Goal
 
+**Standing UI rule (Lee):** Before changing Selkies dashboard/chrome UI for a broken control, first read stock Selkies at the `UPSTREAM` pin and see what hop (`viewer.html` / core / `postMessage`) change is needed so their existing code works. Prefer hop glue that matches their behavior. Only patch their UI as a last resort when the hop cannot provide what stock expects.
+
+
 Extract Selkies visual and functional experience onto the Jolee hop. Leftover panels wait until a hop path exists.
 
 Add a real hop path, then show the ORIGINAL Selkies dashboard control. Prefer original UI with only small mods (`postToCore`, overlay hide-flags in `jolee-settings.js`, PC Clipboard label). Do not invent a new UI or large Sidebar rewrites. Gaming stays out unless asked. Slow-add: a panel appears only after its hop exists.

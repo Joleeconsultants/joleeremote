@@ -5,18 +5,19 @@
 <title>Jolee Remote</title>
 <link rel="icon" href="/favicon.png" type="image/png" />
 <link rel="shortcut icon" href="/favicon.ico" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="stylesheet" href="/dashboard/dashboard.css?v=jo-ui-24" />
+<link rel="stylesheet" href="/dashboard/dashboard.css?v=jo-ui-25" />
 <style>
 html,body{margin:0;height:100%;background:#000;overflow:hidden}
 #jolee-core{position:fixed;inset:0;width:100%;height:100%;border:0;background:#000}
 #root{position:relative;z-index:1}
-#keyboard-input-assist{position:absolute;left:-9999px}
+#keyboard-input-assist{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;border:0;padding:0;caret-color:transparent}
 </style>
 </head>
 <body>
 <iframe id="jolee-core" title="Session hop core" allow="fullscreen; clipboard-read; clipboard-write; microphone; camera"></iframe>
-<input id="keyboard-input-assist" type="text" autocomplete="off" aria-hidden="true">
+<input id="keyboard-input-assist" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-hidden="true">
 <input id="jolee-file-upload" type="file" hidden>
 <div id="root"></div>
 <script>
@@ -64,14 +65,24 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
       iframe.contentWindow.postMessage(msg, location.origin);
     }
   }
-  assist.addEventListener("focus", function () {
-    postToCore({ type: "showVirtualKeyboard" });
-  });
+  // Do not post showVirtualKeyboard on focus: viewer focus would steal the
+  // user-gesture and iOS would never open the OSK. Keys go via assistKey.
   assist.addEventListener("keydown", function (e) {
     postToCore({ type: "assistKey", e: "down", key: e.key, code: e.code });
   });
   assist.addEventListener("keyup", function (e) {
     postToCore({ type: "assistKey", e: "up", key: e.key, code: e.code });
+  });
+  assist.addEventListener("input", function () {
+    // Mobile engines often deliver characters via input, not keydown.
+    var v = assist.value || "";
+    if (!v) return;
+    for (var i = 0; i < v.length; i++) {
+      var ch = v.charAt(i);
+      postToCore({ type: "assistKey", e: "down", key: ch, code: "" });
+      postToCore({ type: "assistKey", e: "up", key: ch, code: "" });
+    }
+    assist.value = "";
   });
   window.addEventListener("requestFileUpload", function () {
     fileUpload.click();
@@ -93,6 +104,6 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
   });
 })();
 </script>
-<script type="module" src="/dashboard/dashboard.js?v=jo-ui-24"></script>
+<script type="module" src="/dashboard/dashboard.js?v=jo-ui-25"></script>
 </body>
 </html>

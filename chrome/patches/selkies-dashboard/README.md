@@ -1,5 +1,7 @@
 This product extracts Selkies visual and functional experience onto the Jolee hop. Leftover panels still wait for a hop.
 
+**Standing UI rule (Lee):** Before changing Selkies dashboard/chrome UI for a broken control, first read stock Selkies at the `UPSTREAM` pin and see what hop (`viewer.html` / core / `postMessage`) change is needed so their existing code works. Prefer hop glue that matches their behavior. Only patch their UI as a last resort when the hop cannot provide what stock expects.
+
 # Selkies dashboard patches
 
 ## Goal

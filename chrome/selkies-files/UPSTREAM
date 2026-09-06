@@ -1,0 +1,4 @@
+repo=https://github.com/selkies-project/selkies
+path=addons/selkies-web-core/nginx
+commit=56618f4f54a4092c9bc07990f86d9682a33b1dfc
+license=MPL-2.0

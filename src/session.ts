@@ -113,12 +113,31 @@ export class Session extends Server<Env> {
     // Use serializeAttachment, not setState: PartyServer's setState overwrites
     // the socket attachment and drops the __pk metadata hibernation needs.
     const token = tokenFromRequest(ctx.request);
-    const joined = Boolean(token);
-    connection.serializeAttachment({ role, joined });
-    if (joined) {
-      this.persistPairState();
-      this.broadcastStatus();
+    if (!token) {
+      // Join-via-first-message path authenticates after upgrade.
+      connection.serializeAttachment({ role, joined: false });
+      return;
     }
+    const row = this.loadRow();
+    if (!row || row.state === "ended") {
+      connection.serializeAttachment({ role, joined: false });
+      connection.close(4004, "session not found");
+      return;
+    }
+    if (Date.now() >= row.expires_at) {
+      connection.serializeAttachment({ role, joined: false });
+      connection.close(4010, "session expired");
+      return;
+    }
+    const expected = role === "browser" ? row.browser_token : row.agent_token;
+    if (!timingSafeEqual(token, expected)) {
+      connection.serializeAttachment({ role, joined: false });
+      connection.close(4003, "invalid token");
+      return;
+    }
+    connection.serializeAttachment({ role, joined: true });
+    this.persistPairState();
+    this.broadcastStatus();
   }
 
   async onMessage(connection: Connection<ConnState>, message: WSMessage): Promise<void> {

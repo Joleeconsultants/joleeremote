@@ -61,6 +61,10 @@ https://remote.example.com/?session=<id>&hop=<worker-host>#token=<browserToken>
 
 `joins.browser` from mint is a path on the hop Worker (`viewerPath`): `/?session=<id>&hop=<worker-host>#token=<browserToken>`. If HTML is on `https://remote.example.com` and the Worker is elsewhere, prefix that origin and keep `hop`. `public/index.html` copies search params except `token` onto the iframe query, and puts the token on the iframe hash (hash first, then query fallback). The hop core auto-connects. A host app can also postMessage `connect` / `disconnect` to the iframe.
 
+## Microphone (parent capture)
+
+Enable Microphone runs `getUserMedia` + `MediaRecorder` in the top-window dashboard (`jolee-mic-capture.js`), then forwards `micChunk` into the hop core iframe. On start failure the overlay posts `pipelineStatusUpdate` with `microphone: false` and `error`, resets the stock Enable/Disable control, and reuses the existing Selkies error notification toast (no new UI).
+
 ## postMessage contract
 
 Same-origin `window` messages from the parent shell to `iframe#jolee-core`.

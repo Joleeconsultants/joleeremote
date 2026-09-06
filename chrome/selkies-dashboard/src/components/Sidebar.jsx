@@ -1431,6 +1431,7 @@ function Sidebar() {
   const [notifications, setNotifications] = useState([]);
   const notificationTimeouts = useRef({});
   const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
+  const [filesIframeSrc, setFilesIframeSrc] = useState("");
   const [isAppsModalOpen, setIsAppsModalOpen] = useState(false);
   const [keyboardButtonPosition, setKeyboardButtonPosition] = useState({ bottom: 20, right: 20 });
   const dragInfo = useRef({
@@ -1842,7 +1843,17 @@ function Sidebar() {
   };
 
   const toggleAppsModal = () => setIsAppsModalOpen(!isAppsModalOpen);
-  const toggleFilesModal = () => setIsFilesModalOpen(!isFilesModalOpen);
+  const toggleFilesModal = () => {
+    setIsFilesModalOpen((wasOpen) => {
+      if (!wasOpen) {
+        // Recompute absolute session+token URL on every open (avoid stale/empty src).
+        setFilesIframeSrc(
+          withSessionToken(new URL("/api/files/", window.location.href).href),
+        );
+      }
+      return !wasOpen;
+    });
+  };
   /**
    * Pops the on-screen keyboard by focusing the core's `#keyboard-input-assist`
    * input; the next touch on the stream overlay blurs it again.
@@ -4736,7 +4747,7 @@ function Sidebar() {
               &times;
             </button>
           </div>
-          <iframe src={withSessionToken("./api/files/")} title={t("filesModal.iframeTitle")} />
+          <iframe src={filesIframeSrc} title={t("filesModal.iframeTitle")} />
         </div>
       )}
       {isAppsModalOpen && (

@@ -32,12 +32,34 @@ function pageHashParams() {
   }
 }
 
+function cookieValue(name) {
+  if (typeof document === "undefined" || !document.cookie) return "";
+  try {
+    const parts = document.cookie.split(";");
+    for (const part of parts) {
+      const idx = part.indexOf("=");
+      if (idx < 0) continue;
+      const key = part.slice(0, idx).trim();
+      if (key !== name) continue;
+      return decodeURIComponent(part.slice(idx + 1).trim());
+    }
+  } catch {
+    return "";
+  }
+  return "";
+}
+
 function pageToken() {
-  return pageSearchParams().get("token") || pageHashParams().get("token") || "";
+  return (
+    pageSearchParams().get("token") ||
+    pageHashParams().get("token") ||
+    cookieValue("jolee_browser_token") ||
+    ""
+  );
 }
 
 function pageSession() {
-  return pageSearchParams().get("session") || "";
+  return pageSearchParams().get("session") || cookieValue("jolee_session") || "";
 }
 
 export function sessionAuthHeaders(headers) {

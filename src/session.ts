@@ -173,19 +173,34 @@ export class Session extends Server<Env> {
   }
 
   async onClose(connection: Connection<ConnState>): Promise<void> {
-    if (this.tearingDown) return;
-    const row = this.loadRow();
-    if (!row) return;
-    if (!this.isJoined(connection)) return;
-    await this.teardown();
+    await this.handlePeerDisconnect(connection);
   }
 
   async onError(connection: Connection<ConnState>, _error: unknown): Promise<void> {
+    await this.handlePeerDisconnect(connection);
+  }
+
+  /**
+   * Role-aware disconnect (noVNC-like):
+   * - browser refresh/leave: keep Session DO alive until TTL alarm or agent leave
+   * - agent leave: teardown (session is useless without the agent)
+   */
+  private async handlePeerDisconnect(connection: Connection<ConnState>): Promise<void> {
     if (this.tearingDown) return;
     const row = this.loadRow();
     if (!row) return;
     if (!this.isJoined(connection)) return;
-    await this.teardown();
+    const role = this.roleOf(connection);
+    if (role === "agent") {
+      await this.teardown();
+      return;
+    }
+    // Mark this socket unjoined so hasRole/status ignore it during onClose.
+    if (role === "browser") {
+      connection.serializeAttachment({ role, joined: false });
+    }
+    this.persistPairState();
+    this.broadcastStatus();
   }
 
   async onAlarm(): Promise<void> {

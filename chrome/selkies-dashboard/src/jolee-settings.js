@@ -63,7 +63,7 @@ export const JOLEE_SERVER_SETTINGS = {
   },
   manual_resolution: { value: false },
   encoder: { value: "h264enc", allowed: ["h264enc", "jpeg"] },
-  framerate: { value: 60, min: 8, max: 240 },
+  framerate: { value: 60, default: 60, min: 8, max: 240 },
   jpeg_quality: { value: 80, default: 80, min: 1, max: 100 },
   use_paint_over_quality: { value: false, locked: true },
   paint_over_jpeg_quality: { value: 80, locked: true },

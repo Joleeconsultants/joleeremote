@@ -11,6 +11,7 @@ package-lock.json
 vite.config.js
 index.html
 src/jolee-bridge.js
+src/jolee-mic-capture.js
 src/jolee-settings.js
 src/jolee-shims
 

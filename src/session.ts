@@ -1,5 +1,6 @@
 import { Server, type Connection, type ConnectionContext, type WSMessage } from "partyserver";
 import { decodeEnvelope, envelopeByteLength, MAX_ENVELOPE_BYTES } from "./envelope";
+import { fileFromFrame } from "./json-frame";
 import { timingSafeEqual } from "./tokens";
 import {
   DEFAULT_TTL_SECONDS,
@@ -43,6 +44,7 @@ export class Session extends Server<Env> {
         created_at INTEGER NOT NULL,
         state TEXT NOT NULL
       )`);
+      this.ensureFilesTable();
     });
   }
 
@@ -138,6 +140,11 @@ export class Session extends Server<Env> {
     if ((decoded.kind === "frame" || decoded.kind === "audio") && sender !== "agent") return;
     if (decoded.kind === "input" && sender !== "browser") return;
 
+    // Stash hop file transfers into the session inbox for /api/files/.
+    if (decoded.kind === "frame" || decoded.kind === "input") {
+      void this.maybeStoreTransferredFile(decoded.payload, sender);
+    }
+
     const target: Role = decoded.kind === "input" ? "agent" : "browser";
     for (const peer of this.getConnections<ConnState>(target)) {
       if (peer.id === connection.id) continue;
@@ -166,6 +173,92 @@ export class Session extends Server<Env> {
     const row = this.loadRow();
     if (!row) return;
     await this.teardown();
+  }
+
+
+  /** Authorize browser or agent hop token for HTTP file APIs. */
+  async authorizeSessionToken(token: string): Promise<Role | null> {
+    const row = this.loadRow();
+    if (!row || row.state === "ended") return null;
+    if (Date.now() >= row.expires_at) return null;
+    if (timingSafeEqual(token, row.browser_token)) return "browser";
+    if (timingSafeEqual(token, row.agent_token)) return "agent";
+    return null;
+  }
+
+  async listSessionFiles(): Promise<
+    { id: string; name: string; mime: string; size: number; createdAt: number; source: string }[]
+  > {
+    this.ensureFilesTable();
+    const rows = this.ctx.storage.sql
+      .exec<{ id: string; name: string; mime: string; size: number; created_at: number; source: string }>(
+        "SELECT id, name, mime, size, created_at, source FROM session_files ORDER BY created_at DESC",
+      )
+      .toArray();
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      mime: r.mime,
+      size: r.size,
+      createdAt: r.created_at,
+      source: r.source,
+    }));
+  }
+
+  async putSessionFile(input: {
+    name: string;
+    mime: string;
+    data: ArrayBuffer | Uint8Array;
+    source?: string;
+  }): Promise<{ id: string; name: string; mime: string; size: number; createdAt: number; source: string }> {
+    this.ensureFilesTable();
+    const bytes =
+      input.data instanceof Uint8Array ? input.data : new Uint8Array(input.data);
+    if (bytes.byteLength === 0) throw new Error("empty file");
+    if (bytes.byteLength > MAX_ENVELOPE_BYTES) throw new Error("file too large");
+    const id = crypto.randomUUID();
+    const createdAt = Date.now();
+    const name = (input.name || "file").slice(0, 512);
+    const mime = (input.mime || "application/octet-stream").slice(0, 256);
+    const source = (input.source || "inbox").slice(0, 64);
+    await this.ctx.storage.put(`fileblob:${id}`, bytes);
+    this.ctx.storage.sql.exec(
+      "INSERT INTO session_files (id, name, mime, size, created_at, source) VALUES (?, ?, ?, ?, ?, ?)",
+      id,
+      name,
+      mime,
+      bytes.byteLength,
+      createdAt,
+      source,
+    );
+    return { id, name, mime, size: bytes.byteLength, createdAt, source };
+  }
+
+  async getSessionFile(
+    id: string,
+  ): Promise<{ id: string; name: string; mime: string; size: number; createdAt: number; source: string; data: ArrayBuffer } | null> {
+    this.ensureFilesTable();
+    const rows = this.ctx.storage.sql
+      .exec<{ id: string; name: string; mime: string; size: number; created_at: number; source: string }>(
+        "SELECT id, name, mime, size, created_at, source FROM session_files WHERE id = ?",
+        id,
+      )
+      .toArray();
+    const row = rows[0];
+    if (!row) return null;
+    const blob = await this.ctx.storage.get<Uint8Array>(`fileblob:${id}`);
+    if (!blob) return null;
+    const copy = new Uint8Array(blob.byteLength);
+    copy.set(blob);
+    return {
+      id: row.id,
+      name: row.name,
+      mime: row.mime,
+      size: row.size,
+      createdAt: row.created_at,
+      source: row.source,
+      data: copy.buffer,
+    };
   }
 
   private handleJoin(connection: Connection<ConnState>, message: string): void {
@@ -298,6 +391,35 @@ export class Session extends Server<Env> {
     };
   }
 
+
+
+  private async maybeStoreTransferredFile(payload: Uint8Array, sender: Role | null): Promise<void> {
+    try {
+      const file = fileFromFrame(payload);
+      if (!file) return;
+      const bin = Uint8Array.from(atob(file.data), (c) => c.charCodeAt(0));
+      await this.putSessionFile({
+        name: file.name,
+        mime: file.mime,
+        data: bin,
+        source: sender === "agent" ? "agent-push" : "browser-push",
+      });
+    } catch {
+      // ignore malformed / oversized transfers
+    }
+  }
+
+  private ensureFilesTable(): void {
+    this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS session_files (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      source TEXT NOT NULL
+    )`);
+  }
+
   private loadRow(): SessionRow | null {
     try {
       const rows = this.ctx.storage.sql
@@ -329,6 +451,7 @@ export class Session extends Server<Env> {
         created_at INTEGER NOT NULL,
         state TEXT NOT NULL
       )`);
+    this.ensureFilesTable();
   }
 }
 

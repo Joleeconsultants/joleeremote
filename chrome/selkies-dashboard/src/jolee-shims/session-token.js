@@ -6,17 +6,38 @@
 
 /**
  * Original Jolee session-token helpers for dashboard compiles. Not selkies-web-core.
- * The hop uses query-param join tokens, not Selkies /api/ bearer cookies.
+ * The hop uses fragment `#token=` (query `?token=` fallback) and `?session=`.
  * @module
  */
 
-function pageToken() {
-  if (typeof window === "undefined" || !window.location) return "";
-  try {
-    return new URLSearchParams(window.location.search).get("token") || "";
-  } catch {
-    return "";
+function pageSearchParams() {
+  if (typeof window === "undefined" || !window.location) {
+    return new URLSearchParams();
   }
+  try {
+    return new URLSearchParams(window.location.search);
+  } catch {
+    return new URLSearchParams();
+  }
+}
+
+function pageHashParams() {
+  if (typeof window === "undefined" || !window.location) {
+    return new URLSearchParams();
+  }
+  try {
+    return new URLSearchParams((window.location.hash || "").replace(/^#/, ""));
+  } catch {
+    return new URLSearchParams();
+  }
+}
+
+function pageToken() {
+  return pageSearchParams().get("token") || pageHashParams().get("token") || "";
+}
+
+function pageSession() {
+  return pageSearchParams().get("session") || "";
 }
 
 export function sessionAuthHeaders(headers) {
@@ -28,12 +49,14 @@ export function sessionAuthHeaders(headers) {
   return base;
 }
 
+/** Attach session + browser token so ./api/files/ can authorize against the hop. */
 export function withSessionToken(url) {
   const token = pageToken();
-  if (!token) return url;
+  const session = pageSession();
   try {
     const resolved = new URL(url, window.location.href);
-    resolved.searchParams.set("token", token);
+    if (token) resolved.searchParams.set("token", token);
+    if (session) resolved.searchParams.set("session", session);
     return resolved.href;
   } catch {
     return url;

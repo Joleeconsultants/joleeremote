@@ -9,3 +9,4 @@
 0011-core-toggle-optimistic.patch
 0012-jolee-theme-import.patch
 0013-persist-audio-devices-fab-positions.patch
+0014-persist-mic-webcam-toggle.patch

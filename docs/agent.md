@@ -205,7 +205,7 @@ What existing tools to use for capture, input, print, clipboard, audio, etc.: [c
 Do not rely on Cloudflare Access policies to police who may open which PC. Access (if you use it) should establish **identity**; your portal/control Worker applies **tiers** and only then mints.
 
 1. User signs in (Access + your IdP — can be a wide multitenant door).
-2. Your Worker loads grants: operator vs assigned-device-only (or refuse).
+2. Your Worker loads grants: operator vs assigned-device-only (or refuse). If exactly one device is linked, skip a device path and mint for that device.
 3. On allow: `POST /sessions` with the mint secret → open `joins.browser` → agent joins with `agentToken`.
 
 This hop only checks mint secret + join tokens. See [architecture.md](architecture.md#host-authorization-tiers).

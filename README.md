@@ -42,7 +42,7 @@ node examples/agent.mjs <sessionId> <agentToken>
 
 Once both peers are paired, the hop forwards placeholder frames (plus one cursor JSON frame so the overlay can swap to a bitmap) and prints pointer/key/wheel input.
 
-**Production layout:** serve session HTML at `https://remote.example.com` (recommended `remote` subdomain). The hop Worker may be any host — that is the `hop` query param. When HTML and Worker are split:
+**Production layout:** serve session HTML on a host you control (docs use `https://remote.example.com` as a placeholder — any hostname works). The hop Worker may be the same origin or a different host — that is the `hop` query param. When HTML and Worker are split:
 
 ```
 https://remote.example.com/?session=<id>&hop=<worker-host>#token=<browserToken>
@@ -110,7 +110,7 @@ Suggested viewer payloads (opaque to the hop): UTF-8 JSON inside kind `input`, e
 
 ## HTTP and WebSocket
 
-Session HTML is intended at `https://remote.example.com`. The hop Worker may be a different host (`hop` query param). Same origin: omit `hop`.
+Session HTML is served from your chosen origin (placeholder in docs: `https://remote.example.com`). The hop Worker may be a different host (`hop` query param). Same origin: omit `hop`.
 
 - `POST /sessions` on the hop Worker. Optional JSON `{ "ttlSeconds": 900 }` (1..3600, default 900). **Production requires `MINT_SECRET`**: send `Authorization: Bearer <MINT_SECRET>` or `X-Mint-Secret`. Unset in local `wrangler dev` keeps open mint. Returns `sessionId`, `browserToken`, `agentToken`, `expiresAt`, `ttlSeconds`, `joins`.
 - `GET /sessions/:id` — public status; does **not** return tokens.

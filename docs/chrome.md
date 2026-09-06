@@ -51,7 +51,7 @@ https://remote.example.com/?session=<id>&hop=<worker-host>#token=<browserToken>
 | --- | --- |
 | `session` | session id from `POST /sessions` |
 | `token` | browser join token (prefer `#token=` fragment; `?token=` is fallback) |
-| `hop` | Worker host; default this origin. The HTML page is what we recommend on `remote` (`remote.example.com`) |
+| `hop` | Worker host; default this origin. HTML can live on any host you control (docs placeholder: `remote.example.com`) |
 
 `joins.browser` from mint is a path on the hop Worker (`viewerPath`): `/?session=<id>&hop=<worker-host>#token=<browserToken>`. If HTML is on `https://remote.example.com` and the Worker is elsewhere, prefix that origin and keep `hop`. `public/index.html` copies search params except `token` onto the iframe query, and puts the token on the iframe hash (hash first, then query fallback). The hop core auto-connects. A host app can also postMessage `connect` / `disconnect` to the iframe.
 

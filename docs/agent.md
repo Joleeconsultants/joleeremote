@@ -6,7 +6,7 @@ Join URL helpers live in `src/joins.ts` (`viewerPath` is the product browser joi
 
 ## Mint
 
-The session HTML lives at `remote` on your domain (`https://remote.example.com`). Pass `hop` only when the Worker is on another host.
+Serve session HTML from any origin you control (docs placeholder: `https://remote.example.com`). Pass `hop` only when the Worker is on another host.
 
 Your app: `POST /sessions` on the hop Worker with optional JSON `{ "ttlSeconds": 900 }` (clamped 1..3600, default 900).
 

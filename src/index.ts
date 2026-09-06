@@ -2,9 +2,8 @@ import { getServerByName, routePartykitRequest } from "partyserver";
 import { Session, type Env } from "./session";
 import { randomToken } from "./tokens";
 import {
-  DEFAULT_TTL_SECONDS,
-  MAX_TTL_SECONDS,
-  MIN_TTL_SECONDS,
+  clampTtlSeconds,
+  resolveSessionTtlSeconds,
   type MintResponse,
 } from "./types";
 import { agentJoinPath, viewerPath } from "./joins";
@@ -80,7 +79,8 @@ async function mint(request: Request, env: Env): Promise<Response> {
     return json({ error: "mint secret required" }, 401);
   }
 
-  let ttlSeconds = DEFAULT_TTL_SECONDS;
+  const defaultTtl = resolveSessionTtlSeconds(env.SESSION_TTL_SECONDS);
+  let ttlSeconds = defaultTtl;
   const contentType = request.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
     try {
@@ -90,10 +90,7 @@ async function mint(request: Request, env: Env): Promise<Response> {
       return json({ error: "invalid json" }, 400);
     }
   }
-  ttlSeconds = Math.min(
-    MAX_TTL_SECONDS,
-    Math.max(MIN_TTL_SECONDS, Math.floor(ttlSeconds)),
-  );
+  ttlSeconds = clampTtlSeconds(ttlSeconds, defaultTtl);
 
   const sessionId = crypto.randomUUID();
   const browserToken = randomToken();

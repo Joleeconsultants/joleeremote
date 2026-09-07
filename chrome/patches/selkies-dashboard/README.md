@@ -68,3 +68,4 @@ Image clipboard stays on input JSON / JSON frame. Cursor shape is the same JSON-
 
 See also `docs/chrome.md`.
 `0015-screen-setting-delivery.patch`: seed capture settings, persist FPS/quality, and coalesce rapid edits by key without changing controls.
+`0016-indicator-readings.patch`: distinguish unavailable telemetry from measured zero; keep FPS text readable.

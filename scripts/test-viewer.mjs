@@ -125,3 +125,33 @@ test('core load replays initial and latest settings, never keys or commands', ()
     assert.deepEqual(sent, [{ type: 'settings', settings: { framerate: 24, jpeg_quality: 80 } }]);
   } finally { delete globalThis.document; delete globalThis.window; }
 });
+
+test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth samples', () => {
+  let now = 0;
+  const sent = [];
+  const c = vm.createContext({ performance: { now: () => now },
+    window: { parent: { postMessage: value => sent.push(value) }, location: { origin: 'https://test.invalid' } },
+    frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {} });
+  vm.runInContext(html.slice(html.indexOf('function numberOr('), html.indexOf('setInterval(postStats,1000)')), c);
+  c.frameCount = 30; c.bytesSinceStats = 125000;
+  now = 500; c.postStats();
+  assert.equal(c.frameCount, 30);
+  now = 1000; c.postStats();
+  assert.equal(sent.at(-1).fps, 30);
+  assert.equal(sent.at(-1).network_stats.bandwidth_mbps, 1);
+  assert.equal(sent.at(-1).system_stats.cpu_percent, null);
+  assert.equal(sent.at(-1).system_stats.mem_used, null);
+  assert.equal(sent.at(-1).network_stats.latency_ms, null);
+  now = 1001; c.agentStats = { system_stats: { cpu_percent: 25 } }; c.postStats();
+  assert.equal(sent.at(-1).fps, 30);
+  assert.equal(sent.at(-1).network_stats.bandwidth_mbps, 1);
+  assert.equal(sent.at(-1).system_stats.cpu_percent, 25);
+  c.agentStats = { system_stats: { cpu_percent: 0, mem_used: 0, mem_total: 100 }, network_stats: { latency_ms: 0 } };
+  now = 1100; c.postStats();
+  assert.equal(sent.at(-1).system_stats.cpu_percent, 0);
+  assert.equal(sent.at(-1).system_stats.mem_total, 100);
+  assert.equal(sent.at(-1).network_stats.latency_ms, 0);
+  now = 2000; c.postStats();
+  assert.equal(sent.at(-1).fps, 0);
+  assert.equal(sent.at(-1).network_stats.bandwidth_mbps, 0);
+});

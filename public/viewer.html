@@ -49,6 +49,7 @@ let audioEnabled=true, videoEnabled=true, audioSinkId="", playingAudio=null, aud
 let pendingAudioPayload=null, audioFailLogged=false;
 let microphoneStream=null, microphoneRecorder=null, microphoneGen=0, microphoneForwarding=false, audioInputDeviceId="", webcamStream=null, webcamTimer=null;
 let frameCount=0, statsStartedAt=performance.now(), bytesSinceStats=0;
+let hopFps=0, hopBandwidth=0;
 let agentStats={};
 const printJobChunks=new Map();
 // Remote overlay is the default (Selkies idea). CSS cursors toggle (original UI) switches to a local pointer.
@@ -644,12 +645,17 @@ async function sendFile(blob){
 function numberOr(value,fallback=0){return typeof value==="number"&&isFinite(value)?value:fallback;}
 function postStats(){
   const now=performance.now(), elapsed=Math.max(1,now-statsStartedAt);
-  const hopFps=frameCount*1000/elapsed;
-  const hopBandwidth=bytesSinceStats*8/elapsed/1000;
+  // Agent telemetry and dashboard requests may arrive between timer ticks.
+  // Publish them immediately without consuming a partial throughput sample.
+  if(elapsed>=1000){
+    hopFps=frameCount*1000/elapsed;
+    hopBandwidth=bytesSinceStats*8/elapsed/1000;
+    frameCount=0; bytesSinceStats=0; statsStartedAt=now;
+  }
   const system=agentStats.system_stats||agentStats.system||{
-    cpu_percent:numberOr(agentStats.cpu_percent,0),
-    mem_used:numberOr(agentStats.mem_used,0),
-    mem_total:numberOr(agentStats.mem_total,0)
+    cpu_percent:numberOr(agentStats.cpu_percent,null),
+    mem_used:numberOr(agentStats.mem_used,null),
+    mem_total:numberOr(agentStats.mem_total,null)
   };
   const hasFlatGpu=agentStats.gpu_percent!==undefined||agentStats.gpu_mem_used!==undefined||agentStats.gpu_mem_total!==undefined;
   const gpu=agentStats.gpu_stats||agentStats.gpu||(hasFlatGpu?{
@@ -657,10 +663,9 @@ function postStats(){
     mem_used:numberOr(agentStats.gpu_mem_used,0),
     mem_total:numberOr(agentStats.gpu_mem_total,0)
   }:null);
-  const network=Object.assign({bandwidth_mbps:numberOr(agentStats.bandwidth_mbps,hopBandwidth),latency_ms:numberOr(agentStats.latency_ms,0)},agentStats.network_stats||agentStats.network||{});
+  const network=Object.assign({bandwidth_mbps:numberOr(agentStats.bandwidth_mbps,hopBandwidth),latency_ms:numberOr(agentStats.latency_ms,null)},agentStats.network_stats||agentStats.network||{});
   const stats={type:"statsUpdate",system_stats:system,gpu_stats:gpu,fps:numberOr(agentStats.fps,hopFps),network_stats:network,currentAudioLevel:numberOr(agentStats.currentAudioLevel??agentStats.audio_level,0)};
   if(window.parent!==window) window.parent.postMessage(stats,window.location.origin);
-  frameCount=0; bytesSinceStats=0; statsStartedAt=now;
 }
 setInterval(postStats,1000);
 canvas.addEventListener("pointermove",(e)=>{

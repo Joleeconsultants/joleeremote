@@ -49,12 +49,23 @@ flowchart LR
 | Clipboard text/image | OS clipboard APIs ↔ hop JSON | New envelope kinds | input / frame `{t:"clipboard",…}` |
 | Audio playback to browser | Your encode → complete media chunks | New codec in the hop | kind `0x03` audio |
 | Mic / webcam from browser | Browser already captures; agent consumes `{t:"mic"}` / `{t:"webcam"}` | Re-encoding in the Worker | input JSON |
-| Files | OS file I/O; hop `{t:"file",…}` | Extra transfer protocol | input / frame JSON |
+| Files | OS file I/O under consumer `FileManagerPath` / Desktop | New transfer protocol or envelope kinds | upload `{t:"file",…}` input; `filesList` / `filesGet` input + frame; optional `{t:"file",…}` push frame |
 | Stats gauges | Your process/GPU metrics → `{t:"stats",…}`; viewer also measures FPS/bandwidth | Pixelflux stats | frame JSON |
 | Encoder / quality settings | Your encoder; honor `{t:"settings",…}` / resize | Claiming this hop has pixelflux | input JSON |
 | **Session print** | See below | Custom RDPDR fork in this repo | frame `{t:"print",…}` |
 | Auth / tenants / devices | Your portal / Access / fleet | Tenants in this public hop | outside hop |
 | Browser print UI | **Shipped here** — viewer print dialog | Silent print from Chrome | — |
+
+## Files path (locked Option A)
+
+Prefer OS file I/O under the consumer agent's PC `FileManagerPath` / Desktop root. The consumer owns path resolution; the hop forwards opaque payloads.
+
+- Upload: browser → agent kind `0x02` `{t:"file",name,mime,data}` (`data` base64); the agent writes into that root.
+- List/get: `filesList` / `filesGet` requests in kind `0x02`, responses in kind `0x01`. Listing is root-only; get uses a basename. Exact shapes, errors, and `mtime` units: [agent.md — Files](agent.md#files-locked-option-a).
+- Optional canary/push: agent → browser kind `0x01` `{t:"file",name,mime,data}` triggers a browser download; it is distinct from `filesGet`.
+- The whole binary envelope, including header, JSON, and base64 expansion, must be ≤ 1 MiB (`MAX_ENVELOPE_BYTES`). Do not build a new transfer protocol or envelope kinds in this hop.
+
+UI **Download Files** and the `letleeadmin` CLI target the same PC folder via the Worker asking the paired agent. A Session DO inbox, if a consumer uses one, is interim only, not the end state.
 
 ## Print path (detail)
 

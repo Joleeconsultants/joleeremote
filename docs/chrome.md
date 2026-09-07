@@ -105,6 +105,12 @@ Core to parent (only when window.parent is not window):
 | `statsUpdate` | dashboard globals for CPU, memory, GPU, FPS, bandwidth, latency, and audio level |
 | `printJob` | `{name, mime}` — optional chrome awareness when a print JSON frame arrives (no blob URL). Parent may ignore. |
 
+## Files (locked Option A)
+
+**Download Files** / file UX will list and get files via hop `filesList` / `filesGet` toward the paired agent: requests in kind `0x02`, responses in kind `0x01`. UI and `letleeadmin` CLI target the same PC `FileManagerPath` / Desktop folder via the Worker asking that agent. The consumer owns PC path resolution; the hop stays opaque. A Session DO inbox, if used by a consumer, is interim only.
+
+The existing `fileUpload` → `{t:"file",name,mime,data}` postMessage mapping above stays the upload path. Agent → browser `{t:"file",name,mime,data}` frames remain the canary/push download path, distinct from `filesGet`. All use the 1 MiB whole-envelope cap. See [agent.md — Files](agent.md#files-locked-option-a) for the locked shapes. This documents the contract; list/get Viewer/Worker wiring and new chrome postMessage types are not introduced here.
+
 ## What's left
 
 **Visible now:** screen and agent-owned encoder preference (default H.264; JPEG fallback) + frame-rate/JPEG-quality settings, PC clipboard text+image, audio playback, microphone capture, file upload/download, webcam JPEG stills, stats gauges, a Ctrl+Alt+Del shortcut, fullscreen, theme, and mobile keyboard. Session print frames open the browser print dialog / preview in the hop viewer (PDF preferred); silent OS spool stays desktop-client only. Paint-over and the other Selkies-only encoder controls stay hidden. Overlay is hop core; CSS cursors is original UI. There is no pixelflux.
@@ -142,4 +148,3 @@ The patch series exists to rewire that chrome onto the hop canvas. Add chrome ba
 Do not bump packages past what the source uses: dashboard npm follows the pinned Selkies package.json; wrangler, workers-types, partyserver, and partysocket follow those sources, not latest-on-npm.
 
 Dependabot covers npm weekly (Monday) at `/` and `/chrome/selkies-dashboard`, plus GitHub Actions at `/`. The dashboard is pinned in `chrome/selkies-dashboard/UPSTREAM`; overlay files in `OVERLAY` are kept; Jolee rewires are `chrome/patches/selkies-dashboard/` plus `scripts/sync-selkies-dashboard.sh` (`latest` or a SHA). A weekday Action opens an issue titled "Selkies dashboard upstream moved" when the pin is behind.
-

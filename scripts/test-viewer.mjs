@@ -155,3 +155,36 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   assert.equal(sent.at(-1).fps, 0);
   assert.equal(sent.at(-1).network_stats.bandwidth_mbps, 0);
 });
+
+test('exact-resolution pointer mapping uses the centered native image and smoothing reaches CSS', () => {
+  const classes = new Map();
+  const c = vm.createContext({ scaleLocally: false, antiAliasing: false, ctx: {},
+    canvas: { width: 1280, height: 720, style: {}, classList: { toggle: (name, on) => classes.set(name, on) },
+      getBoundingClientRect: () => ({ left: -440, top: 40, width: 1280, height: 720 }) } });
+  vm.runInContext(html.slice(html.indexOf('function applyScale('), html.indexOf('function applyCursorMode(')) +
+    html.slice(html.indexOf('function contentBox('), html.indexOf('function moveOverlay(')), c);
+  c.applyScale(); c.applySmoothing();
+  assert.equal(classes.get('exact-resolution'), true);
+  assert.equal(c.canvas.style.imageRendering, 'pixelated');
+  assert.equal(c.pointerNorm({ clientX: 200, clientY: 400 }).x, 0.5);
+  assert.equal(c.pointerNorm({ clientX: 200, clientY: 400 }).y, 0.5);
+  c.scaleLocally = true; c.antiAliasing = true; c.applyScale(); c.applySmoothing();
+  assert.equal(classes.get('exact-resolution'), false);
+  assert.equal(c.canvas.style.imageRendering, 'auto');
+});
+
+test('local display preferences replay on iframe load without replaying actions', () => {
+  const sent = []; const listeners = {};
+  const frame = { contentWindow: { postMessage: value => sent.push(structuredClone(value)) },
+    addEventListener: (event, fn) => { listeners[event] = fn; } };
+  globalThis.document = { getElementById: () => frame };
+  globalThis.window = { location: { origin: 'https://test.invalid' } };
+  try {
+    postToCore({ type: 'setScaleLocally', value: false });
+    postToCore({ type: 'setAntiAliasing', value: false });
+    postToCore({ type: 'setAntiAliasing', value: true });
+    postToCore({ type: 'command', command: 'ctrl-alt-delete' });
+    sent.length = 0; listeners.load();
+    assert.deepEqual(sent, [{ type: 'setScaleLocally', value: false }, { type: 'setAntiAliasing', value: true }]);
+  } finally { delete globalThis.document; delete globalThis.window; }
+});

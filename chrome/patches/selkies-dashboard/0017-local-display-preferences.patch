@@ -1,0 +1,31 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index 63c5b73..e941ca8 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -1376,6 +1376,10 @@ function Sidebar() {
+     const saved = localStorage.getItem(getPrefixedKey("antiAliasingEnabled"));
+     return saved !== null ? saved === "true" : true;
+   });
++  useEffect(() => {
++    postToCore({ type: "setScaleLocally", value: scaleLocally });
++    postToCore({ type: "setAntiAliasing", value: antiAliasing });
++  }, [scaleLocally, antiAliasing]);
+   const [enableBinaryClipboard, setEnableBinaryClipboard] = useState(() => {
+     const saved = localStorage.getItem(getPrefixedKey("enable_binary_clipboard"));
+     return saved !== null ? saved === 'true' : DEFAULT_ENABLE_BINARY_CLIPBOARD;
+@@ -2232,6 +2236,7 @@ function Sidebar() {
+   const handleScaleLocallyToggle = () => {
+     const newState = !scaleLocally;
+     setScaleLocally(newState);
++    localStorage.setItem(getPrefixedKey("scaleLocallyManual"), String(newState));
+     postToCore(
+       { type: "setScaleLocally", value: newState },
+       window.location.origin
+@@ -2291,6 +2296,7 @@ function Sidebar() {
+   const handleAntiAliasingToggle = () => {
+     const newState = !antiAliasing;
+     setAntiAliasing(newState);
++    localStorage.setItem(getPrefixedKey("antiAliasingEnabled"), String(newState));
+     postToCore(
+       { type: "setAntiAliasing", value: newState },
+       window.location.origin

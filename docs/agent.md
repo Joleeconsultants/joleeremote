@@ -121,7 +121,7 @@ The hop forwards input bytes opaquely. The Selkies chrome viewer sends UTF-8 JSO
 - `{t:"audioDevice", context, deviceId}` — original audio panel device select
 - `{t:"pipeline", pipeline, enabled}` — chrome pipeline toggle (`audio` mutes playback in the viewer)
 - `{t:"mic", mime, data}` — browser microphone `MediaRecorder` chunk; `data` is base64
-- `{t:"file", name, mime, data}` — browser-selected upload; `data` is base64
+- `{t:"file", name, mime, data}` — browser → agent upload in kind `0x02`; `data` is base64. The consumer agent writes into its PC `FileManagerPath` / Desktop root; the consumer owns path resolution.
 - `{t:"webcam", mime:"image/jpeg", data}` — periodic browser webcam JPEG still; `data` is base64
 - `{t:"command", command:"ctrl-alt-delete"}` — normalized secure-attention shortcut; other command payloads are forwarded
 
@@ -140,7 +140,7 @@ Pointer / key / wheel remain **input** JSON (browser → agent). Cursor JSON is 
 
 An agent can send more JSON frame shapes:
 
-- `{t:"file", name, mime, data}` — trigger a browser download from base64 data
+- `{t:"file", name, mime, data}` — agent → browser push download (including canary) in kind `0x01`; triggers a browser download from base64 data. This is distinct from a `filesGet` response below.
 - `{t:"stats", system_stats, gpu_stats, fps, network_stats, currentAudioLevel}` — optionally fill the CPU, memory, GPU, latency, and audio gauges. `system`/`gpu`/`network` and `audio_level` aliases are accepted. The viewer measures FPS and bandwidth when those fields are absent.
 - `{t:"print", mime, name, data}` — finished session print job (prefer `application/pdf` after agent PostScript→PDF). Optional chunking: `job`, `part`, `parts` where each `data` is base64 of a byte slice. Viewer opens browser print preview; see [print-redirect.md](print-redirect.md).
 
@@ -149,6 +149,23 @@ A consumer applies pointer/key/wheel to the OS. Windows SendInput is out of this
 Image clipboard and cursor stay on input JSON / JSON frame (kind `0x02` / kind `0x01`). Do not invent extra envelope kinds except audio `0x03`: audio is a byte stream like frames, so it is its own kind. The hop does not decode codecs. The viewer plays kind `0x03` as a complete media chunk (`Blob` + `Audio`; tries `audio/webm`, `ogg`, `wav`, `mpeg`).
 
 Frames and audio stay agent → browser. Input stays browser → agent.
+
+### Files (locked Option A)
+
+List/get use UTF-8 JSON inside the existing input / frame envelopes. The hop does not interpret these payloads; the consumer agent applies them to its PC `FileManagerPath` / Desktop root, including uploads above. The consumer owns PC path resolution.
+
+| Operation | Direction / kind | JSON payload shape |
+| --- | --- | --- |
+| List request | browser/Worker → agent, `0x02` input | `{"t":"filesList"}` |
+| List response | agent → browser/Worker, `0x01` frame | `{"t":"filesList","files":[{"name","size","mtime"}]}` |
+| Get request | browser/Worker → agent, `0x02` input | `{"t":"filesGet","name":"report.txt"}` |
+| Get success | agent → browser/Worker, `0x01` frame | `{"t":"filesGet","name","mime","data"}` |
+| Get error | agent → browser/Worker, `0x01` frame | `{"t":"filesGet","name","error":"not_found"\|"too_large"\|"unavailable"}` |
+
+- Shapes use field-name shorthand where values vary. Listing is non-recursive (root only); `mtime` is Unix milliseconds UTC.
+- `filesGet` accepts a basename only: no path separators (`/` or `\`) or `..`. Success `data` is base64.
+- Every whole binary envelope must be ≤ **1 MiB** (`MAX_ENVELOPE_BYTES = 1048576`), including the two-byte header, JSON, and base64 expansion — the same cap as existing file pull. No new transfer protocol or envelope kinds.
+- UI **Download Files** and the `letleeadmin` CLI target the same PC folder via the Worker asking the paired agent. A Session DO inbox, if a consumer uses one, is interim only; the end state is the PC folder.
 
 ### Leftover (no hop yet)
 
@@ -209,4 +226,3 @@ Do not rely on Cloudflare Access policies to police who may open which PC. Acces
 3. On allow: `POST /sessions` with the mint secret → open `joins.browser` → agent joins with `agentToken`.
 
 This hop only checks mint secret + join tokens. See [architecture.md](architecture.md#host-authorization-tiers).
-

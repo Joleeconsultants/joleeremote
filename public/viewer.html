@@ -418,7 +418,8 @@ function handlePrintFrame(pf){
   }
   let job=printJobChunks.get(pf.job);
   if(!job||job.parts!==pf.parts){
-    job={name:pf.name,mime:pf.mime,parts:pf.parts,chunks:new Array(pf.parts)};
+    // Fill every slot: Array.every skips holes and would accept an incomplete job.
+    job={name:pf.name,mime:pf.mime,parts:pf.parts,chunks:new Array(pf.parts).fill(null)};
     printJobChunks.set(pf.job,job);
   }
   job.name=pf.name;

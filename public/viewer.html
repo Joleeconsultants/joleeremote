@@ -67,7 +67,14 @@ function applyCursorMode(){
   const show=!useBrowserCursors && pointerOver && agentCursorVisible;
   cursorEl.style.display=show?"block":"none";
 }
+let sessionPaired=false;
+let latestSettings={};
 function setStatus(state){
+  const wasPaired=sessionPaired;
+  sessionPaired=state==="paired";
+  if(sessionPaired&&!wasPaired&&Object.keys(latestSettings).length){
+    sendInput({t:"settings",settings:latestSettings});
+  }
   if(window.parent!==window){
     window.parent.postMessage({type:"status",state}, window.location.origin);
   }
@@ -583,7 +590,18 @@ function connect(opts){
     paintFrame(env.payload);
   });
 }
-function sendInput(payload){if(!socket||socket.readyState!==1)return;const encoded=encodeInput(payload);if(encoded.length>MAX_ENVELOPE_BYTES)return;socket.send(encoded);}
+function sendInput(payload){
+  if(payload.t==="settings"&&payload.settings&&typeof payload.settings==="object"){
+    const merged=Object.assign({},latestSettings,payload.settings);
+    if(encodeInput({t:"settings",settings:merged}).length>MAX_ENVELOPE_BYTES)return;
+    latestSettings=merged;
+    if(!sessionPaired)return;
+  }
+  if(!socket||socket.readyState!==1)return;
+  const encoded=encodeInput(payload);
+  if(encoded.length>MAX_ENVELOPE_BYTES)return;
+  socket.send(encoded);
+}
 function requestFullscreen(){
   const el=stage;
   const req=el.requestFullscreen||el.webkitRequestFullscreen;

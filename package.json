@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && node --test scripts/test-viewer.mjs",
     "dev": "wrangler dev",
     "build:dashboard": "npm --prefix chrome/selkies-dashboard run build",
     "sync:dashboard": "bash scripts/sync-selkies-dashboard.sh"

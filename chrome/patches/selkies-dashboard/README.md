@@ -67,3 +67,4 @@ Image clipboard stays on input JSON / JSON frame. Cursor shape is the same JSON-
 | `0014-mic-start-failure-ux.patch` | surface mic start failures via stock notification + start re-entry guard |
 
 See also `docs/chrome.md`.
+`0015-screen-setting-delivery.patch`: seed capture settings, persist FPS/quality, and coalesce rapid edits by key without changing controls.

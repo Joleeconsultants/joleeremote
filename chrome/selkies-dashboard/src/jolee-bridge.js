@@ -12,8 +12,40 @@
  * @param {object} message
  * @param {string} [targetOrigin]
  */
+const settingsByFrame = new WeakMap();
+
+/** Coalesce slider bursts by key, so adjusting another control loses no values. */
+export function debounceSettings(send, delay) {
+  let timer;
+  let pending = {};
+  const enqueue = (settings) => {
+    Object.assign(pending, settings);
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const settings = pending;
+      pending = {};
+      send(settings);
+    }, delay);
+  };
+  enqueue.cancel = () => { clearTimeout(timer); pending = {}; };
+  return enqueue;
+}
+
 export function postToCore(message, targetOrigin = window.location.origin) {
   const iframe = document.getElementById("jolee-core");
+  if (iframe && message?.type === "settings") {
+    let state = settingsByFrame.get(iframe);
+    if (!state) {
+      state = { settings: {}, origin: targetOrigin };
+      settingsByFrame.set(iframe, state);
+      // Initial React effects may run before the core's message listener exists.
+      // Replay settings only; input and actions must never replay on load.
+      iframe.addEventListener("load", () => iframe.contentWindow?.postMessage(
+        { type: "settings", settings: state.settings }, state.origin));
+    }
+    Object.assign(state.settings, message.settings);
+    state.origin = targetOrigin;
+  }
   if (message && message.type === "requestFullscreen" && iframe) {
     const req = iframe.requestFullscreen || iframe.webkitRequestFullscreen;
     if (req) {

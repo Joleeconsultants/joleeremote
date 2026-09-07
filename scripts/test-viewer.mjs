@@ -92,3 +92,36 @@ test('re-pairing restores settings but never replays key or file actions',()=>{
   assert.deepEqual(sent.at(-1),{t:'settings',settings:{framerate:60,jpeg_quality:90}});
   assert.ok(sent.every(p=>p.t==='settings'));
 });
+
+import { debounceSettings, postToCore } from '../chrome/selkies-dashboard/src/jolee-bridge.js';
+
+test('rapid settings changes preserve different keys and only the latest value per key', async () => {
+  const sent = [];
+  const post = debounceSettings(value => sent.push(value), 5);
+  post({ framerate: 30 });
+  post({ jpeg_quality: 60 });
+  post({ framerate: 24 });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.deepEqual(sent, [{ framerate: 24, jpeg_quality: 60 }]);
+  post({ jpeg_quality: 50 });
+  post.cancel();
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(sent.length, 1);
+});
+
+test('core load replays initial and latest settings, never keys or commands', () => {
+  const sent = [];
+  const listeners = {};
+  const frame = { contentWindow: { postMessage: msg => sent.push(structuredClone(msg)) },
+    addEventListener: (event, fn) => { listeners[event] = fn; } };
+  globalThis.document = { getElementById: () => frame };
+  globalThis.window = { location: { origin: 'https://test.invalid' } };
+  try {
+    postToCore({ type: 'settings', settings: { framerate: 60, jpeg_quality: 80 } });
+    postToCore({ type: 'settings', settings: { framerate: 24 } });
+    postToCore({ type: 'command', command: 'ctrl-alt-delete' });
+    sent.length = 0;
+    listeners.load();
+    assert.deepEqual(sent, [{ type: 'settings', settings: { framerate: 24, jpeg_quality: 80 } }]);
+  } finally { delete globalThis.document; delete globalThis.window; }
+});

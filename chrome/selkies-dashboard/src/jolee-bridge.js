@@ -13,6 +13,7 @@
  * @param {string} [targetOrigin]
  */
 const settingsByFrame = new WeakMap();
+const localPreferences = new Set(["setScaleLocally", "setAntiAliasing"]);
 
 /** Coalesce slider bursts by key, so adjusting another control loses no values. */
 export function debounceSettings(send, delay) {
@@ -33,17 +34,23 @@ export function debounceSettings(send, delay) {
 
 export function postToCore(message, targetOrigin = window.location.origin) {
   const iframe = document.getElementById("jolee-core");
-  if (iframe && message?.type === "settings") {
+  if (iframe && (message?.type === "settings" || localPreferences.has(message?.type))) {
     let state = settingsByFrame.get(iframe);
     if (!state) {
-      state = { settings: {}, origin: targetOrigin };
+      state = { settings: {}, preferences: {}, origin: targetOrigin };
       settingsByFrame.set(iframe, state);
       // Initial React effects may run before the core's message listener exists.
-      // Replay settings only; input and actions must never replay on load.
-      iframe.addEventListener("load", () => iframe.contentWindow?.postMessage(
-        { type: "settings", settings: state.settings }, state.origin));
+      // Replay settings and local display preferences, never input or actions.
+      iframe.addEventListener("load", () => {
+        if (Object.keys(state.settings).length) iframe.contentWindow?.postMessage(
+          { type: "settings", settings: state.settings }, state.origin);
+        for (const preference of Object.values(state.preferences)) {
+          iframe.contentWindow?.postMessage(preference, state.origin);
+        }
+      });
     }
-    Object.assign(state.settings, message.settings);
+    if (message.type === "settings") Object.assign(state.settings, message.settings);
+    else state.preferences[message.type] = { type: message.type, value: !!message.value };
     state.origin = targetOrigin;
   }
   if (message && message.type === "requestFullscreen" && iframe) {

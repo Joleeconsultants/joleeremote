@@ -54,3 +54,41 @@ test('single-part print still opens immediately', () => {
   assert.equal(previews.length, 1);
   assert.equal(Buffer.from(previews[0].bytes).toString(), 'single');
 });
+
+function settingsViewer() {
+  const sent=[];
+  const window={}; window.parent=window;
+  const context=vm.createContext({window, socket:{readyState:0,send:value=>sent.push(JSON.parse(value))},
+    MAX_ENVELOPE_BYTES:1048576, encodeInput:JSON.stringify});
+  const statusSource=html.slice(html.indexOf('let sessionPaired='),html.indexOf('function encodeInput('));
+  const sendSource=html.slice(html.indexOf('function sendInput('),html.indexOf('function requestFullscreen('));
+  vm.runInContext(statusSource+'\n'+sendSource,context);
+  return {context,sent};
+}
+
+test('settings chosen before socket open or agent join replay latest values on pairing',()=>{
+  const {context:c,sent}=settingsViewer();
+  c.sendInput({t:'settings',settings:{framerate:30}});
+  c.socket.readyState=1;
+  c.setStatus('waiting');
+  c.sendInput({t:'settings',settings:{framerate:60,jpeg_quality:80}});
+  assert.equal(sent.length,0);
+  c.setStatus('paired');
+  assert.deepEqual(sent,[{t:'settings',settings:{framerate:60,jpeg_quality:80}}]);
+  c.setStatus('paired');
+  assert.equal(sent.length,1);
+});
+
+test('re-pairing restores settings but never replays key or file actions',()=>{
+  const {context:c,sent}=settingsViewer();
+  c.sendInput({t:'key',e:'down',key:'x'});
+  c.sendInput({t:'file',data:'eA=='});
+  c.sendInput({t:'settings',settings:{framerate:60}});
+  c.socket.readyState=1;
+  c.setStatus('paired');
+  c.sendInput({t:'settings',settings:{jpeg_quality:90}});
+  c.setStatus('waiting');
+  c.setStatus('paired');
+  assert.deepEqual(sent.at(-1),{t:'settings',settings:{framerate:60,jpeg_quality:90}});
+  assert.ok(sent.every(p=>p.t==='settings'));
+});

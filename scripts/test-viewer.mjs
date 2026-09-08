@@ -44,7 +44,7 @@ test('assist defers composition and keeps named controls and physical shortcuts'
 
 // Exercise the shipped browser routine; stub only browser side effects.
 const html = readFileSync(new URL('../public/viewer.html', import.meta.url), 'utf8');
-const source = html.slice(html.indexOf('function handlePrintFrame(pf){'), html.indexOf('function applyAudioSink(el){'));
+const source = html.slice(html.indexOf('function handlePrintFrame(pf){'), html.indexOf('function setVideoEnabled('));
 assert.ok(source.startsWith('function handlePrintFrame(pf){'));
 
 function viewer() {
@@ -98,7 +98,7 @@ function settingsViewer() {
   const sent=[];
   const window={}; window.parent=window;
   const context=vm.createContext({window, socket:{readyState:0,send:value=>sent.push(JSON.parse(value))},
-    MAX_ENVELOPE_BYTES:1048576, encodeInput:JSON.stringify});
+    stopAudioPlayback:()=>{}, MAX_ENVELOPE_BYTES:1048576, encodeInput:JSON.stringify});
   const statusSource=html.slice(html.indexOf('let sessionPaired='),html.indexOf('function encodeInput('));
   const sendSource=html.slice(html.indexOf('function sendInput('),html.indexOf('function requestFullscreen('));
   vm.runInContext(statusSource+'\n'+sendSource,context);
@@ -186,7 +186,7 @@ test('core load replays initial and latest settings, never keys or commands', ()
 test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth samples', () => {
   let now = 0;
   const sent = [];
-  const c = vm.createContext({ performance: { now: () => now }, consumeScreenAck: () => {},
+  const c = vm.createContext({ performance: { now: () => now }, consumeScreenAck: () => {}, remoteAudio:{reading:()=>({level:null,state:"unavailable"})},
     window: { parent: { postMessage: value => sent.push(value) }, location: { origin: 'https://test.invalid' } },
     frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, agentScreen: null, agentStatsReceivedAt: 0, observedEncoder: null, latencyReading: () => null });
   vm.runInContext(html.slice(html.indexOf('function numberOr('), html.indexOf('setInterval(postStats,1000)')), c);
@@ -268,7 +268,7 @@ test('local display preferences replay on iframe load without replaying actions'
 test('latency accepts only the pending reply and expires samples or disconnected state', () => {
   let now = 0, nonce = 0;
   const sent = [];
-  const c = vm.createContext({ performance: { now: () => now }, crypto: { randomUUID: () => `nonce-${++nonce}` },
+  const c = vm.createContext({ stopAudioPlayback:()=>{}, performance: { now: () => now }, crypto: { randomUUID: () => `nonce-${++nonce}` },
     socket: { readyState: 1 }, window: { parent: { postMessage() {} }, location: { origin: 'https://test.invalid' } },
     sendInput: value => sent.push(value), parseJsonFrameObject: value => value, postStats() {} });
   vm.runInContext(html.slice(html.indexOf('let sessionPaired='), html.indexOf('function encodeInput(')), c);
@@ -314,4 +314,43 @@ test('screen requests correlate confirmations and clear pending work on disconne
   c.requestScreenSize(1280,720,'manual');
   c.finishScreenRequest('rejected','session_unavailable');
   assert.equal(results.at(-1).reason,'session_unavailable'); assert.equal(timers.size,0);
+});
+
+function audioHarness() {
+  const sources=[]; let decodeResolve;
+  class Context {
+    state='suspended';currentTime=0;
+    createAnalyser(){return {fftSize:2048,connect(){},getFloatTimeDomainData:out=>out.fill(this.signal||0)};}
+    createMediaStreamDestination(){return {stream:{}};}
+    resume(){this.state='running';return Promise.resolve();}
+    decodeAudioData(){return this.defer?new Promise(resolve=>{decodeResolve=resolve;}):Promise.resolve({duration:0.25});}
+    createBufferSource(){const source={connect(){},disconnect(){},start(time){this.time=time;},stop(){this.stopped=true;}};sources.push(source);return source;}
+  }
+  class Audio {paused=true;play(){this.paused=false;return Promise.resolve();}pause(){this.paused=true;}setSinkId(id){this.sink=id;return Promise.resolve();}}
+  const c=vm.createContext({window:{AudioContext:Context},Audio,Float32Array});
+  vm.runInContext(html.slice(html.indexOf('class RemoteAudioPlayer'),html.indexOf('function stopAudioPlayback('))+'\nglobalThis.player=remoteAudio;',c);
+  return {player:c.player,sources,resolve:()=>decodeResolve({duration:0.25})};
+}
+
+test('audio buffers sequential playback, measures signal and expires silence vs missing audio',async()=>{
+  const {player,sources}=audioHarness();const bytes=new Uint8Array([1,2]);
+  for(let i=0;i<7;i++)player.push(bytes);
+  assert.equal(player.queue.length,4);assert.equal(player.reading().level,null);
+  await player.unlock();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(sources.length,4);
+  assert.equal(sources[1].time-sources[0].time,0.25);
+  player.context.signal=0.5;
+  assert.equal(player.reading().level,71);
+  player.context.signal=0;assert.equal(player.reading().state,'silent');assert.equal(player.reading().level,0);
+  player.context.currentTime=3;assert.equal(player.reading().level,null);assert.equal(player.reading().state,'waiting');
+  await player.setSink('speaker');assert.equal(player.element.sink,'speaker');
+  await player.setSink('');assert.equal(player.element.sink,'');
+  player.enabled=false;player.stop();assert.equal(player.reading().state,'disabled');assert.ok(sources.every(s=>s.stopped));
+});
+
+test('audio decode finishing after teardown cannot restart playback',async()=>{
+  const {player,sources,resolve}=audioHarness();await player.unlock();player.context.defer=true;
+  player.push(new Uint8Array([1]));player.stop();resolve();
+  await new Promise(done=>setImmediate(done));
+  assert.equal(sources.length,0);assert.equal(player.queue.length,0);assert.equal(player.reading().level,null);
 });

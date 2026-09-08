@@ -7,7 +7,7 @@
 <link rel="shortcut icon" href="/favicon.ico" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="stylesheet" href="/dashboard/dashboard.css?v=jo-ui-34" />
+<link rel="stylesheet" href="/dashboard/dashboard.css?v=jo-ui-35" />
 <style>
 html,body{margin:0;height:100%;background:#000;overflow:hidden}
 #jolee-core{position:fixed;inset:0;width:100%;height:100%;border:0;background:#000}
@@ -127,10 +127,11 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
     window.gpu_stats = msg.gpu_stats || null;
     window.fps = Number.isFinite(msg.fps) ? msg.fps : 0;
     window.network_stats = msg.network_stats || {};
-    window.currentAudioLevel = Number.isFinite(msg.currentAudioLevel) ? msg.currentAudioLevel : 0;
+    window.currentAudioLevel = Number.isFinite(msg.currentAudioLevel) ? msg.currentAudioLevel : null;
+    window.audioPlaybackState = typeof msg.audio_playback_state === 'string' ? msg.audio_playback_state : 'unavailable';
   });
 })();
 </script>
-<script type="module" src="/dashboard/dashboard.js?v=jo-ui-34"></script>
+<script type="module" src="/dashboard/dashboard.js?v=jo-ui-35"></script>
 </body>
 </html>

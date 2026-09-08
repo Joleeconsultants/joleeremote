@@ -84,22 +84,32 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
   }
   // Do not post showVirtualKeyboard on focus: viewer focus would steal the
   // user-gesture and iOS would never open the OSK. Keys go via assistKey.
-  assist.addEventListener("keydown", function (e) {
-    postToCore({ type: "assistKey", e: "down", key: e.key, code: e.code });
-  });
-  assist.addEventListener("keyup", function (e) {
-    postToCore({ type: "assistKey", e: "up", key: e.key, code: e.code });
-  });
-  assist.addEventListener("input", function () {
-    // Mobile engines often deliver characters via input, not keydown.
-    var v = assist.value || "";
-    if (!v) return;
-    for (var i = 0; i < v.length; i++) {
-      var ch = v.charAt(i);
+    var composing = false;
+    function forwardAssistControl(e, direction) {
+      // Printable characters are delivered once, by committed input below.
+      if (composing || e.isComposing || e.key === "Process" || e.key === "Unidentified" || e.key === "Dead") return;
+      if (Array.from(e.key || "").length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) return;
+      postToCore({ type: "assistKey", e: direction, key: e.key, code: e.code });
+    }
+    assist.addEventListener("keydown", function (e) { forwardAssistControl(e, "down"); });
+    assist.addEventListener("keyup", function (e) { forwardAssistControl(e, "up"); });
+    function commitAssistText() {
+      var v = assist.value || "";
+      if (!v) return;
+      // Preserve supplementary Unicode characters as one key payload.
+      for (var ch of v) {
       postToCore({ type: "assistKey", e: "down", key: ch, code: "" });
       postToCore({ type: "assistKey", e: "up", key: ch, code: "" });
     }
-    assist.value = "";
+      assist.value = "";
+    }
+    assist.addEventListener("compositionstart", function () { composing = true; });
+    assist.addEventListener("compositionend", function () {
+      composing = false;
+      commitAssistText();
+    });
+    assist.addEventListener("input", function (e) {
+      if (!composing && !e.isComposing) commitAssistText();
   });
   window.addEventListener("requestFileUpload", function () {
     fileUpload.click();

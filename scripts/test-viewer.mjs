@@ -3,6 +3,45 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+function assistKeyboard() {
+  const shell = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const events = {}, sent = [];
+  const assist = { value: '', addEventListener: (name, callback) => { events[name] = callback; } };
+  vm.runInNewContext(shell.slice(shell.indexOf('var composing = false;'), shell.indexOf('window.addEventListener("requestFileUpload"')), {
+    assist, postToCore: value => sent.push(value),
+  });
+  return { assist, sent, fire: (name, event = {}) => events[name](event) };
+}
+
+test('assist commits printable text once and preserves spaces and Unicode scalars', () => {
+  const { assist, sent, fire } = assistKeyboard();
+  fire('keydown', { key: 'A', code: 'KeyA' });
+  assist.value = 'A ! é 😀';
+  fire('input');
+  fire('keyup', { key: 'A', code: 'KeyA' });
+  assert.deepEqual(sent.filter(e => e.e === 'down').map(e => e.key), ['A', ' ', '!', ' ', 'é', ' ', '😀']);
+  assert.equal(sent.length, 14);
+  assert.ok(sent.every(e => e.code === ''));
+  assert.equal(assist.value, '');
+});
+
+test('assist defers composition and keeps named controls and physical shortcuts', () => {
+  const { assist, sent, fire } = assistKeyboard();
+  fire('compositionstart');
+  assist.value = 'ni'; fire('input', { isComposing: true });
+  fire('keydown', { key: 'Process' });
+  assert.equal(sent.length, 0);
+  assist.value = '你'; fire('compositionend'); fire('input');
+  assert.deepEqual(sent.map(e => e.key), ['你', '你']);
+  for (const key of ['Backspace', 'Enter', 'Escape']) {
+    fire('keydown', { key, code: '' }); fire('keyup', { key, code: '' });
+  }
+  fire('keydown', { key: 's', code: 'KeyS', ctrlKey: true });
+  fire('keyup', { key: 's', code: 'KeyS', ctrlKey: true });
+  assert.equal(sent.length, 10);
+  assert.equal(sent[8].code, 'KeyS');
+});
+
 // Exercise the shipped browser routine; stub only browser side effects.
 const html = readFileSync(new URL('../public/viewer.html', import.meta.url), 'utf8');
 const source = html.slice(html.indexOf('function handlePrintFrame(pf){'), html.indexOf('function applyAudioSink(el){'));

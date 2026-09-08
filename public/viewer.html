@@ -672,7 +672,9 @@ function sendInput(payload){
 function requestFullscreen(){
   const el=stage;
   const req=el.requestFullscreen||el.webkitRequestFullscreen;
-  if(req) Promise.resolve(req.call(el)).catch(()=>{});
+  const report=()=>{if(window.parent!==window)window.parent.postMessage({type:'fullscreenError',message:req?'Fullscreen was not granted by this browser.':'Fullscreen is not supported by this browser.'},window.location.origin);};
+  if(!req){report();return;}
+  try{Promise.resolve(req.call(el)).catch(report);}catch{report();}
 }
 function showVirtualKeyboard(){
   // Parent shell owns #keyboard-input-assist + OSK (Selkies). Do not steal

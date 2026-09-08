@@ -354,3 +354,13 @@ test('audio decode finishing after teardown cannot restart playback',async()=>{
   await new Promise(done=>setImmediate(done));
   assert.equal(sources.length,0);assert.equal(player.queue.length,0);assert.equal(player.reading().level,null);
 });
+
+test('fullscreen denial and unsupported API produce explicit parent feedback',async()=>{
+  const messages=[];
+  const c=vm.createContext({stage:{requestFullscreen:()=>Promise.reject(new Error('not granted'))},window:{parent:{postMessage:m=>messages.push(m)},location:{origin:'https://test.invalid'}}});
+  vm.runInContext(html.slice(html.indexOf('function requestFullscreen('),html.indexOf('function showVirtualKeyboard(')),c);
+  c.requestFullscreen();await new Promise(done=>setImmediate(done));
+  assert.equal(messages.at(-1).type,'fullscreenError');assert.match(messages.at(-1).message,/not granted/);
+  c.stage={};c.requestFullscreen();assert.match(messages.at(-1).message,/not supported/);
+  c.stage={requestFullscreen:()=>{throw new Error('inactive');}};c.requestFullscreen();assert.equal(messages.length,3);
+});

@@ -91,6 +91,7 @@ const clipboardPaste=new ClipboardPasteGate({
 let pendingClipboardRequest=null;
 const clipboardReadErrors=new Set();
 function beginClipboardRequest(kind){
+  delete canvas.dataset.clipboardReceipt;
   if(pendingClipboardRequest)clearTimeout(pendingClipboardRequest.timer);
   const request={id:crypto.randomUUID(),kind};
   clipboardPaste.begin(request.id);
@@ -119,6 +120,13 @@ function consumeClipboardResult(payload){
   }
   if(pendingClipboardRequest&&result.id===pendingClipboardRequest.id&&
       (result.status==='applied'&&result.reason===null||result.status==='rejected'&&reasons.includes(result.reason))){
+    const request=pendingClipboardRequest;
+    // Content-free diagnostic receipt of an actual matched native result. Never
+    // expose content or the one-use Paste token, and never synthesize an ack.
+    if(request.kind==='image'&&request.wireSha256&&sessionPaired){
+      canvas.dataset.clipboardReceipt=JSON.stringify({sessionId:session,clipboardId:request.id,
+        status:result.status,mime:'image/png',wireSha256:request.wireSha256,receivedAt:new Date().toISOString()});
+    }
     finishClipboardRequest(result.status,result.reason,result.paste_token);
   }
   return true;
@@ -177,6 +185,7 @@ function setStatus(state){
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
   if(!sessionPaired){
+    delete canvas.dataset.clipboardReceipt;
     clipboardPaste.reset();
     invalidateVideoFrames();
     if(wasPaired){stopAudioPlayback();stopWebcam();}
@@ -1012,6 +1021,9 @@ async function clipboardImageUpdateFromUI(blob){
   try{
     const bytes=await normalizeClipboardImage(blob,clipboardImageLimits());
     if(!current())return;
+    const digest=await crypto.subtle.digest('SHA-256',bytes);
+    if(!current())return;
+    request.wireSha256=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
     if(!sessionPaired||connection!==socket||connection.readyState!==1){finishClipboardRequest('rejected','session_unavailable');return;}
     if(latestSettings.enable_binary_clipboard===false){finishClipboardRequest('rejected','unsupported');return;}
     const encoded=encodeInput({t:'clipboard',id:request.id,mime:'image/png',data:bytesToBase64(bytes)});

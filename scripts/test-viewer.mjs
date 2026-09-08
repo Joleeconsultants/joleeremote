@@ -1,10 +1,12 @@
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { webcrypto } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ClipboardPasteGate } from '../public/clipboard-paste.js';
 function viewerContext(globals) {
-  return vm.createContext({ ClipboardPasteGate, clipboardPaste: new ClipboardPasteGate({ send() {}, report() {}, supported: () => false, connection: () => null }), ...globals });
+  return vm.createContext({ canvas:{dataset:{}},session:'fixture-session', ClipboardPasteGate, clipboardPaste: new ClipboardPasteGate({ send() {}, report() {}, supported: () => false, connection: () => null }), ...globals,
+    crypto:{subtle:webcrypto.subtle,...globals.crypto} });
 }
 import { createClipboardDelivery, clipboardImageBlob } from '../chrome/selkies-dashboard/src/jolee-clipboard-delivery.js';
 
@@ -523,6 +525,38 @@ test('late image conversion cannot replace newer text or write into a replaced c
   assert.equal(sent.length,1);assert.equal(sent[0].text,'newer');assert.equal(messages.length,0);
   const second=c.clipboardImageUpdateFromUI(clipboardPng());c.socket={readyState:1,send:()=>assert.fail('stale image sent')};resolve(new Uint8Array([1]));await second;
   assert.equal(messages.at(-1).reason,'session_unavailable');assert.equal(sent.length,1);
+});
+
+test('image diagnostic receipt exposes only the exact native result and submitted wire hash',async()=>{
+  const {c,sent,timers}=imageClipboardViewer();
+  const blob=clipboardPng();
+  await c.clipboardImageUpdateFromUI(blob);
+  assert.equal(c.canvas.dataset.clipboardReceipt,undefined);
+  const ack=(id,status='applied',reason=null)=>c.consumeClipboardResult(JSON.stringify({t:'clipboard_result',id,status,reason,paste_token:'secret-token'}));
+  ack('other');ack('1','applied','invalid_image');
+  assert.equal(c.canvas.dataset.clipboardReceipt,undefined);
+  ack('1');
+  const receipt=JSON.parse(c.canvas.dataset.clipboardReceipt);
+  assert.deepEqual(Object.keys(receipt).sort(),['clipboardId','mime','receivedAt','sessionId','status','wireSha256']);
+  const expected=Buffer.from(await webcrypto.subtle.digest('SHA-256',Buffer.from(sent[0].data,'base64'))).toString('hex');
+  assert.equal(receipt.wireSha256,expected);
+  assert.equal(receipt.sessionId,'fixture-session');assert.equal(receipt.clipboardId,'1');
+  assert.equal(receipt.status,'applied');assert.equal(receipt.mime,'image/png');
+  assert.ok(Number.isFinite(Date.parse(receipt.receivedAt)));
+  const saved=c.canvas.dataset.clipboardReceipt;ack('1','rejected','invalid_image');
+  assert.equal(c.canvas.dataset.clipboardReceipt,saved);
+  c.clipboardUpdateFromUI('replacement');assert.equal(c.canvas.dataset.clipboardReceipt,undefined);
+  [...timers.values()][0]();assert.equal(c.canvas.dataset.clipboardReceipt,undefined);
+});
+
+test('hashing an image cannot send after timeout or replacement',async()=>{
+  const {c,sent,timers}=imageClipboardViewer();let finishHash,hashStarted;
+  const started=new Promise(resolve=>{hashStarted=resolve;});
+  c.crypto.subtle={digest:()=>{hashStarted();return new Promise(resolve=>{finishHash=resolve;});}};
+  const write=c.clipboardImageUpdateFromUI(clipboardPng());
+  await started;[...timers.values()][0]();
+  finishHash(new Uint8Array(32).buffer);await write;
+  assert.equal(sent.length,0);assert.equal(c.canvas.dataset.clipboardReceipt,undefined);
 });
 test('image clipboard enforces capability, toggle, payload, PNG geometry and animation bounds',async()=>{
   const {c,sent,messages}=imageClipboardViewer();

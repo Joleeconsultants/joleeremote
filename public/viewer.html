@@ -30,6 +30,7 @@ canvas.exact-resolution{position:absolute;width:auto;height:auto;left:50%;top:50
 <script type="module">
 // Must match root package.json partysocket (currently 1.1.6).
 import PartySocket from "https://esm.sh/partysocket@1.1.6";
+import { ClipboardPasteGate } from './clipboard-paste.js?v=jo-ui-41';
 const VERSION=1, KIND_FRAME=1, KIND_INPUT=2, KIND_AUDIO=3;
 const DEFAULT_CURSOR_SVG="data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round" d="M1 1v16.5l4.2-4.3 3.3 8 2.5-1-3.3-7.9H15z"/></svg>');
 const DEFAULT_CURSOR_HX=1, DEFAULT_CURSOR_HY=1;
@@ -82,19 +83,43 @@ function finishScreenRequest(status,reason,effective=null){
   clearTimeout(request.timer);pendingScreenRequest=null;
   if(window.parent!==window)window.parent.postMessage({type:'screenResult',id:request.id,status,reason,effective},window.location.origin);
 }
+const clipboardPaste=new ClipboardPasteGate({
+  send:payload=>sendInput(payload), supported:()=>agentStats.clipboard_paste_supported===true,
+  connection:()=>sessionPaired&&socket?.readyState===1?socket:null,
+  report:(status,reason)=>{if(window.parent!==window)window.parent.postMessage({type:'clipboardPasteResult',status,reason},window.location.origin);},
+});
 let pendingClipboardRequest=null;
-function finishClipboardRequest(status,reason){
+const clipboardReadErrors=new Set();
+function beginClipboardRequest(kind){
+  if(pendingClipboardRequest)clearTimeout(pendingClipboardRequest.timer);
+  const request={id:crypto.randomUUID(),kind};
+  clipboardPaste.begin(request.id);
+  request.timer=setTimeout(()=>{if(pendingClipboardRequest===request)finishClipboardRequest('rejected','confirmation_timeout');},15000);
+  pendingClipboardRequest=request;return request;
+}
+function finishClipboardRequest(status,reason,pasteToken){
   if(!pendingClipboardRequest)return;
   const request=pendingClipboardRequest;
   clearTimeout(request.timer);pendingClipboardRequest=null;
-  if(window.parent!==window)window.parent.postMessage({type:'clipboardResult',id:request.id,status,reason},window.location.origin);
+  clipboardPaste.settle(request.id,status,pasteToken);
+  if(window.parent!==window)window.parent.postMessage({type:'clipboardResult',id:request.id,kind:request.kind,status,reason},window.location.origin);
 }
 function consumeClipboardResult(payload){
   const result=parseJsonFrameObject(payload);
   if(!result||result.t!=='clipboard_result')return false;
+  const reasons=['invalid_text','invalid_image','image_too_large','clipboard_unavailable','unsupported'];
+  if(result.id===null&&result.direction==='read'&&result.status==='rejected'&&reasons.includes(result.reason)&&
+      typeof result.sequence==='string'&&result.sequence.length>0&&result.sequence.length<=64){
+    if(!clipboardReadErrors.has(result.sequence)){
+      clipboardReadErrors.add(result.sequence);
+      if(clipboardReadErrors.size>64)clipboardReadErrors.delete(clipboardReadErrors.values().next().value);
+      if(window.parent!==window)window.parent.postMessage({type:'clipboardReadError',reason:result.reason},window.location.origin);
+    }
+    return true;
+  }
   if(pendingClipboardRequest&&result.id===pendingClipboardRequest.id&&
-      (result.status==='applied'&&result.reason===null||result.status==='rejected'&&['invalid_text','clipboard_unavailable'].includes(result.reason))){
-    finishClipboardRequest(result.status,result.reason);
+      (result.status==='applied'&&result.reason===null||result.status==='rejected'&&reasons.includes(result.reason))){
+    finishClipboardRequest(result.status,result.reason,result.paste_token);
   }
   return true;
 }
@@ -152,10 +177,12 @@ function setStatus(state){
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
   if(!sessionPaired){
+    clipboardPaste.reset();
     invalidateVideoFrames();
     if(wasPaired){stopAudioPlayback();stopWebcam();}
     finishScreenRequest('rejected','session_unavailable');
     finishClipboardRequest('rejected','session_unavailable');
+    clipboardReadErrors.clear();
     if(screenResizeTimer!==null)clearTimeout(screenResizeTimer);
     screenResizeTimer=null;
   }else if(!wasPaired)scheduleScreenResize();
@@ -217,8 +244,21 @@ function clipboardTextFromFrame(payload){
   const obj=parseJsonFrameObject(payload);
   if(!obj) return null;
   if(!(obj.t==="clipboard"||obj.type==="clipboard")) return null;
-  if(typeof obj.mime==="string"&&obj.mime.indexOf("image/")===0&&typeof obj.data==="string"){
-    return {kind:"image",mime:obj.mime,data:obj.data};
+  if(typeof obj.mime==="string"&&obj.mime.indexOf("image/")===0){
+    if(!sessionPaired||latestSettings.enable_binary_clipboard===false)return {kind:'ignored'};
+    try{
+      if(obj.mime!=='image/png')throw new Error('unsupported');
+      const limits=clipboardImageLimits();
+      if(typeof obj.data!=='string'||!obj.data.length)throw new Error('invalid_image');
+      if(obj.data.length>Math.ceil(limits.bytes/3)*4)throw new Error('image_too_large');
+      if(obj.data.length%4!==0||!/^[A-Za-z0-9+/]*={0,2}$/.test(obj.data))throw new Error('invalid_image');
+      const binary=atob(obj.data);
+      if(btoa(binary)!==obj.data)throw new Error('invalid_image');
+      if(binary.length>limits.bytes)throw new Error('image_too_large');
+      const bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));
+      checkClipboardPng(bytes,limits);
+      return {kind:"image",mime:'image/png',data:obj.data};
+    }catch(error){return {kind:'rejected',reason:['invalid_image','image_too_large','unsupported'].includes(error.message)?error.message:'invalid_image'};}
   }
   if(typeof obj.text==="string") return {kind:"text",text:obj.text};
   return null;
@@ -776,6 +816,7 @@ function connect(opts){
     if(env.kind==="audio"){playAudioChunk(env.payload);return;}
     if(env.kind!=="frame") return;
     if(consumeLatencyReply(env.payload))return;
+    if(clipboardPaste.consume(parseJsonFrameObject(env.payload)))return;
     if(consumeClipboardResult(env.payload))return;
     const videoConfig=parseJsonFrameObject(env.payload);
     if(videoConfig?.t==='video_config'){
@@ -784,8 +825,12 @@ function connect(opts){
     }
     const clip=clipboardTextFromFrame(env.payload);
     if(clip!==null){
+      if(clip.kind==='ignored')return;
+      if(clip.kind==='image'||clip.kind==='text')clipboardPaste.invalidate('superseded');
       if(window.parent!==window){
-        if(clip.kind==="image"){
+        if(clip.kind==='rejected'){
+          window.parent.postMessage({type:'clipboardReadError',reason:clip.reason},window.location.origin);
+        }else if(clip.kind==="image"){
           window.parent.postMessage({type:"clipboardImageUpdate",mime:clip.mime,data:clip.data}, window.location.origin);
         }else{
           window.parent.postMessage({type:"clipboardContentUpdate",text:clip.text}, window.location.origin);
@@ -809,7 +854,9 @@ function connect(opts){
   });
 }
 function sendInput(payload){
+  if(payload.t==='pointer'&&payload.e==='down'||payload.t==='wheel')clipboardPaste.cancel('conflicting_input');
   if(payload.t==="settings"&&payload.settings&&typeof payload.settings==="object"){
+    if(payload.settings.enable_binary_clipboard===false)clipboardPaste.invalidate('cancelled');
     payload={...payload,settings:{...payload.settings,video_protocol:1}};
     const merged=Object.assign({},latestSettings,payload.settings);
     if(encodeInput({t:"settings",settings:merged}).length>MAX_ENVELOPE_BYTES)return;
@@ -833,9 +880,7 @@ function showVirtualKeyboard(){
   // focus to canvas/vk — that was the mobile keyboard regression.
 }
 function clipboardUpdateFromUI(text){
-  if(pendingClipboardRequest)clearTimeout(pendingClipboardRequest.timer);
-  const id=crypto.randomUUID();
-  pendingClipboardRequest={id,timer:setTimeout(()=>finishClipboardRequest('rejected','confirmation_timeout'),15000)};
+  const {id}=beginClipboardRequest('text');
   const maxChars=Number.isInteger(agentStats.clipboard_max_chars)&&agentStats.clipboard_max_chars>0?Math.min(16384,agentStats.clipboard_max_chars):16384;
   const invalid=typeof text!=='string'||text.length>maxChars||text.includes('\0')||Array.from(text).some(ch=>ch.length===1&&ch.charCodeAt(0)>=0xD800&&ch.charCodeAt(0)<=0xDFFF);
   if(invalid){finishClipboardRequest('rejected','invalid_text');return;}
@@ -851,15 +896,89 @@ function bytesToBase64(bytes){
   }
   return btoa(bin);
 }
-async function clipboardImageUpdateFromUI(blob){
-  if(!(blob instanceof Blob)) return;
+function clipboardImageLimits(){
+  const limit=(name,max)=>Number.isInteger(agentStats[name])&&agentStats[name]>0?Math.min(max,agentStats[name]):max;
+  return {bytes:limit('clipboard_image_max_bytes',768000),dimension:limit('clipboard_image_max_dimension',4096),pixels:limit('clipboard_image_max_pixels',8388608)};
+}
+function checkClipboardGeometry(width,height,limits){
+  if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1)throw new Error('invalid_image');
+  if(width>limits.dimension||height>limits.dimension||width*height>limits.pixels)throw new Error('image_too_large');
+}
+function checkClipboardPng(bytes,limits){
+  const signature=[137,80,78,71,13,10,26,10];
+  if(bytes.length<45||signature.some((v,i)=>bytes[i]!==v))throw new Error('invalid_image');
+  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  let offset=8,header=false,end=false;
+  while(offset+12<=bytes.length){
+    const length=view.getUint32(offset),type=String.fromCharCode(...bytes.subarray(offset+4,offset+8));
+    if(length>bytes.length-offset-12)throw new Error('invalid_image');
+    if(!header){
+      if(type!=='IHDR'||length!==13)throw new Error('invalid_image');
+      checkClipboardGeometry(view.getUint32(offset+8),view.getUint32(offset+12),limits);header=true;
+    }else if(type==='IHDR')throw new Error('invalid_image');
+    if(type==='acTL'||type==='fcTL'||type==='fdAT')throw new Error('unsupported');
+    offset+=length+12;
+    if(type==='IEND'){if(length!==0||offset!==bytes.length)throw new Error('invalid_image');end=true;break;}
+  }
+  if(!end)throw new Error('invalid_image');
+}
+function checkClipboardJpeg(bytes,limits){
+  if(bytes.length<4||bytes[0]!==255||bytes[1]!==216)throw new Error('invalid_image');
+  let offset=2;
+  while(offset<bytes.length){
+    if(bytes[offset++]!==255)throw new Error('invalid_image');
+    while(offset<bytes.length&&bytes[offset]===255)offset++;
+    const marker=bytes[offset++];
+    if(marker===217||marker===218)break;
+    if(marker===1||marker>=208&&marker<=215)continue;
+    if(offset+2>bytes.length)break;
+    const length=bytes[offset]*256+bytes[offset+1];
+    if(length<2||offset+length>bytes.length)break;
+    if(marker>=192&&marker<=207&&![196,200,204].includes(marker)){
+      if(length<8)break;
+      checkClipboardGeometry(bytes[offset+5]*256+bytes[offset+6],bytes[offset+3]*256+bytes[offset+4],limits);return;
+    }
+    offset+=length;
+  }
+  throw new Error('invalid_image');
+}
+async function normalizeClipboardImage(blob,limits){
+  if(!(blob instanceof Blob)||!['image/png','image/jpeg'].includes(blob.type))throw new Error('unsupported');
+  if(blob.size>8388608)throw new Error('image_too_large');
+  if(blob.type==='image/png'){
+    const bytes=new Uint8Array(await blob.arrayBuffer());checkClipboardPng(bytes,limits);
+    if(bytes.length>limits.bytes)throw new Error('image_too_large');
+    return bytes;
+  }
+  checkClipboardJpeg(new Uint8Array(await blob.arrayBuffer()),limits);
+  const bitmap=await createImageBitmap(blob);
   try{
-    const buf=await blob.arrayBuffer();
-    const encoded=encodeInput({t:"clipboard",mime:blob.type||"image/png",data:bytesToBase64(new Uint8Array(buf))});
-    if(encoded.length>MAX_ENVELOPE_BYTES) return;
-    if(!socket||socket.readyState!==1) return;
-    socket.send(encoded);
-  }catch(e){}
+    checkClipboardGeometry(bitmap.width,bitmap.height,limits);
+    const surface=document.createElement('canvas');surface.width=bitmap.width;surface.height=bitmap.height;
+    const context=surface.getContext('2d');if(!context)throw new Error('invalid_image');
+    context.drawImage(bitmap,0,0);
+    const png=await new Promise(resolve=>surface.toBlob(resolve,'image/png'));
+    if(!png)throw new Error('invalid_image');
+    if(png.size>limits.bytes)throw new Error('image_too_large');
+    return new Uint8Array(await png.arrayBuffer());
+  }finally{bitmap.close();}
+}
+async function clipboardImageUpdateFromUI(blob){
+  const request=beginClipboardRequest('image'),connection=socket;
+  const current=()=>pendingClipboardRequest===request;
+  if(!sessionPaired||!connection||connection.readyState!==1){finishClipboardRequest('rejected','session_unavailable');return;}
+  if(agentStats.clipboard_image_supported!==true||latestSettings.enable_binary_clipboard===false){finishClipboardRequest('rejected','unsupported');return;}
+  try{
+    const bytes=await normalizeClipboardImage(blob,clipboardImageLimits());
+    if(!current())return;
+    if(!sessionPaired||connection!==socket||connection.readyState!==1){finishClipboardRequest('rejected','session_unavailable');return;}
+    if(latestSettings.enable_binary_clipboard===false){finishClipboardRequest('rejected','unsupported');return;}
+    const encoded=encodeInput({t:'clipboard',id:request.id,mime:'image/png',data:bytesToBase64(bytes)});
+    if(encoded.length>MAX_ENVELOPE_BYTES){finishClipboardRequest('rejected','image_too_large');return;}
+    connection.send(encoded);
+  }catch(error){
+    if(current())finishClipboardRequest('rejected',['unsupported','invalid_image','image_too_large'].includes(error?.message)?error.message:'clipboard_unavailable');
+  }
 }
 async function sendFile(blob){
   if(!(blob instanceof Blob)) return;
@@ -964,10 +1083,15 @@ canvas.addEventListener("wheel",(e)=>{
 },{passive:false});
 canvas.addEventListener("contextmenu",(e)=>{e.preventDefault();});
 // Keys stay on the canvas (and #vk). Do not window-capture: dashboard .allow-native-input must keep typing.
-canvas.addEventListener("keydown",(e)=>{sendInput({t:"key",e:"down",key:e.key,code:e.code});e.preventDefault();});
-canvas.addEventListener("keyup",(e)=>{sendInput({t:"key",e:"up",key:e.key,code:e.code});e.preventDefault();});
-vk.addEventListener("keydown",(e)=>{sendInput({t:"key",e:"down",key:e.key,code:e.code});});
-vk.addEventListener("keyup",(e)=>{sendInput({t:"key",e:"up",key:e.key,code:e.code});});
+function sendKeyFromUI(e,direction){
+  clipboardPaste.key({t:'key',e:direction,key:e.key,code:e.code},
+    {trusted:e.isTrusted,ctrlKey:e.ctrlKey,metaKey:e.metaKey,shiftKey:e.shiftKey,altKey:e.altKey});
+}
+canvas.addEventListener("keydown",(e)=>{sendKeyFromUI(e,'down');e.preventDefault();});
+canvas.addEventListener("keyup",(e)=>{sendKeyFromUI(e,'up');e.preventDefault();});
+vk.addEventListener("keydown",(e)=>sendKeyFromUI(e,'down'));
+vk.addEventListener("keyup",(e)=>sendKeyFromUI(e,'up'));
+for(const target of [canvas,vk,window])target.addEventListener('blur',()=>clipboardPaste.cancel('target_unavailable'));
 window.addEventListener("message",(event)=>{
   if(event.origin!==window.location.origin) return;
   if(window.parent!==window && event.source!==window.parent) return;
@@ -988,7 +1112,11 @@ window.addEventListener("message",(event)=>{
       break;
     case "fileUpload": sendFile(msg.file); break;
     case "assistKey":
-      sendInput({t:"key",e:msg.e==="up"?"up":"down",key:msg.key,code:msg.code});
+      clipboardPaste.key({t:'key',e:msg.e==='up'?'up':'down',key:msg.key,code:msg.code},
+        {trusted:msg.trusted===true,ctrlKey:msg.ctrlKey===true,metaKey:msg.metaKey===true,shiftKey:msg.shiftKey===true,altKey:msg.altKey===true});
+      break;
+    case 'clipboardPasteCancel':
+      clipboardPaste.cancel('target_unavailable');
       break;
     case "setAntiAliasing":
       antiAliasing=!!msg.value;

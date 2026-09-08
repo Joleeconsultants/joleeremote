@@ -2,6 +2,11 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { ClipboardPasteGate } from '../public/clipboard-paste.js';
+function viewerContext(globals) {
+  return vm.createContext({ ClipboardPasteGate, clipboardPaste: new ClipboardPasteGate({ send() {}, report() {}, supported: () => false, connection: () => null }), ...globals });
+}
+import { createClipboardDelivery, clipboardImageBlob } from '../chrome/selkies-dashboard/src/jolee-clipboard-delivery.js';
 
 function assistKeyboard() {
   const shell = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
@@ -46,7 +51,7 @@ test('assist defers composition and keeps named controls and physical shortcuts'
 const html = readFileSync(new URL('../public/viewer.html', import.meta.url), 'utf8');
 test('clipboard writes require matching native confirmation and reject invalid text without truncation',()=>{
   const messages=[],sent=[],timers=new Map();let id=0,timerId=0;
-  const c=vm.createContext({window:{parent:{postMessage:m=>messages.push(m)},location:{origin:'https://example.test'}},
+  const c=viewerContext({window:{parent:{postMessage:m=>messages.push(m)},location:{origin:'https://example.test'}},
     crypto:{randomUUID:()=>String(++id)},agentStats:{clipboard_text_supported:true,clipboard_max_chars:16384},sessionPaired:true,
     sendInput:m=>sent.push(m),parseJsonFrameObject:JSON.parse,
     setTimeout:fn=>{timers.set(++timerId,fn);return timerId;},clearTimeout:id=>timers.delete(id)});
@@ -70,7 +75,7 @@ function viewer() {
   const previews = [];
   const window = {};
   window.parent = window;
-  const context = vm.createContext({
+  const context = viewerContext({
     window, Uint8Array, printJobChunks: new Map(),
     base64ToBytes: data => new Uint8Array(Buffer.from(data, 'base64')),
     openPrintPreview: file => previews.push(file),
@@ -116,7 +121,7 @@ test('single-part print still opens immediately', () => {
 function settingsViewer() {
   const sent=[];
   const window={}; window.parent=window;
-  const context=vm.createContext({window, socket:{readyState:0,send:value=>sent.push(JSON.parse(value))},
+  const context=viewerContext({window, socket:{readyState:0,send:value=>sent.push(JSON.parse(value))},
     stopAudioPlayback:()=>{}, stopWebcam:()=>{}, invalidateVideoFrames:()=>{}, MAX_ENVELOPE_BYTES:1048576, encodeInput:JSON.stringify});
   const statusSource=html.slice(html.indexOf('let sessionPaired='),html.indexOf('function encodeInput('));
   const sendSource=html.slice(html.indexOf('function sendInput('),html.indexOf('function requestFullscreen('));
@@ -205,7 +210,7 @@ test('core load replays initial and latest settings, never keys or commands', ()
 test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth samples', () => {
   let now = 0;
   const sent = [];
-  const c = vm.createContext({ performance: { now: () => now }, consumeScreenAck: () => {}, remoteAudio:{reading:()=>({level:null,state:"unavailable"})},
+  const c = viewerContext({ performance: { now: () => now }, consumeScreenAck: () => {}, remoteAudio:{reading:()=>({level:null,state:"unavailable"})},
     window: { parent: { postMessage: value => sent.push(value) }, location: { origin: 'https://test.invalid' } },
     frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, agentScreen: null, agentStatsReceivedAt: 0, observedEncoder: null, latencyReading: () => null });
   vm.runInContext(html.slice(html.indexOf('function numberOr('), html.indexOf('setInterval(postStats,1000)')), c);
@@ -263,7 +268,7 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
 
 test('exact-resolution pointer mapping uses the centered native image and smoothing reaches CSS', () => {
   const classes = new Map();
-  const c = vm.createContext({ scaleLocally: false, antiAliasing: false, ctx: {},
+  const c = viewerContext({ scaleLocally: false, antiAliasing: false, ctx: {},
     canvas: { width: 1280, height: 720, style: {}, classList: { toggle: (name, on) => classes.set(name, on) },
       getBoundingClientRect: () => ({ left: -440, top: 40, width: 1280, height: 720 }) } });
   vm.runInContext(html.slice(html.indexOf('function applyScale('), html.indexOf('function applyCursorMode(')) +
@@ -297,7 +302,7 @@ test('local display preferences replay on iframe load without replaying actions'
 test('latency accepts only the pending reply and expires samples or disconnected state', () => {
   let now = 0, nonce = 0;
   const sent = [];
-  const c = vm.createContext({ stopAudioPlayback:()=>{}, stopWebcam:()=>{}, invalidateVideoFrames:()=>{}, performance: { now: () => now }, crypto: { randomUUID: () => `nonce-${++nonce}` },
+  const c = viewerContext({ stopAudioPlayback:()=>{}, stopWebcam:()=>{}, invalidateVideoFrames:()=>{}, performance: { now: () => now }, crypto: { randomUUID: () => `nonce-${++nonce}` },
     socket: { readyState: 1 }, window: { parent: { postMessage() {} }, location: { origin: 'https://test.invalid' } },
     sendInput: value => sent.push(value), parseJsonFrameObject: value => value, postStats() {} });
   vm.runInContext(html.slice(html.indexOf('let sessionPaired='), html.indexOf('function encodeInput(')), c);
@@ -318,7 +323,7 @@ test('latency accepts only the pending reply and expires samples or disconnected
 
 test('screen requests correlate confirmations and clear pending work on disconnect', () => {
   const sent=[], results=[], timers=new Map(); let next=0;
-  const c=vm.createContext({
+  const c=viewerContext({
     window:{parent:{postMessage:m=>results.push(m)},location:{origin:'https://test.invalid'}},
     crypto:{randomUUID:()=>`screen-${++next}`},
     setTimeout:fn=>{const id=++next;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),
@@ -356,7 +361,7 @@ function audioHarness() {
     createBufferSource(){const source={connect(){},disconnect(){},start(time){this.time=time;},stop(){this.stopped=true;}};sources.push(source);return source;}
   }
   class Audio {paused=true;play(){this.paused=false;return Promise.resolve();}pause(){this.paused=true;}setSinkId(id){this.sink=id;return Promise.resolve();}}
-  const c=vm.createContext({window:{AudioContext:Context},Audio,Float32Array});
+  const c=viewerContext({window:{AudioContext:Context},Audio,Float32Array});
   vm.runInContext(html.slice(html.indexOf('class RemoteAudioPlayer'),html.indexOf('function stopAudioPlayback('))+'\nglobalThis.player=remoteAudio;',c);
   return {player:c.player,sources,resolve:()=>decodeResolve({duration:0.25})};
 }
@@ -386,7 +391,7 @@ test('audio decode finishing after teardown cannot restart playback',async()=>{
 
 test('fullscreen denial and unsupported API produce explicit parent feedback',async()=>{
   const messages=[];
-  const c=vm.createContext({stage:{requestFullscreen:()=>Promise.reject(new Error('not granted'))},window:{parent:{postMessage:m=>messages.push(m)},location:{origin:'https://test.invalid'}}});
+  const c=viewerContext({stage:{requestFullscreen:()=>Promise.reject(new Error('not granted'))},window:{parent:{postMessage:m=>messages.push(m)},location:{origin:'https://test.invalid'}}});
   vm.runInContext(html.slice(html.indexOf('function requestFullscreen('),html.indexOf('function showVirtualKeyboard(')),c);
   c.requestFullscreen();await new Promise(done=>setImmediate(done));
   assert.equal(messages.at(-1).type,'fullscreenError');assert.match(messages.at(-1).message,/not granted/);
@@ -397,7 +402,7 @@ test('fullscreen denial and unsupported API produce explicit parent feedback',as
 
 test('late JPEG decodes cannot overwrite newer frames or repaint disabled/reconnected video',async()=>{
   const pending=[],painted=[],closed=[];
-  const c=vm.createContext({negotiatedVideo:{reset:()=>{}},videoGeneration:0,receivedFrameSequence:0,latestPaintedFrame:0,videoEnabled:true,videoDecoder:null,
+  const c=viewerContext({negotiatedVideo:{reset:()=>{}},videoGeneration:0,receivedFrameSequence:0,latestPaintedFrame:0,videoEnabled:true,videoDecoder:null,
     canvas:{},ctx:{drawImage:b=>painted.push(b.id)},applySmoothing:()=>{},observedEncoder:null,frameCount:0,Blob,
     createImageBitmap:()=>new Promise(resolve=>pending.push(resolve))});
   vm.runInContext(html.slice(html.indexOf('function invalidateVideoFrames('),html.indexOf('async function paintH264(')),c);
@@ -415,7 +420,7 @@ test('late JPEG decodes cannot overwrite newer frames or repaint disabled/reconn
 
 test('webcam capture requires confirmed support and a late permission grant cannot restart a stopped camera',async()=>{
   let resolveCamera,calls=0,stopped=0;const status=[];
-  const c=vm.createContext({agentStats:{},webcamGen:0,webcamStarting:false,webcamStream:null,webcamTimer:null,
+  const c=viewerContext({agentStats:{},webcamGen:0,webcamStarting:false,webcamStream:null,webcamTimer:null,
     navigator:{mediaDevices:{getUserMedia:()=>{calls++;return new Promise(resolve=>resolveCamera=resolve);}}},
     clearInterval:()=>{},postPipelineStatus:(...args)=>status.push(args)});
   vm.runInContext(html.slice(html.indexOf('function stopWebcam('),html.indexOf('function downloadFile(')),c);
@@ -433,7 +438,7 @@ test('replaced sockets cannot change status, deliver data or close the current s
     close(){this.closed=true;}
     fire(name,event={}){this.listeners[name](event);}
   }
-  const c=vm.createContext({PartySocket:Socket,URL,session:'test',token:'owned-test-token',hop:'',socket:null,
+  const c=viewerContext({PartySocket:Socket,URL,session:'test',token:'owned-test-token',hop:'',socket:null,
     location:{host:'test.invalid',href:'https://test.invalid/viewer.html'},history:{replaceState:()=>{}},
     videoDecoder:null,stopAudioPlayback:()=>{},stopMicrophone:()=>{},stopWebcam:()=>{},printJobChunks:new Map(),
     setStatus:s=>states.push(s),decodeEnvelope:()=>{throw new Error('stale binary message consumed');}});
@@ -462,11 +467,213 @@ test('audio start finishing after stop cannot revive state or overwrite the stop
 test('DPI selection requires confirmed endpoint support before persisting or sending a change',()=>{
   const sidebar=readFileSync(new URL('../chrome/selkies-dashboard/src/components/Sidebar.jsx',import.meta.url),'utf8');
   const changes=[];
-  const c=vm.createContext({agentCapabilities:{},setSelectedDpi:v=>changes.push(v),
+  const c=viewerContext({agentCapabilities:{},setSelectedDpi:v=>changes.push(v),
     localStorage:{setItem:(...args)=>changes.push(args)},getPrefixedKey:k=>k,debouncedPostSetting:v=>changes.push(v)});
   vm.runInContext(sidebar.slice(sidebar.indexOf('const handleDpiScalingChange ='),sidebar.indexOf('const DRAG_THRESHOLD ='))+'\nglobalThis.changeDpi=handleDpiScalingChange;',c);
   for(const support of [undefined,null,false]){c.agentCapabilities.dpi_scaling_supported=support;c.changeDpi({target:{value:'144'}});}
   assert.equal(changes.length,0);
   c.agentCapabilities.dpi_scaling_supported=true;c.changeDpi({target:{value:'144'}});
   assert.equal(changes[0],144);assert.equal(changes[2].scaling_dpi,144);
+});
+
+function imageClipboardViewer(){
+  const messages=[],sent=[],timers=new Map();let id=0,timerId=0;
+  const c=viewerContext({Blob,Uint8Array,DataView,Set,window:{parent:{postMessage:m=>messages.push(m)},location:{origin:'https://example.test'}},
+    crypto:{randomUUID:()=>String(++id)},agentStats:{clipboard_image_supported:true},latestSettings:{},sessionPaired:true,
+    socket:{readyState:1,send:value=>sent.push(JSON.parse(value))},sendInput:m=>sent.push(m),encodeInput:JSON.stringify,
+    btoa:value=>Buffer.from(value,'binary').toString('base64'),atob:value=>Buffer.from(value,'base64').toString('binary'),parseJsonFrameObject:JSON.parse,
+    setTimeout:fn=>{timers.set(++timerId,fn);return timerId;},clearTimeout:id=>timers.delete(id)});
+  vm.runInContext(html.slice(html.indexOf('let pendingClipboardRequest='),html.indexOf('function consumeScreenAck(')),c);
+  vm.runInContext(html.slice(html.indexOf('function clipboardUpdateFromUI('),html.indexOf('async function sendFile(')),c);
+  vm.runInContext(html.slice(html.indexOf('function clipboardTextFromFrame('),html.indexOf('function cursorFromFrame(')),c);
+  return {c,messages,sent,timers};
+}
+const clipboardPng=()=>new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg==','base64')],{type:'image/png'});
+
+test('incoming clipboard images enforce PNG bounds and ignore disabled or unpaired delivery',async()=>{
+  const {c}=imageClipboardViewer();
+  const data=Buffer.from(await clipboardPng().arrayBuffer()).toString('base64');
+  const read=(changes={})=>c.clipboardTextFromFrame(JSON.stringify({t:'clipboard',mime:'image/png',data,...changes}));
+  assert.equal(read().kind,'image');
+  assert.equal(read({mime:'image/svg+xml'}).reason,'unsupported');
+  assert.equal(read({data:'%%%%'}).reason,'invalid_image');
+  assert.equal(read({data:'AAAA'}).reason,'invalid_image');
+  const huge=Buffer.from(data,'base64');huge.writeUInt32BE(4097,16);
+  assert.equal(read({data:huge.toString('base64')}).reason,'image_too_large');
+  c.agentStats.clipboard_image_max_bytes=1;assert.equal(read().reason,'image_too_large');
+  c.latestSettings.enable_binary_clipboard=false;assert.equal(read().kind,'ignored');
+  c.latestSettings.enable_binary_clipboard=true;c.sessionPaired=false;assert.equal(read().kind,'ignored');
+  assert.equal(c.clipboardTextFromFrame(JSON.stringify({t:'clipboard',text:'unchanged'})).text,'unchanged');
+});
+test('image clipboard waits for exact native ack and read failures never complete a write',async()=>{
+  const {c,messages,sent,timers}=imageClipboardViewer();
+  await c.clipboardImageUpdateFromUI(clipboardPng());
+  assert.equal(sent.length,1);assert.equal(sent[0].mime,'image/png');assert.equal(sent[0].id,'1');assert.equal(messages.length,0);
+  const ack=value=>c.consumeClipboardResult(JSON.stringify({t:'clipboard_result',...value}));
+  ack({id:null,direction:'read',sequence:'7',status:'rejected',reason:'image_too_large'});
+  ack({id:null,direction:'read',sequence:'7',status:'rejected',reason:'image_too_large'});
+  assert.equal(messages.length,1);assert.equal(messages[0].type,'clipboardReadError');assert.equal(timers.size,1);
+  ack({id:'other',status:'applied',reason:null});assert.equal(messages.length,1);
+  ack({id:'1',status:'applied',reason:null});assert.equal(messages.at(-1).kind,'image');assert.equal(messages.at(-1).status,'applied');assert.equal(timers.size,0);
+});
+test('late image conversion cannot replace newer text or write into a replaced connection',async()=>{
+  const {c,sent,messages}=imageClipboardViewer();let resolve;
+  c.normalizeClipboardImage=()=>new Promise(r=>resolve=r);
+  const first=c.clipboardImageUpdateFromUI(clipboardPng());c.clipboardUpdateFromUI('newer');resolve(new Uint8Array([1,2]));await first;
+  assert.equal(sent.length,1);assert.equal(sent[0].text,'newer');assert.equal(messages.length,0);
+  const second=c.clipboardImageUpdateFromUI(clipboardPng());c.socket={readyState:1,send:()=>assert.fail('stale image sent')};resolve(new Uint8Array([1]));await second;
+  assert.equal(messages.at(-1).reason,'session_unavailable');assert.equal(sent.length,1);
+});
+test('image clipboard enforces capability, toggle, payload, PNG geometry and animation bounds',async()=>{
+  const {c,sent,messages}=imageClipboardViewer();
+  c.agentStats.clipboard_image_supported=false;await c.clipboardImageUpdateFromUI(clipboardPng());assert.equal(messages.at(-1).reason,'unsupported');
+  c.agentStats.clipboard_image_supported=true;c.latestSettings.enable_binary_clipboard=false;await c.clipboardImageUpdateFromUI(clipboardPng());assert.equal(messages.at(-1).reason,'unsupported');
+  c.latestSettings.enable_binary_clipboard=true;c.agentStats.clipboard_image_max_bytes=1;await c.clipboardImageUpdateFromUI(clipboardPng());assert.equal(messages.at(-1).reason,'image_too_large');
+  delete c.agentStats.clipboard_image_max_bytes;
+  const bytes=new Uint8Array(await clipboardPng().arrayBuffer());new DataView(bytes.buffer).setUint32(16,4097);
+  await c.clipboardImageUpdateFromUI(new Blob([bytes],{type:'image/png'}));assert.equal(messages.at(-1).reason,'image_too_large');
+  await c.clipboardImageUpdateFromUI(new Blob(['not PNG'],{type:'image/png'}));assert.equal(messages.at(-1).reason,'invalid_image');
+  const png=new Uint8Array(await clipboardPng().arrayBuffer()),actl=Buffer.alloc(20);actl.writeUInt32BE(8);actl.write('acTL',4);
+  await c.clipboardImageUpdateFromUI(new Blob([png.slice(0,33),actl,png.slice(33)],{type:'image/png'}));assert.equal(messages.at(-1).reason,'unsupported');
+  assert.equal(sent.length,0);
+});
+test('image write timeout and disabling during conversion suppress late delivery',async()=>{
+  const {c,sent,messages,timers}=imageClipboardViewer();let resolve;
+  c.normalizeClipboardImage=()=>new Promise(r=>resolve=r);
+  const first=c.clipboardImageUpdateFromUI(clipboardPng());[...timers.values()][0]();resolve(new Uint8Array([1]));await first;
+  assert.equal(messages.at(-1).reason,'confirmation_timeout');assert.equal(sent.length,0);
+  const second=c.clipboardImageUpdateFromUI(clipboardPng());c.latestSettings.enable_binary_clipboard=false;resolve(new Uint8Array([1]));await second;
+  assert.equal(messages.at(-1).reason,'unsupported');assert.equal(sent.length,0);
+});
+
+test('JPEG dimensions are checked before allocating a decoded image',()=>{
+  const {c}=imageClipboardViewer(),limits={dimension:4096,pixels:8388608};
+  const jpeg=Uint8Array.from([255,216,255,192,0,8,8,0,2,0,3,1]);
+  assert.doesNotThrow(()=>c.checkClipboardJpeg(jpeg,limits));
+  jpeg[9]=32;assert.throws(()=>c.checkClipboardJpeg(jpeg,limits),/image_too_large/);
+  assert.throws(()=>c.checkClipboardJpeg(Uint8Array.from([255,216,255,218]),limits),/invalid_image/);
+});
+
+test('browser image delivery retries permission denial only on flush and reports actual success',async()=>{
+  const outcomes=[],writes=[];let allowed=false;
+  const delivery=createClipboardDelivery({enabled:()=>true,report:v=>outcomes.push(v),write:blob=>{
+    writes.push(blob);if(!allowed)throw Object.assign(new Error('activation'),{name:'NotAllowedError'});
+  }});
+  const blob=clipboardPng();await delivery.receive(blob);
+  assert.deepEqual(outcomes,['gesture_required']);assert.equal(writes.length,1);
+  await delivery.flush();assert.equal(writes.length,2);assert.equal(outcomes.length,1);
+  allowed=true;await delivery.flush();assert.deepEqual(outcomes,['gesture_required','applied']);
+  await delivery.flush();assert.equal(writes.length,3);
+});
+
+test('browser image writes serialize newest values and stale failures cannot replace them',async()=>{
+  const outcomes=[],writes=[];let finish;
+  const delivery=createClipboardDelivery({enabled:()=>true,report:v=>outcomes.push(v),write:blob=>{
+    writes.push(blob);return new Promise((resolve,reject)=>{finish={resolve,reject};});
+  }});
+  const first=delivery.receive('first');delivery.receive('second');delivery.receive('newest');
+  assert.deepEqual(writes,['first']);finish.reject(Object.assign(new Error(),{name:'NotAllowedError'}));await first;
+  assert.deepEqual(writes,['first','newest']);assert.deepEqual(outcomes,[]);
+  const last=delivery.flush();finish.resolve();await last;
+  assert.deepEqual(outcomes,['applied']);
+});
+
+test('browser clipboard reset and disabled state discard pending content and late callbacks',async()=>{
+  const outcomes=[],writes=[];let enabled=true,finish;
+  const delivery=createClipboardDelivery({enabled:()=>enabled,report:v=>outcomes.push(v),write:blob=>{
+    writes.push(blob);return new Promise((resolve,reject)=>{finish={resolve,reject};});
+  }});
+  const old=delivery.receive('old-session');delivery.clear();finish.resolve();await old;
+  assert.deepEqual(outcomes,[]);
+  const current=delivery.receive('current');finish.reject(Object.assign(new Error(),{name:'NotAllowedError'}));await current;
+  enabled=false;delivery.flush();enabled=true;delivery.flush();assert.equal(writes.length,2);
+  assert.deepEqual(outcomes,['gesture_required']);
+});
+
+test('browser delivery reports unsupported failures without retry and preserves PNG bytes',async()=>{
+  const outcomes=[];let writes=0;
+  const delivery=createClipboardDelivery({enabled:()=>true,report:v=>outcomes.push(v),write:()=>{writes++;throw new TypeError('No ClipboardItem');}});
+  await delivery.receive(clipboardPng());delivery.flush();assert.equal(writes,1);assert.deepEqual(outcomes,['failed']);
+  const expected=Buffer.from(await clipboardPng().arrayBuffer());
+  const received=clipboardImageBlob({mime:'image/png',data:expected.toString('base64')});
+  assert.equal(received.type,'image/png');assert.deepEqual(Buffer.from(await received.arrayBuffer()),expected);
+  assert.throws(()=>clipboardImageBlob({mime:'image/svg+xml',data:'AAAA'}));
+  assert.throws(()=>clipboardImageBlob({mime:'image/png',data:'AB=='}));
+});
+test('text replaces a blocked image in the same queue and Image Support OFF preserves text delivery',async()=>{
+  const written=[];let enabled=true,allow=false;
+  const delivery=createClipboardDelivery({enabled:c=>typeof c==='string'||enabled,report(){},write:c=>{
+    written.push(c);if(!allow)throw Object.assign(new Error(),{name:'NotAllowedError'});
+  }});
+  await delivery.receive(clipboardPng());await delivery.receive('newer text');
+  enabled=false;delivery.clearImages();allow=true;await delivery.flush();
+  assert.equal(written.at(-1),'newer text');assert.equal(written.length,3);
+  await delivery.receive(clipboardPng());assert.equal(written.length,3);
+  await delivery.receive('text while images disabled');assert.equal(written.at(-1),'text while images disabled');
+});
+
+function pasteHarness() {
+  const sent=[],reported=[],timers=new Map();let serial=0,clock=0,connection={},supported=true;
+  const gate=new ClipboardPasteGate({send:p=>sent.push(p),report:(status,reason)=>reported.push({status,reason}),
+    connection:()=>connection,supported:()=>supported,uuid:()=>`paste-${++serial}`,
+    schedule:fn=>{timers.set(++clock,fn);return clock;},unschedule:id=>timers.delete(id)});
+  const key=(key,e='down',gesture={})=>gate.key({t:'key',key,e,code:key==='Control'?'ControlLeft':key==='v'?'KeyV':key},
+    {trusted:true,...gesture});
+  return {gate,sent,reported,timers,key,replaceConnection:()=>{connection={};},disable:()=>{supported=false;}};
+}
+const pasteToken='0123456789abcdef0123456789abcdef';
+test('pending Paste waits for both clipboard confirmation and actual modifier/V release in either order',()=>{
+  for(const ackFirst of [true,false]) {
+    const {gate,sent,key}=pasteHarness();gate.begin('image-1');
+    key('Control');key('v','down',{ctrlKey:true});key('v','down',{ctrlKey:true});
+    if(ackFirst)gate.settle('image-1','applied',pasteToken);
+    assert.equal(sent.length,1);key('v','up',{ctrlKey:true});assert.equal(sent.length,1);
+    key('Control','up');
+    if(!ackFirst){assert.equal(sent.length,2);gate.settle('image-1','applied',pasteToken);}
+    assert.deepEqual(sent.map(p=>p.t),['key','key','clipboard_paste']);
+    assert.equal(sent[1].e,'up');assert.equal(sent[2].clipboard_id,'image-1');assert.equal(sent[2].paste_token,pasteToken);
+    gate.settle('image-1','applied',pasteToken);gate.flush();assert.equal(sent.length,3);gate.reset();
+  }
+});
+test('clipboard uploads do not implicitly Paste and ordinary shortcut keys remain unchanged',()=>{
+  const {gate,sent,key}=pasteHarness();gate.begin('image-1');gate.settle('image-1','applied',pasteToken);
+  assert.equal(sent.length,0);key('Control');key('v','down',{ctrlKey:true});key('v','up',{ctrlKey:true});key('Control','up');
+  assert.equal(sent.length,4);assert.ok(sent.every(p=>p.t==='key'));gate.reset();
+});
+test('Paste cannot dispatch while an already-held modifier was pressed outside the canvas',()=>{
+  const {gate,key,sent}=pasteHarness();gate.begin('image-1');key('v','down',{ctrlKey:true});
+  gate.settle('image-1','applied',pasteToken);key('v','up',{ctrlKey:true});assert.equal(sent.length,0);
+  key('Control','up',{ctrlKey:false});assert.equal(sent[0].e,'up');assert.equal(sent[1].t,'clipboard_paste');gate.reset();
+});
+test('modified, untrusted and unsupported pending Paste never become a plain native shortcut',()=>{
+  for(const gesture of [{shiftKey:true},{altKey:true},{trusted:false},{metaKey:true}]) {
+    const {gate,sent,key,reported}=pasteHarness();gate.begin('image-1');key('Control');key('v','down',{ctrlKey:true,...gesture});
+    key('v','up');key('Control','up');gate.settle('image-1','applied',pasteToken);
+    assert.equal(sent.length,2);assert.equal(reported[0].status,'rejected');gate.reset();
+  }
+  const {gate,key,sent,disable}=pasteHarness();gate.begin('image-1');disable();key('Control');key('v','down',{ctrlKey:true});
+  key('v','up');key('Control','up');gate.settle('image-1','applied',pasteToken);assert.equal(sent.length,2);gate.reset();
+});
+test('focus/input/replacement/disconnect and failed or malformed acknowledgments cancel pending Paste',()=>{
+  for(const cancel of [h=>h.gate.cancel('target_unavailable'),h=>h.key('x'),h=>h.gate.begin('newer'),
+    h=>h.gate.reset(),h=>h.gate.settle('image-1','rejected',null),h=>h.gate.settle('image-1','applied','invalid'),
+    h=>h.replaceConnection(),h=>h.gate.invalidate('cancelled')]) {
+    const h=pasteHarness();h.gate.begin('image-1');h.key('Control');h.key('v','down',{ctrlKey:true});cancel(h);
+    h.key('v','up');h.key('Control','up');h.gate.settle('image-1','applied',pasteToken);
+    assert.equal(h.sent.filter(p=>p.t==='clipboard_paste').length,0);h.gate.reset();
+  }
+});
+test('Paste results require exact action and clipboard ids and partial/timeout actions never retry',()=>{
+  for(const timeout of [true,false]) {
+    const h=pasteHarness();h.gate.begin('image-1');h.key('Control');h.key('v','down',{ctrlKey:true});
+    h.key('v','up');h.key('Control','up');h.gate.settle('image-1','applied',pasteToken);
+    const action=h.sent.at(-1);
+    h.gate.consume({t:'clipboard_paste_result',id:action.id,clipboard_id:'wrong',status:'injected',reason:null});
+    assert.equal(h.reported.length,0);
+    if(timeout)[...h.timers.values()][0]();
+    else h.gate.consume({t:'clipboard_paste_result',id:action.id,clipboard_id:'image-1',status:'uncertain',reason:'input_partial'});
+    assert.equal(h.reported.at(-1).status,'uncertain');h.gate.flush();
+    h.gate.consume({t:'clipboard_paste_result',id:action.id,clipboard_id:'image-1',status:'injected',reason:null});
+    assert.equal(h.reported.length,1);assert.equal(h.sent.filter(p=>p.t==='clipboard_paste').length,1);h.gate.reset();
+  }
 });

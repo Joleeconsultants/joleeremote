@@ -70,3 +70,5 @@ See also `docs/chrome.md`.
 `0015-screen-setting-delivery.patch`: seed capture settings, persist FPS/quality, and coalesce rapid edits by key without changing controls.
 `0016-indicator-readings.patch`: distinguish unavailable telemetry from measured zero; keep FPS text readable.
 `0017-local-display-preferences.patch`: apply and persist existing local scaling and anti-aliasing choices.
+
+`0027-image-clipboard-delivery.patch`: wire bounded inbound clipboard delivery and existing result notifications, including explicit pending-Paste feedback. Hop-specific delivery queue lives in the preserved `src/jolee-clipboard-delivery.js` overlay. No panel layout changes.

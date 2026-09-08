@@ -7,7 +7,7 @@
 <link rel="shortcut icon" href="/favicon.ico" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="stylesheet" href="/dashboard/dashboard.css?v=jo-ui-40" />
+<link rel="stylesheet" href="/dashboard/dashboard.css?v=jo-ui-41" />
 <style>
 html,body{margin:0;height:100%;background:#000;overflow:hidden}
 #jolee-core{position:fixed;inset:0;width:100%;height:100%;border:0;background:#000}
@@ -89,10 +89,12 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
       // Printable characters are delivered once, by committed input below.
       if (composing || e.isComposing || e.key === "Process" || e.key === "Unidentified" || e.key === "Dead") return;
       if (Array.from(e.key || "").length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) return;
-      postToCore({ type: "assistKey", e: direction, key: e.key, code: e.code });
+      postToCore({ type: "assistKey", e: direction, key: e.key, code: e.code,
+        trusted: e.isTrusted === true, ctrlKey: !!e.ctrlKey, metaKey: !!e.metaKey, shiftKey: !!e.shiftKey, altKey: !!e.altKey });
     }
     assist.addEventListener("keydown", function (e) { forwardAssistControl(e, "down"); });
     assist.addEventListener("keyup", function (e) { forwardAssistControl(e, "up"); });
+    assist.addEventListener('blur', function () { postToCore({type:'clipboardPasteCancel'}); });
     function commitAssistText() {
       var v = assist.value || "";
       if (!v) return;
@@ -132,6 +134,6 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
   });
 })();
 </script>
-<script type="module" src="/dashboard/dashboard.js?v=jo-ui-40"></script>
+<script type="module" src="/dashboard/dashboard.js?v=jo-ui-41"></script>
 </body>
 </html>

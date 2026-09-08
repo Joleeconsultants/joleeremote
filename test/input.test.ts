@@ -10,6 +10,22 @@ function utf8(s: string): Uint8Array {
 }
 
 describe("parseInputPayload / parseInputJson", () => {
+  it("preserves image write ids through the reusable agent parser", () => {
+    const image = { t: 'clipboard', mime: 'image/png', data: 'AAAA', id: 'image-1' };
+    expect(parseInputJson(JSON.stringify(image))).toEqual(image);
+    for (const id of ['', 'x'.repeat(65), 3, null]) expect(parseInputJson(JSON.stringify({...image,id}))).toBeNull();
+    expect(parseInputJson(JSON.stringify({...image,text:'ambiguous'}))).toBeNull();
+  });
+  it("parses correlated paste actions without dropping their one-use token", () => {
+    const action = { t:'clipboard_paste',id:'paste-1',clipboard_id:'image-1',paste_token:'0123456789abcdef0123456789abcdef' };
+    expect(parseInputJson(JSON.stringify(action))).toEqual(action);
+    for (const field of ['id','clipboard_id','paste_token']) {
+      expect(parseInputJson(JSON.stringify({...action,[field]:''}))).toBeNull();
+      expect(parseInputJson(JSON.stringify({...action,[field]:null}))).toBeNull();
+    }
+    expect(parseInputJson(JSON.stringify({...action,paste_token:'z'.repeat(32)}))).toBeNull();
+    expect(parseInputJson(JSON.stringify({...action,shift:true}))).toBeNull();
+  });
   it("preserves clipboard correlation ids and rejects malformed ids", () => {
     expect(parseInputJson(JSON.stringify({t:'clipboard',text:'hello',id:'write-1'}))).toEqual({t:'clipboard',text:'hello',id:'write-1'});
     for (const id of ['', 'x'.repeat(65), 3, null]) expect(parseInputJson(JSON.stringify({t:'clipboard',text:'hello',id}))).toBeNull();

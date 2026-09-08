@@ -37,6 +37,7 @@ export {
   type ClipboardInput,
   type ClipboardTextInput,
   type ClipboardImageInput,
+  type ClipboardPasteInput,
   type ResizeInput,
   type CssScalingInput,
   type SettingsInput,

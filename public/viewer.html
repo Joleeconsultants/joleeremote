@@ -45,6 +45,7 @@ let token=hashParams.get("token")||params.get("token")||"";
 let hop=params.get("hop")||"";
 let socket=null, videoDecoder=null, scaleLocally=true, antiAliasing=true;
 let audioEnabled=true, videoEnabled=true, audioSinkId="";
+let webcamGen=0,webcamStarting=false;
 let microphoneStream=null, microphoneRecorder=null, microphoneGen=0, microphoneForwarding=false, audioInputDeviceId="", webcamStream=null, webcamTimer=null;
 let frameCount=0, statsStartedAt=performance.now(), bytesSinceStats=0;
 let videoGeneration=0, receivedFrameSequence=0, latestPaintedFrame=0;
@@ -152,7 +153,7 @@ function setStatus(state){
   sessionPaired=state==="paired";
   if(!sessionPaired){
     invalidateVideoFrames();
-    if(wasPaired)stopAudioPlayback();
+    if(wasPaired){stopAudioPlayback();stopWebcam();}
     finishScreenRequest('rejected','session_unavailable');
     finishClipboardRequest('rejected','session_unavailable');
     if(screenResizeTimer!==null)clearTimeout(screenResizeTimer);
@@ -491,6 +492,7 @@ async function setMicrophoneEnabled(enabled){
   }
 }
 function stopWebcam(error){
+  webcamGen++;webcamStarting=false;
   if(webcamTimer!==null) clearInterval(webcamTimer);
   webcamTimer=null;
   if(webcamStream) webcamStream.getTracks().forEach((track)=>track.stop());
@@ -499,26 +501,32 @@ function stopWebcam(error){
 }
 async function setWebcamEnabled(enabled){
   if(!enabled){stopWebcam();return;}
-  if(webcamStream) return;
+  if(agentStats.webcam_supported!==true){stopWebcam('The PC has not confirmed webcam forwarding support.');return;}
+  if(webcamStream||webcamStarting) return;
+  const gen=++webcamGen;webcamStarting=true;
   try{
-    webcamStream=await navigator.mediaDevices.getUserMedia({video:true});
+    const stream=await navigator.mediaDevices.getUserMedia({video:true});
+    if(gen!==webcamGen){stream.getTracks().forEach(track=>track.stop());return;}
+    webcamStream=stream;
     const video=document.createElement("video");
     video.muted=true; video.playsInline=true; video.srcObject=webcamStream;
     await video.play();
+    if(gen!==webcamGen)return;
     const still=document.createElement("canvas"), stillCtx=still.getContext("2d");
     const capture=()=>{
-      if(!webcamStream||video.readyState<2) return;
+      if(gen!==webcamGen||!webcamStream||video.readyState<2) return;
       still.width=video.videoWidth||640; still.height=video.videoHeight||480;
       stillCtx.drawImage(video,0,0,still.width,still.height);
       still.toBlob(async(blob)=>{
-        if(!blob||!webcamStream) return;
+        if(!blob||gen!==webcamGen||!webcamStream) return;
         const data=bytesToBase64(new Uint8Array(await blob.arrayBuffer()));
+        if(gen!==webcamGen||!webcamStream)return;
         sendInput({t:"webcam",mime:"image/jpeg",data});
       },"image/jpeg",0.8);
     };
-    capture(); webcamTimer=setInterval(capture,500);
+    webcamStarting=false;capture(); webcamTimer=setInterval(capture,500);
     postPipelineStatus("webcam",true);
-  }catch(e){console.warn("[jolee] webcam start failed", e && e.name, e && e.message);stopWebcam(e&&e.name);}
+  }catch(e){if(gen===webcamGen)stopWebcam(e&&e.name);}
 }
 function downloadFile(file){
   try{
@@ -760,6 +768,7 @@ async function sendFile(blob){
 }
 function numberOr(value,fallback=0){return typeof value==="number"&&isFinite(value)?value:fallback;}
 function acceptAgentStats(stats){
+  if(stats.webcam_supported===false&&(webcamStream||webcamStarting))stopWebcam('Webcam forwarding is not supported by this PC.');
   if(Object.prototype.hasOwnProperty.call(stats,'screen')){agentScreen=stats.screen;consumeScreenAck(stats.screen);}
   // Terminal screen acknowledgements are not a new CPU/memory sample.
   // Keep both the previous measurement and its original expiry time.
@@ -795,6 +804,7 @@ function postStats(){
   stats.active_encoder=observedEncoder||(['jpeg','h264enc'].includes(agentStats.active_encoder)?agentStats.active_encoder:null);
   stats.supported_encoders=Array.isArray(agentStats.supported_encoders)?agentStats.supported_encoders.filter(value=>['jpeg','h264enc'].includes(value)):null;
   stats.microphone_supported=typeof agentStats.microphone_supported==='boolean'?agentStats.microphone_supported:null;
+  stats.webcam_supported=typeof agentStats.webcam_supported==='boolean'?agentStats.webcam_supported:null;
   stats.audio_bitrate_supported=typeof agentStats.audio_bitrate_supported==='boolean'?agentStats.audio_bitrate_supported:null;
   stats.screen=agentScreen;
   if(window.parent!==window) window.parent.postMessage(stats,window.location.origin);

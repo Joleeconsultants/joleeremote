@@ -309,6 +309,7 @@ class NegotiatedVideo {
           this.started=true;this.output(frame);this.drain();
         }}finally{frame.close();}
       },error:()=>this.fail(serial)});
+      this.decoder.ondequeue=()=>{if(serial===this.serial)this.drain();};
       this.decoder.configure(options);this.ready=true;
       clearTimeout(this.timer);this.timer=null;
       this.drain();

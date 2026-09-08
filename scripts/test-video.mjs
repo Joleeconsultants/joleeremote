@@ -93,3 +93,9 @@ test('sustained queued latency after output starts requests JPEG instead of accu
   h.advance(501);h.instances[0].callbacks.output({close(){}});
   assert.equal(h.fallback.length,1);assert.equal(h.consumer.pending.length,0);
 });
+test('decoder dequeue wakes pending input and stale dequeue cannot revive a reset stream',async()=>{
+  const h=harness();h.consumer.configure(config());await settle();const decoder=h.instances[0];
+  decoder.decodeQueueSize=8;h.consumer.push(key);assert.equal(h.decoded.length,0);
+  decoder.decodeQueueSize=0;decoder.ondequeue();assert.equal(h.decoded.length,1);
+  h.consumer.reset();decoder.ondequeue();assert.equal(h.decoded.length,1);assert.equal(h.fallback.length,0);
+});

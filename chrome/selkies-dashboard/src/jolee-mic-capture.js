@@ -82,6 +82,8 @@ export function setParentMicDeviceId(deviceId) {
   micDeviceId = typeof deviceId === "string" ? deviceId : "";
 }
 
+export function parentMicrophoneGeneration() { return micGen; }
+
 export function isParentMicrophoneActive() {
   return !!(micRecorder && micRecorder.state === "recording");
 }
@@ -186,11 +188,13 @@ export async function startParentMicrophone() {
       const name = (err && err.name) || "Error";
       const message = (err && err.message) || "MediaRecorder error";
       console.error("Dashboard: microphone recorder error", name, message);
+      clearMicrophoneResources();
       try {
         window.postMessage(
           {
             type: "pipelineStatusUpdate",
             microphone: false,
+            microphoneGeneration: micGen,
             error: name + ": " + message,
           },
           window.location.origin
@@ -198,7 +202,6 @@ export async function startParentMicrophone() {
       } catch (postErr) {
         /* ignore */
       }
-      clearMicrophoneResources();
     });
     recorder.addEventListener(
       "stop",
@@ -226,11 +229,13 @@ export async function startParentMicrophone() {
     const name = (e && e.name) || "Error";
     const message = (e && e.message) || String(e);
     console.error("Dashboard: microphone start failed", name, message);
+    clearMicrophoneResources();
     try {
       window.postMessage(
         {
           type: "pipelineStatusUpdate",
           microphone: false,
+          microphoneGeneration: micGen,
           error: name + ": " + message,
         },
         window.location.origin
@@ -238,7 +243,6 @@ export async function startParentMicrophone() {
     } catch (postErr) {
       /* ignore */
     }
-    clearMicrophoneResources();
     return false;
   }
 }

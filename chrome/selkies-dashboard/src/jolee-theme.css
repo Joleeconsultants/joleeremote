@@ -60,3 +60,9 @@
   width: calc(280px + 8px);
   scrollbar-gutter: stable;
 }
+
+/* Read-only dashboard text is not a typing target. Keep real editors usable. */
+.sidebar { caret-color: transparent; }
+.sidebar input, .sidebar textarea, .sidebar [contenteditable="true"] {
+  caret-color: auto;
+}

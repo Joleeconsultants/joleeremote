@@ -198,6 +198,7 @@ function setStatus(state,expiresAt=null){
   if(!sessionPaired){
     delete canvas.dataset.clipboardReceipt;
     clipboardPaste.reset();
+    setMicrophoneForwarding(false);
     invalidateVideoFrames();
     if(wasPaired){stopAudioPlayback();stopWebcam();}
     finishScreenRequest('rejected','session_unavailable');
@@ -577,7 +578,7 @@ function setMicrophoneForwarding(enabled){
     clearMicrophoneResources();
     return;
   }
-  microphoneForwarding=true;
+  microphoneForwarding=sessionPaired && agentStats.microphone_supported===true && performance.now()-agentStatsReceivedAt<5000;
   // Drop any leftover iframe capture without snapping parent UI.
   if(microphoneRecorder||microphoneStream) clearMicrophoneResources();
 }
@@ -1223,7 +1224,7 @@ window.addEventListener("message",(event)=>{
       applyCursorMode();
       break;
     case "micChunk":
-      if(microphoneForwarding && typeof msg.mime==="string" && typeof msg.data==="string" && msg.data){
+      if(sessionPaired && microphoneForwarding && agentStats.microphone_supported===true && performance.now()-agentStatsReceivedAt<5000 && typeof msg.mime==="string" && typeof msg.data==="string" && msg.data){
         sendInput({t:"mic",mime:msg.mime,data:msg.data});
       }
       break;

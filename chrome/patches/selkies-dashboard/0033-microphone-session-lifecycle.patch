@@ -1,0 +1,162 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index 5357738..6fb05d7 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -75,8 +75,9 @@ import {
+   startParentMicrophone,
+   stopParentMicrophone,
+   setParentMicDeviceId,
+-  isParentMicrophoneActive,
++  parentMicrophoneGeneration,
+ } from "../jolee-mic-capture.js";
++import { createMicrophoneSession } from "../jolee-mic-session.js";
+ import { JOLEE_SERVER_SETTINGS } from "../jolee-settings.js";
+ import * as yaml from "js-yaml";
+ 
+@@ -1464,7 +1465,30 @@ function Sidebar() {
+   });
+   const [notifications, setNotifications] = useState([]);
+   const notificationTimeouts = useRef({});
+-  const micStartingRef = useRef(false);
++  const [microphoneReady, setMicrophoneReady] = useState(false);
++  const microphoneSession = useMemo(() => createMicrophoneSession({
++    start: startParentMicrophone, stop: stopParentMicrophone, select: setParentMicDeviceId,
++    changed: (active, ready) => { setIsMicrophoneActive(active); setMicrophoneReady(ready); },
++    forward: (enabled) => postToCore({ type: "pipelineControl", pipeline: "microphone", enabled }, window.location.origin),
++  }), []);
++  useEffect(() => {
++    const core = document.getElementById('jolee-core');
++    const reset = () => microphoneSession.reset();
++    const receive = (event) => {
++      if (event.origin !== window.location.origin || event.source !== core?.contentWindow) return;
++      if (event.data?.type === 'status') microphoneSession.paired(event.data.state === 'paired');
++      if (event.data?.type === 'statsUpdate') microphoneSession.support(event.data.microphone_supported);
++    };
++    window.addEventListener('message', receive);
++    window.addEventListener('pagehide', reset);
++    core?.addEventListener('load', reset);
++    return () => {
++      window.removeEventListener('message', receive);
++      window.removeEventListener('pagehide', reset);
++      core?.removeEventListener('load', reset);
++      reset();
++    };
++  }, [microphoneSession]);
+   const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
+   const [filesIframeSrc, setFilesIframeSrc] = useState("");
+   const [isAppsModalOpen, setIsAppsModalOpen] = useState(false);
+@@ -2187,21 +2211,7 @@ function Sidebar() {
+       { type: "audioDeviceSelected", context: "input", deviceId: deviceId },
+       window.location.origin
+     );
+-    if (isMicrophoneActive || isParentMicrophoneActive()) {
+-      stopParentMicrophone();
+-      const ok = await startParentMicrophone();
+-      if (!ok) {
+-        setIsMicrophoneActive(false);
+-        postToCore(
+-          {
+-            type: "pipelineControl",
+-            pipeline: "microphone",
+-            enabled: false,
+-          },
+-          window.location.origin
+-        );
+-      }
+-    }
++    await microphoneSession.device(deviceId);
+   };
+   const handleAudioOutputChange = (event) => {
+     const deviceId = event.target.value;
+@@ -2386,53 +2396,7 @@ function Sidebar() {
+       window.location.origin
+     );
+   };
+-  const handleMicrophoneToggle = async () => {
+-    const enabled = !isMicrophoneActive;
+-    if (enabled && agentCapabilities.microphone_supported === false) return;
+-    if (!enabled) {
+-      micStartingRef.current = false;
+-      stopParentMicrophone();
+-      setIsMicrophoneActive(false);
+-      postToCore(
+-        {
+-          type: "pipelineControl",
+-          pipeline: "microphone",
+-          enabled: false,
+-        },
+-        window.location.origin
+-      );
+-      return;
+-    }
+-    if (micStartingRef.current || isParentMicrophoneActive()) return;
+-    micStartingRef.current = true;
+-    setIsMicrophoneActive(true);
+-    setParentMicDeviceId(selectedInputDeviceId);
+-    try {
+-      const ok = await startParentMicrophone();
+-      if (!ok) {
+-        setIsMicrophoneActive(false);
+-        postToCore(
+-          {
+-            type: "pipelineControl",
+-            pipeline: "microphone",
+-            enabled: false,
+-          },
+-          window.location.origin
+-        );
+-        return;
+-      }
+-      postToCore(
+-        {
+-          type: "pipelineControl",
+-          pipeline: "microphone",
+-          enabled: true,
+-        },
+-        window.location.origin
+-      );
+-    } finally {
+-      micStartingRef.current = false;
+-    }
+-  };
++  const handleMicrophoneToggle = () => microphoneSession.toggle(selectedInputDeviceId);
+   const handleWebcamToggle = () => {
+     const enabled = !isWebcamActive;
+     setIsWebcamActive(enabled);
+@@ -2986,8 +2950,10 @@ function Sidebar() {
+           if (message.audio !== undefined) setIsAudioActive(message.audio);
+           // Microphone UI is owned by parent capture; ignore core ON snaps.
+           // Explicit failure posts from jolee-mic-capture include error + microphone:false.
+-          if (message.microphone === false) {
+-            setIsMicrophoneActive(false);
++          if (message.microphone === false &&
++              (event.source === document.getElementById('jolee-core')?.contentWindow ||
++               (event.source === window && message.microphoneGeneration === parentMicrophoneGeneration()))) {
++            microphoneSession.stop();
+             if (typeof message.error === "string" && message.error) {
+               const id = "microphone-start-error";
+               const text = `${t("notifications.errorPrefix")} ${message.error}`;
+@@ -3465,8 +3431,8 @@ function Sidebar() {
+               <button
+                 className={`action-button ${isMicrophoneActive ? "active" : ""}`}
+                 onClick={handleMicrophoneToggle}
+-                disabled={!isMicrophoneActive && agentCapabilities.microphone_supported === false}
+-                title={agentCapabilities.microphone_supported === false ? 'Microphone forwarding is not supported by this PC yet.' : t(
++                disabled={!isMicrophoneActive && !microphoneReady}
++                title={!microphoneReady ? 'Microphone forwarding requires a connected PC with confirmed support.' : t(
+                   isMicrophoneActive
+                     ? "buttons.microphoneDisableTitle"
+                     : "buttons.microphoneEnableTitle"
+@@ -4146,10 +4112,10 @@ function Sidebar() {
+                       </label>
+                       <select
+                         id="audioInputSelect"
+-                        title={agentCapabilities.microphone_supported === false ? 'Microphone forwarding is not supported by this PC yet.' : undefined}
++                        title={!microphoneReady ? 'Microphone forwarding requires a connected PC with confirmed support.' : undefined}
+                         value={selectedInputDeviceId}
+                         onChange={handleAudioInputChange}
+-                        disabled={agentCapabilities.microphone_supported === false || isLoadingAudioDevices || !!audioDeviceError}
++                        disabled={!microphoneReady || isLoadingAudioDevices || !!audioDeviceError}
+                         className="audio-device-select"
+                       >
+                         {audioInputDevices.map((d) => (

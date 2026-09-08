@@ -186,9 +186,9 @@ test('core load replays initial and latest settings, never keys or commands', ()
 test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth samples', () => {
   let now = 0;
   const sent = [];
-  const c = vm.createContext({ performance: { now: () => now },
+  const c = vm.createContext({ performance: { now: () => now }, consumeScreenAck: () => {},
     window: { parent: { postMessage: value => sent.push(value) }, location: { origin: 'https://test.invalid' } },
-    frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, agentStatsReceivedAt: 0, observedEncoder: null, latencyReading: () => null });
+    frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, agentScreen: null, agentStatsReceivedAt: 0, observedEncoder: null, latencyReading: () => null });
   vm.runInContext(html.slice(html.indexOf('function numberOr('), html.indexOf('setInterval(postStats,1000)')), c);
   c.frameCount = 30; c.bytesSinceStats = 125000;
   now = 500; c.postStats();
@@ -217,6 +217,12 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   assert.equal(sent.at(-1).network_stats.latency_ms, null);
   c.agentStats = { system_stats: { cpu_percent: 10 } }; c.agentStatsReceivedAt = now;
   c.postStats(); assert.equal(sent.at(-1).system_stats.cpu_percent, 10);
+  now = 5500;
+  c.acceptAgentStats({t:'stats',screen:{request_id:'screen-1',status:'rejected',reason:'application_disabled'}});
+  c.postStats();
+  assert.equal(sent.at(-1).system_stats.cpu_percent, 10);
+  assert.equal(c.agentStatsReceivedAt, 5000);
+  assert.equal(sent.at(-1).screen.request_id, 'screen-1');
   c.observedEncoder = 'jpeg';
   c.agentStats = { active_encoder: 'h264enc', supported_encoders: ['jpeg', 'invalid'], microphone_supported: false };
   c.postStats();
@@ -279,4 +285,33 @@ test('latency accepts only the pending reply and expires samples or disconnected
   c.consumeLatencyReply({ t: 'pong', id: sent[2].id }); assert.equal(c.latencyReading(now), 20);
   c.setStatus('waiting'); assert.equal(c.latencyReading(now), null);
   assert.equal(c.consumeLatencyReply({ t: 'stats' }), false);
+});
+
+test('screen requests correlate confirmations and clear pending work on disconnect', () => {
+  const sent=[], results=[], timers=new Map(); let next=0;
+  const c=vm.createContext({
+    window:{parent:{postMessage:m=>results.push(m)},location:{origin:'https://test.invalid'}},
+    crypto:{randomUUID:()=>`screen-${++next}`},
+    setTimeout:fn=>{const id=++next;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),
+    sendInput:m=>sent.push(m),innerWidth:393,innerHeight:735,devicePixelRatio:2,
+  });
+  vm.runInContext(html.slice(html.indexOf('let sessionPaired='),html.indexOf('let pendingLatency=')),c);
+  vm.runInContext('sessionPaired=true; screenAligned=true; screenUseCssScaling=false',c);
+  c.requestWindowSize();
+  assert.equal(sent[0].w,784); assert.equal(sent[0].h,1456); assert.equal(sent[0].mode,'auto');
+  c.requestScreenSize(1920,1080,'manual');
+  const active=sent.at(-1);
+  c.consumeScreenAck({request_id:sent[0].id,status:'applied',effective:{width:784,height:1456}});
+  c.consumeScreenAck({request_id:active.id,status:'applied'});
+  assert.equal(results.length,0);
+  c.consumeScreenAck({request_id:active.id,status:'rejected',reason:'application_disabled'});
+  assert.equal(results.length,1); assert.equal(results[0].reason,'application_disabled');
+  c.consumeScreenAck({request_id:active.id,status:'applied',effective:{width:1920,height:1080}});
+  assert.equal(results.length,1); assert.equal(timers.size,0);
+  c.requestScreenSize(1280,720,'manual');
+  [...timers.values()][0]();
+  assert.equal(results.at(-1).reason,'confirmation_timeout');
+  c.requestScreenSize(1280,720,'manual');
+  c.finishScreenRequest('rejected','session_unavailable');
+  assert.equal(results.at(-1).reason,'session_unavailable'); assert.equal(timers.size,0);
 });

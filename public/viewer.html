@@ -51,6 +51,7 @@ let microphoneStream=null, microphoneRecorder=null, microphoneGen=0, microphoneF
 let frameCount=0, statsStartedAt=performance.now(), bytesSinceStats=0;
 let hopFps=0, hopBandwidth=0;
 let agentStats={};
+let agentScreen=null;
 let observedEncoder=null;
 let agentStatsReceivedAt=0;
 const printJobChunks=new Map();
@@ -73,6 +74,41 @@ function applyCursorMode(){
 }
 let sessionPaired=false;
 let latestSettings={};
+let pendingScreenRequest=null, screenAutoEnabled=false;
+let screenUseCssScaling=true, screenAligned=false, screenResizeTimer=null;
+function finishScreenRequest(status,reason,effective=null){
+  if(!pendingScreenRequest)return;
+  const request=pendingScreenRequest;
+  clearTimeout(request.timer);pendingScreenRequest=null;
+  if(window.parent!==window)window.parent.postMessage({type:'screenResult',id:request.id,status,reason,effective},window.location.origin);
+}
+function consumeScreenAck(screen){
+  if(!screen||!pendingScreenRequest||screen.request_id!==pendingScreenRequest.id)return;
+  if(screen.status==='applied'||screen.status==='rejected'){
+    const size=screen.effective;
+    const effective=size&&Number.isInteger(size.width)&&Number.isInteger(size.height)&&size.width>0&&size.height>0?size:null;
+    if(screen.status==='applied'&&!effective)return;
+    finishScreenRequest(screen.status,typeof screen.reason==='string'?screen.reason:null,effective);
+  }
+}
+function requestScreenSize(width,height,mode){
+  if(pendingScreenRequest)clearTimeout(pendingScreenRequest.timer);
+  const step=screenAligned?16:2;
+  const id=crypto.randomUUID();
+  pendingScreenRequest={id,timer:setTimeout(()=>finishScreenRequest('rejected','confirmation_timeout'),15000)};
+  if(!Number.isFinite(width)||!Number.isFinite(height)||width<2||height<2||width>3840||height>3840){finishScreenRequest('rejected','invalid_request');return;}
+  if(!sessionPaired){finishScreenRequest('rejected','session_unavailable');return;}
+  sendInput({t:'resize',id,mode,w:Math.max(step,Math.floor(width/step)*step),h:Math.max(step,Math.floor(height/step)*step),...(mode==='auto'?{reset:true}:{})});
+}
+function requestWindowSize(){
+  const dpr=screenUseCssScaling?1:(devicePixelRatio||1);
+  requestScreenSize(Math.round(innerWidth*dpr),Math.round(innerHeight*dpr),'auto');
+}
+function scheduleScreenResize(){
+  if(screenResizeTimer!==null)clearTimeout(screenResizeTimer);
+  screenResizeTimer=null;
+  if(screenAutoEnabled&&sessionPaired)screenResizeTimer=setTimeout(()=>{screenResizeTimer=null;requestWindowSize();},250);
+}
 let pendingLatency=null, measuredLatency=null, latencyReceivedAt=0;
 const LATENCY_TIMEOUT_MS=10000, LATENCY_MAX_AGE_MS=15000;
 function latencyReading(now){
@@ -99,7 +135,12 @@ function consumeLatencyReply(payload){
 function setStatus(state){
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
-  if(!sessionPaired){pendingLatency=null;measuredLatency=null;latencyReceivedAt=0;agentStats={};agentStatsReceivedAt=0;observedEncoder=null;}
+  if(!sessionPaired){
+    finishScreenRequest('rejected','session_unavailable');
+    if(screenResizeTimer!==null)clearTimeout(screenResizeTimer);
+    screenResizeTimer=null;
+  }else if(!wasPaired)scheduleScreenResize();
+  if(!sessionPaired){pendingLatency=null;measuredLatency=null;latencyReceivedAt=0;agentStats={};agentStatsReceivedAt=0;observedEncoder=null;agentScreen=null;}
   if(sessionPaired&&!wasPaired&&Object.keys(latestSettings).length){
     sendInput({t:"settings",settings:latestSettings});
   }
@@ -612,7 +653,7 @@ function connect(opts){
     const file=fileFromFrame(env.payload);
     if(file!==null){downloadFile(file);return;}
     const stats=statsFromFrame(env.payload);
-    if(stats!==null){agentStats=stats;agentStatsReceivedAt=performance.now();postStats();return;}
+    if(stats!==null){acceptAgentStats(stats);postStats();return;}
     const print=printFromFrame(env.payload);
     if(print!==null){handlePrintFrame(print);return;}
     if(!videoEnabled) return;
@@ -671,6 +712,13 @@ async function sendFile(blob){
   }catch(e){}
 }
 function numberOr(value,fallback=0){return typeof value==="number"&&isFinite(value)?value:fallback;}
+function acceptAgentStats(stats){
+  if(Object.prototype.hasOwnProperty.call(stats,'screen')){agentScreen=stats.screen;consumeScreenAck(stats.screen);}
+  // Terminal screen acknowledgements are not a new CPU/memory sample.
+  // Keep both the previous measurement and its original expiry time.
+  const measurementKeys=Object.keys(stats).filter(key=>!['t','type','screen','sampled_at'].includes(key));
+  if(measurementKeys.length){agentStats=stats;agentStatsReceivedAt=performance.now();}
+}
 function postStats(){
   const now=performance.now(), elapsed=Math.max(1,now-statsStartedAt);
   // Endpoint telemetry normally arrives once a second. Never keep a frozen
@@ -700,6 +748,7 @@ function postStats(){
   stats.supported_encoders=Array.isArray(agentStats.supported_encoders)?agentStats.supported_encoders.filter(value=>['jpeg','h264enc'].includes(value)):null;
   stats.microphone_supported=typeof agentStats.microphone_supported==='boolean'?agentStats.microphone_supported:null;
   stats.audio_bitrate_supported=typeof agentStats.audio_bitrate_supported==='boolean'?agentStats.audio_bitrate_supported:null;
+  stats.screen=agentScreen;
   if(window.parent!==window) window.parent.postMessage(stats,window.location.origin);
 }
 setInterval(postStats,1000);
@@ -809,16 +858,27 @@ window.addEventListener("message",(event)=>{
       }
       break;
     case "setManualResolution":
-      sendInput({t:"resize",w:msg.width,h:msg.height});
+      screenAutoEnabled=false;
+      scheduleScreenResize();
+      requestScreenSize(msg.width,msg.height,'manual');
       break;
     case "resetResolutionToWindow":
-      sendInput({t:"resize",w:Math.round(innerWidth),h:Math.round(innerHeight),reset:true});
+      screenAutoEnabled=true;
+      requestWindowSize();
       break;
     case "setUseCssScaling":
+      screenUseCssScaling=!!msg.value;
       sendInput({t:"cssScaling",value:!!msg.value});
+      if(screenAutoEnabled)requestWindowSize();
       break;
     case "settings":
-      if(msg.settings) sendInput({t:"settings",settings:msg.settings});
+      if(msg.settings){
+        if(typeof msg.settings.force_aligned_resolution==='boolean'&&screenAligned!==msg.settings.force_aligned_resolution){
+          screenAligned=msg.settings.force_aligned_resolution;
+          scheduleScreenResize();
+        }
+        sendInput({t:"settings",settings:msg.settings});
+      }
       break;
     case "command": {
       const value=String(msg.value??msg.command??msg.payload?.command??"");
@@ -847,6 +907,7 @@ window.addEventListener("message",(event)=>{
 applyScale();
 applySmoothing();
 applyCursorMode();
+window.addEventListener('resize',scheduleScreenResize);
 setStatus("disconnected");
 if(session.trim()&&token.trim()) connect();
 </script></body></html>

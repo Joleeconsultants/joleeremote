@@ -54,6 +54,12 @@ describe("parseInputPayload / parseInputJson", () => {
   });
 
   it("parses resize, cssScaling, settings, audioDevice, pipeline", () => {
+    expect(parseInputJson('{"t":"resize","w":1920,"h":1080,"id":"screen-1","mode":"manual"}')).toEqual({
+      t: "resize", w: 1920, h: 1080, id: "screen-1", mode: "manual",
+    });
+    expect(parseInputJson('{"t":"resize","w":800,"h":600,"id":"","mode":"manual"}')).toBeNull();
+    expect(parseInputJson(JSON.stringify({t:"resize",w:800,h:600,id:"x".repeat(65)}))).toBeNull();
+    expect(parseInputJson('{"t":"resize","w":800,"h":600,"mode":"other"}')).toBeNull();
     expect(parseInputJson('{"t":"resize","w":1920,"h":1080}')).toEqual({
       t: "resize",
       w: 1920,

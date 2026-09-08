@@ -40,3 +40,13 @@ test('nonfinite release coordinates still release at the last valid position',()
   const f=fixture();f.input.down(f.e({button:2,buttons:2}));f.input.up(f.e({x:NaN,y:Infinity}));
   assert.deepEqual(f.sent.at(-1),{t:'pointer',e:'up',x:0.5,y:0.5,b:2});
 });
+
+test('unsupported extra mouse buttons never become a native left click',()=>{
+  const f=fixture();
+  for(const button of [3,4])assert.equal(f.input.down(f.e({button,buttons:button===3?8:16})),false);
+  assert.equal(f.sent.length,0);
+  f.input.down(f.e());f.input.move(f.e({buttons:25}));f.input.cancel();
+  assert.deepEqual(f.sent.filter(m=>m.e==='down').map(m=>m.b),[0]);
+  assert.deepEqual(f.sent.filter(m=>m.e==='up').map(m=>m.b),[0]);
+  assert.equal(f.sent.find(m=>m.e==='move').b,1);
+});

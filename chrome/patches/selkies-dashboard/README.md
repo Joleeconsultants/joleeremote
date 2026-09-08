@@ -72,3 +72,5 @@ See also `docs/chrome.md`.
 `0017-local-display-preferences.patch`: apply and persist existing local scaling and anti-aliasing choices.
 
 `0027-image-clipboard-delivery.patch`: wire bounded inbound clipboard delivery and existing result notifications, including explicit pending-Paste feedback. Hop-specific delivery queue lives in the preserved `src/jolee-clipboard-delivery.js` overlay. No panel layout changes.
+
+`0030-sas-command-results.patch`: gate the existing shortcut on the active agent capability and show correlated outcomes using existing notifications. No new layout.

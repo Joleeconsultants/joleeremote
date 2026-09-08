@@ -3,9 +3,10 @@ import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { SasControl } from '../public/sas-control.js';
 import { ClipboardPasteGate } from '../public/clipboard-paste.js';
 function viewerContext(globals) {
-  return vm.createContext({ canvas:{dataset:{}},session:'fixture-session', ClipboardPasteGate, clipboardPaste: new ClipboardPasteGate({ send() {}, report() {}, supported: () => false, connection: () => null }), ...globals,
+  return vm.createContext({ canvas:{dataset:{}},clearTimeout:()=>{},session:'fixture-session', SasControl, structuredClone, sasControl:{consume:()=>false,request:()=>{},publish:()=>{}}, ClipboardPasteGate, clipboardPaste: new ClipboardPasteGate({ send() {}, report() {}, supported: () => false, connection: () => null }), ...globals,
     crypto:{subtle:webcrypto.subtle,...globals.crypto} });
 }
 import { createClipboardDelivery, clipboardImageBlob } from '../chrome/selkies-dashboard/src/jolee-clipboard-delivery.js';

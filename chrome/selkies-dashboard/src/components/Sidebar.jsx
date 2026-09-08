@@ -1287,6 +1287,7 @@ function Sidebar() {
     localStorage.getItem(getPrefixedKey("encoder")) || DEFAULT_ENCODER
   );
   const [agentCapabilities, setAgentCapabilities] = useState({});
+  const [sasState, setSasState] = useState({ available: false, pending: false });
   useEffect(() => {
     const receive = (event) => {
       const core = document.getElementById('jolee-core');
@@ -2837,6 +2838,37 @@ function Sidebar() {
       coreDocument?.removeEventListener('keydown', gesture, true);
       window.removeEventListener('message', receive);
     };
+  }, [scheduleNotificationRemoval]);
+
+  // The core owns ephemeral request correlation; the existing button and
+  // notification list only display its validated capability/outcome.
+  useEffect(() => {
+    const frame = document.getElementById('jolee-core');
+    const refresh = () => {
+      setSasState({ available: false, pending: false });
+      postToCore({ type: 'getSasState' }, window.location.origin);
+    };
+    const receive = event => {
+      if (event.origin !== window.location.origin || event.source !== frame?.contentWindow) return;
+      const message = event.data;
+      if (message?.type === 'status' && message.state !== 'paired') setSasState({ available: false, pending: false });
+      if (message?.type === 'sasState' && typeof message.available === 'boolean' && typeof message.pending === 'boolean')
+        setSasState({ available: message.available && !message.pending, pending: message.pending });
+      if (message?.type !== 'sasResult' || !['invoked', 'rejected', 'uncertain'].includes(message.status)) return;
+      const id = 'sas-result';
+      const text = message.status === 'invoked' ? 'Ctrl+Alt+Delete requested.'
+        : message.status === 'rejected' ? 'Ctrl+Alt+Delete was not sent.'
+        : 'Ctrl+Alt+Delete outcome is unknown. Check the remote screen before trying again.';
+      setNotifications(prev => [...prev.filter(n => n.id !== id), {
+        id, fileName: 'Ctrl+Alt+Delete', status: message.status === 'invoked' ? 'notice' : 'warn',
+        message: text, timestamp: Date.now(), fadingOut: false,
+      }].slice(-MAX_NOTIFICATIONS));
+      scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
+    };
+    window.addEventListener('message', receive);
+    frame?.addEventListener('load', refresh);
+    refresh();
+    return () => { window.removeEventListener('message', receive); frame?.removeEventListener('load', refresh); };
   }, [scheduleNotificationRemoval]);
 
   /** The core message listener; the module docblock lists the message types handled. */
@@ -4911,7 +4943,9 @@ function Sidebar() {
                         { type: "command", command: "ctrl-alt-delete" },
                         window.location.origin
                       )}
-                      title="Send Ctrl+Alt+Del to the remote PC"
+                      disabled={!sasState.available || sasState.pending}
+                      title={sasState.pending ? 'Waiting for the PC response' : sasState.available
+                        ? 'Send Ctrl+Alt+Del to the remote PC' : 'Ctrl+Alt+Delete is unavailable for this session'}
                     >
                       Ctrl + Alt + Del
                     </button>

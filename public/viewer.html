@@ -51,6 +51,7 @@ let microphoneStream=null, microphoneRecorder=null, microphoneGen=0, microphoneF
 let frameCount=0, statsStartedAt=performance.now(), bytesSinceStats=0;
 let hopFps=0, hopBandwidth=0;
 let agentStats={};
+let agentScreen=null;
 let observedEncoder=null;
 let agentStatsReceivedAt=0;
 const printJobChunks=new Map();
@@ -99,7 +100,7 @@ function consumeLatencyReply(payload){
 function setStatus(state){
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
-  if(!sessionPaired){pendingLatency=null;measuredLatency=null;latencyReceivedAt=0;agentStats={};agentStatsReceivedAt=0;observedEncoder=null;}
+  if(!sessionPaired){pendingLatency=null;measuredLatency=null;latencyReceivedAt=0;agentStats={};agentStatsReceivedAt=0;observedEncoder=null;agentScreen=null;}
   if(sessionPaired&&!wasPaired&&Object.keys(latestSettings).length){
     sendInput({t:"settings",settings:latestSettings});
   }
@@ -612,7 +613,7 @@ function connect(opts){
     const file=fileFromFrame(env.payload);
     if(file!==null){downloadFile(file);return;}
     const stats=statsFromFrame(env.payload);
-    if(stats!==null){agentStats=stats;agentStatsReceivedAt=performance.now();postStats();return;}
+    if(stats!==null){acceptAgentStats(stats);postStats();return;}
     const print=printFromFrame(env.payload);
     if(print!==null){handlePrintFrame(print);return;}
     if(!videoEnabled) return;
@@ -671,6 +672,13 @@ async function sendFile(blob){
   }catch(e){}
 }
 function numberOr(value,fallback=0){return typeof value==="number"&&isFinite(value)?value:fallback;}
+function acceptAgentStats(stats){
+  if(Object.prototype.hasOwnProperty.call(stats,'screen'))agentScreen=stats.screen;
+  // Terminal screen acknowledgements are not a new CPU/memory sample.
+  // Keep both the previous measurement and its original expiry time.
+  const measurementKeys=Object.keys(stats).filter(key=>!['t','type','screen','sampled_at'].includes(key));
+  if(measurementKeys.length){agentStats=stats;agentStatsReceivedAt=performance.now();}
+}
 function postStats(){
   const now=performance.now(), elapsed=Math.max(1,now-statsStartedAt);
   // Endpoint telemetry normally arrives once a second. Never keep a frozen
@@ -700,6 +708,7 @@ function postStats(){
   stats.supported_encoders=Array.isArray(agentStats.supported_encoders)?agentStats.supported_encoders.filter(value=>['jpeg','h264enc'].includes(value)):null;
   stats.microphone_supported=typeof agentStats.microphone_supported==='boolean'?agentStats.microphone_supported:null;
   stats.audio_bitrate_supported=typeof agentStats.audio_bitrate_supported==='boolean'?agentStats.audio_bitrate_supported:null;
+  stats.screen=agentScreen;
   if(window.parent!==window) window.parent.postMessage(stats,window.location.origin);
 }
 setInterval(postStats,1000);

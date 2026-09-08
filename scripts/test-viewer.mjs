@@ -188,7 +188,7 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   const sent = [];
   const c = vm.createContext({ performance: { now: () => now },
     window: { parent: { postMessage: value => sent.push(value) }, location: { origin: 'https://test.invalid' } },
-    frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, agentStatsReceivedAt: 0, observedEncoder: null, latencyReading: () => null });
+    frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, agentScreen: null, agentStatsReceivedAt: 0, observedEncoder: null, latencyReading: () => null });
   vm.runInContext(html.slice(html.indexOf('function numberOr('), html.indexOf('setInterval(postStats,1000)')), c);
   c.frameCount = 30; c.bytesSinceStats = 125000;
   now = 500; c.postStats();
@@ -217,6 +217,12 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   assert.equal(sent.at(-1).network_stats.latency_ms, null);
   c.agentStats = { system_stats: { cpu_percent: 10 } }; c.agentStatsReceivedAt = now;
   c.postStats(); assert.equal(sent.at(-1).system_stats.cpu_percent, 10);
+  now = 5500;
+  c.acceptAgentStats({t:'stats',screen:{request_id:'screen-1',status:'rejected',reason:'application_disabled'}});
+  c.postStats();
+  assert.equal(sent.at(-1).system_stats.cpu_percent, 10);
+  assert.equal(c.agentStatsReceivedAt, 5000);
+  assert.equal(sent.at(-1).screen.request_id, 'screen-1');
   c.observedEncoder = 'jpeg';
   c.agentStats = { active_encoder: 'h264enc', supported_encoders: ['jpeg', 'invalid'], microphone_supported: false };
   c.postStats();

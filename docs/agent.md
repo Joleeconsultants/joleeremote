@@ -227,3 +227,9 @@ Do not rely on Cloudflare Access policies to police who may open which PC. Acces
 3. On allow: `POST /sessions` with the mint secret → open `joins.browser` → agent joins with `agentToken`.
 
 This hop only checks mint secret + join tokens. See [architecture.md](architecture.md#host-authorization-tiers).
+
+### Screen acknowledgement extension
+
+Resize commands may include an optional `id` (1–64 characters) and `mode` (`auto` or `manual`). The hop preserves these fields; older commands remain valid. Endpoint validation determines supported dimensions and whether a change can be applied.
+
+An agent may send `t:stats` with only a `screen` acknowledgement. The viewer forwards it as `statsUpdate.screen` independently of CPU/memory telemetry; such an acknowledgement neither deletes those measurements nor refreshes their expiry. Missing screen state is unknown. Consumers must correlate `request_id` with their latest request and distinguish requested, effective desktop, and encoded frame geometry. A successful command write is not an applied resolution.

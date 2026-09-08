@@ -41,6 +41,8 @@ export type ResizeInput = {
   w: number;
   h: number;
   reset?: boolean;
+  id?: string;
+  mode?: "auto" | "manual";
 };
 
 export type CssScalingInput = { t: "cssScaling"; value: boolean };
@@ -168,6 +170,14 @@ function parseObject(obj: Record<string, unknown>): InputPayload | null {
       if (!isFiniteNumber(obj.w) || !isFiniteNumber(obj.h)) return null;
       const out: ResizeInput = { t: "resize", w: obj.w, h: obj.h };
       if (obj.reset === true) out.reset = true;
+      if (obj.id !== undefined) {
+        if (typeof obj.id !== "string" || obj.id.length < 1 || obj.id.length > 64) return null;
+        out.id = obj.id;
+      }
+      if (obj.mode !== undefined) {
+        if (obj.mode !== "auto" && obj.mode !== "manual") return null;
+        out.mode = obj.mode;
+      }
       return out;
     }
     case "cssScaling": {

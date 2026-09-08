@@ -11,7 +11,7 @@ feel live while the hop viewer acknowledges via pipelineStatusUpdate.
 diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
 --- a/src/components/Sidebar.jsx
 +++ b/src/components/Sidebar.jsx
-@@ -2300,31 +2300,39 @@
+@@ -2300,33 +2300,45 @@
      resetDpiToDerivedDefault();
    };
 -  const handleVideoToggle = () =>

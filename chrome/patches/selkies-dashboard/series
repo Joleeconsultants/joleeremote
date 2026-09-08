@@ -10,3 +10,12 @@
 0012-jolee-theme-import.patch
 0013-mic-parent-capture.patch
 0014-mic-start-failure-ux.patch
+0015-screen-setting-delivery.patch
+0016-indicator-readings.patch
+0017-local-display-preferences.patch
+0018-audio-device-routing.patch
+0019-confirmed-encoder-state.patch
+0020-screen-acknowledgements.patch
+0021-measured-audio-playback.patch
+0022-fullscreen-result.patch
+0023-clipboard-write-results.patch

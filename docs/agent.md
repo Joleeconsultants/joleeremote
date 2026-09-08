@@ -112,7 +112,7 @@ The hop forwards input bytes opaquely. The Selkies chrome viewer sends UTF-8 JSO
 - `{t:"pointer", e, x, y, b}` — `e` is `move` / `down` / `up`; `x`/`y` are 0–1 over the displayed image (`object-fit` contain vs stretch). `b` is `buttons` on move, `button` on down/up
 - `{t:"wheel", dx, dy, x, y}` — canvas wheel; `dx`/`dy` are `deltaX`/`deltaY`; context menu is suppressed so right-click stays in the session
 - `{t:"key", e, key, code}` — `e` is `down` / `up`. Keys are captured on the canvas after pointerdown focus, not from dashboard `.allow-native-input`
-- `{t:"clipboard", text}` — browser → agent (sidebar PC Clipboard, text)
+- `{t:"clipboard", text, id?}` — browser → agent (sidebar PC Clipboard, text). Optional correlation `id` is 1–64 characters. The current text receiver limit is 16,384 UTF-16 units, with no NUL or unpaired surrogates; never truncate.
 - `{t:"clipboard", mime, data}` — browser → agent image clipboard. `mime` starts with `image/` (default `image/png`); `data` is base64. The viewer skips the send if the encoded envelope would exceed 1 MiB.
 - `{t:"resize", w, h}` — set capture size from the original screen panel
 - `{t:"resize", w, h, reset:true}` — reset capture size to `round(innerWidth)` / `round(innerHeight)`
@@ -233,3 +233,7 @@ This hop only checks mint secret + join tokens. See [architecture.md](architectu
 Resize commands may include an optional `id` (1–64 characters) and `mode` (`auto` or `manual`). The hop preserves these fields; older commands remain valid. Endpoint validation determines supported dimensions and whether a change can be applied.
 
 An agent may send `t:stats` with only a `screen` acknowledgement. The viewer forwards it as `statsUpdate.screen` independently of CPU/memory telemetry; such an acknowledgement neither deletes those measurements nor refreshes their expiry. Missing screen state is unknown. Consumers must correlate `request_id` with their latest request and distinguish requested, effective desktop, and encoded frame geometry. A successful command write is not an applied resolution.
+
+### Clipboard write confirmation
+
+A text write with `id` receives a kind0x01 UTF-8 JSON frame `{t:"clipboard_result",id,status:"applied"|"rejected",reason:null|"invalid_text"|"clipboard_unavailable"}`. Applied means the native clipboard set succeeded. The viewer correlates only the latest outstanding write, expires it after15seconds, and reports disconnect/rejection through existing notifications. Invalid, stale or duplicate replies do not indicate success. Agent stats may advertise `clipboard_text_supported` and `clipboard_max_chars`. PC-to-browser changes continue using `{t:"clipboard",text}`. Do not export the initial OS clipboard or echo the browser’s own write as a PC change. Images remain a separate capability.

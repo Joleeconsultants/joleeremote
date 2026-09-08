@@ -94,6 +94,47 @@ async function waitUntilState(sessionId: string, state: string, timeoutMs = 8000
 }
 
 describe("session hop", () => {
+  it("only the owning browser token ends a session and retires both peers", async () => {
+    const minted = await mint();
+    const other = await mint();
+    const browser = await openWs(browserJoinPath(minted.sessionId, minted.browserToken));
+    const agent = await openWs(agentJoinPath(minted.sessionId, minted.agentToken));
+    await waitUntilState(minted.sessionId, "paired");
+    const path = "https://example.com/sessions/" + minted.sessionId + "/end";
+    const end = (token?: string) => SELF.fetch(path, { method: "POST", headers: token ? { authorization: "Bearer " + token } : {} });
+    expect((await end()).status).toBe(401);
+    expect((await end(minted.agentToken)).status).toBe(403);
+    expect((await end(other.browserToken)).status).toBe(403);
+    expect((await SELF.fetch(path + "?token=" + minted.browserToken, { method: "POST" })).status).toBe(401);
+    expect((await SELF.fetch(path, { headers: { authorization: "Bearer " + minted.browserToken } })).status).not.toBe(204);
+    await waitUntilState(minted.sessionId, "paired");
+    const closed = [browser, agent].map(ws => new Promise<number>(resolve => ws.addEventListener("close", ev => resolve(ev.code), { once: true })));
+    const ended = await end(minted.browserToken);
+    expect(ended.status).toBe(204);
+    expect(ended.headers.get("cache-control")).toBe("no-store");
+    expect(await Promise.all(closed)).toEqual([4000, 4000]);
+    expect((await SELF.fetch("https://example.com/sessions/" + minted.sessionId)).status).toBe(404);
+    expect((await end(minted.browserToken)).status).toBe(404);
+    await runInDurableObject(env.Session.getByName(minted.sessionId), async (_instance, state) => {
+      expect(await state.storage.getAlarm()).toBeNull();
+    });
+    const rejoin = await SELF.fetch("https://example.com" + browserJoinPath(minted.sessionId, minted.browserToken), { headers: { Upgrade: "websocket" } });
+    expect(rejoin.status).toBe(404);
+    expect((await SELF.fetch("https://example.com/sessions/" + other.sessionId)).status).toBe(200);
+    await SELF.fetch("https://example.com/sessions/" + other.sessionId + "/end", { method: "POST", headers: { authorization: "Bearer " + other.browserToken } });
+  });
+
+  it("allows the owning browser to clean up a retained expired session", async () => {
+    const minted = await mint();
+    await runInDurableObject(env.Session.getByName(minted.sessionId), async (_instance, state) => {
+      state.storage.sql.exec("UPDATE session SET expires_at = ?", Date.now() - 1);
+    });
+    const result = await SELF.fetch("https://example.com/sessions/" + minted.sessionId + "/end", {
+      method: "POST", headers: { authorization: "Bearer " + minted.browserToken },
+    });
+    expect(result.status).toBe(204);
+  });
+
   it("mints a session with join tokens and hides tokens from status", async () => {
     const minted = await mint();
     expect(minted.sessionId.length).toBe(36);

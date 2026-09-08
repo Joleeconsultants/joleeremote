@@ -45,6 +45,18 @@ export default {
       return withCors(await sessionStatus(statusMatch[1], env));
     }
 
+    const endMatch = url.pathname.match(/^\/sessions\/([^/]+)\/end$/);
+    if (request.method === "POST" && endMatch) {
+      // Explicit owner action, never GET/navigation or a token in the URL.
+      const token = request.headers.get("authorization")?.match(/^Bearer ([a-f0-9]{64})$/i)?.[1];
+      if (!token) return withCors(new Response(JSON.stringify({ error: "browser token required" }),
+        { status: 401, headers: { "cache-control": "no-store", "content-type": "application/json" } }));
+      const stub = await getServerByName(env.Session, endMatch[1]);
+      const result = await stub.endOwnedSession(token);
+      return withCors(new Response(result === 204 ? null : JSON.stringify({ error: result === 403 ? "invalid browser token" : "session not found" }),
+        { status: result, headers: { "cache-control": "no-store", "content-type": "application/json" } }));
+    }
+
     const joinMatch = url.pathname.match(/^\/sessions\/([^/]+)\/(browser|agent)$/);
     if (joinMatch) {
       const sessionId = joinMatch[1];

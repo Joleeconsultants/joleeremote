@@ -57,9 +57,9 @@ let agentScreen=null;
 let observedEncoder=null;
 let agentStatsReceivedAt=0;
 const printJobChunks=new Map();
-// Remote overlay is the default (Selkies idea). CSS cursors toggle (original UI) switches to a local pointer.
+// Both original cursor modes render the same remote shape and hotspot.
 let useBrowserCursors=false, pointerOver=false, agentCursorVisible=true;
-let cursorHx=DEFAULT_CURSOR_HX, cursorHy=DEFAULT_CURSOR_HY;
+let cursorHx=DEFAULT_CURSOR_HX, cursorHy=DEFAULT_CURSOR_HY, cursorPosition=null;
 cursorEl.src=DEFAULT_CURSOR_SVG;
 function applyScale(){
   canvas.classList.toggle("exact-resolution", !scaleLocally);
@@ -70,7 +70,7 @@ function applySmoothing(){
   canvas.style.imageRendering=antiAliasing?"auto":"pixelated";
 }
 function applyCursorMode(){
-  canvas.style.cursor=useBrowserCursors?"default":"none";
+  canvas.style.cursor=useBrowserCursors && agentCursorVisible?`url("${cursorEl.src}") ${cursorHx} ${cursorHy}, default`:"none";
   const show=!useBrowserCursors && pointerOver && agentCursorVisible;
   cursorEl.style.display=show?"block":"none";
 }
@@ -199,6 +199,7 @@ function setStatus(state,expiresAt=null){
     delete canvas.dataset.clipboardReceipt;
     clipboardPaste.reset();
     setMicrophoneForwarding(false);
+    resetRemoteCursor();
     invalidateVideoFrames();
     if(wasPaired){stopAudioPlayback();stopWebcam();}
     finishScreenRequest('rejected','session_unavailable');
@@ -286,26 +287,32 @@ function clipboardTextFromFrame(payload){
 }
 function cursorFromFrame(payload){
   const obj=parseJsonFrameObject(payload);
-  if(!obj) return null;
-  if(!(obj.t==="cursor"||obj.type==="cursor")) return null;
-  const hx=typeof obj.hx==="number"&&isFinite(obj.hx)?obj.hx:0;
-  const hy=typeof obj.hy==="number"&&isFinite(obj.hy)?obj.hy:0;
-  const mime=typeof obj.mime==="string"?obj.mime:"";
-  const data=typeof obj.data==="string"?obj.data:"";
-  return {visible:obj.visible!==false,hx,hy,mime,data};
+  if(!obj || !(obj.t==="cursor"||obj.type==="cursor") || (obj.visible!==undefined && typeof obj.visible!=="boolean")) return null;
+  if(obj.visible===false) return {visible:false};
+  if(obj.mime===undefined && obj.data===undefined) return {visible:true};
+  if(obj.mime!=="image/png" || typeof obj.data!=="string" || obj.data.length>174764 ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(obj.data)) return null;
+  try{
+    const png=Uint8Array.from(atob(obj.data),c=>c.charCodeAt(0));
+    if(png.length<33 || png.length>131072 || ![137,80,78,71,13,10,26,10].every((v,i)=>png[i]===v)) return null;
+    const view=new DataView(png.buffer);
+    if(view.getUint32(8)!==13 || view.getUint32(12)!==0x49484452) return null;
+    const width=view.getUint32(16),height=view.getUint32(20);
+    if(width<1||height<1||width>128||height>128||!Number.isSafeInteger(obj.hx)||!Number.isSafeInteger(obj.hy)||
+        obj.hx<0||obj.hy<0||obj.hx>=width||obj.hy>=height) return null;
+    return {visible:true,mime:obj.mime,data:obj.data,hx:obj.hx,hy:obj.hy};
+  }catch{return null;}
+}
+function resetRemoteCursor(){
+  agentCursorVisible=true;cursorHx=DEFAULT_CURSOR_HX;cursorHy=DEFAULT_CURSOR_HY;
+  cursorEl.src=DEFAULT_CURSOR_SVG;cursorPosition=null;applyCursorMode();
 }
 function applyCursorFrame(cur){
-  agentCursorVisible=!!cur.visible;
-  if(cur.visible){
-    if(cur.mime&&cur.data){
-      cursorEl.src="data:"+cur.mime+";base64,"+cur.data;
-      cursorHx=cur.hx;
-      cursorHy=cur.hy;
-    }else if(!cursorEl.src){
-      cursorEl.src=DEFAULT_CURSOR_SVG;
-      cursorHx=DEFAULT_CURSOR_HX;
-      cursorHy=DEFAULT_CURSOR_HY;
-    }
+  agentCursorVisible=cur.visible;
+  if(cur.visible && cur.mime && cur.data){
+    cursorEl.src="data:image/png;base64,"+cur.data;
+    cursorHx=cur.hx;cursorHy=cur.hy;
+    if(cursorPosition) moveOverlay(cursorPosition);
   }
   applyCursorMode();
 }
@@ -323,6 +330,7 @@ function pointerNorm(e){
   return {x:(e.clientX-b.left)/w, y:(e.clientY-b.top)/h};
 }
 function moveOverlay(e){
+  cursorPosition={clientX:e.clientX,clientY:e.clientY};
   const r=stage.getBoundingClientRect();
   cursorEl.style.transform="translate("+(e.clientX-r.left-cursorHx)+"px,"+(e.clientY-r.top-cursorHy)+"px)";
 }

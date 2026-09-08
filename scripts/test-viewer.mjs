@@ -554,6 +554,29 @@ test('JPEG dimensions are checked before allocating a decoded image',()=>{
   assert.throws(()=>c.checkClipboardJpeg(Uint8Array.from([255,216,255,218]),limits),/invalid_image/);
 });
 
+test('WebP preflight bounds both canvas and bitstream dimensions and rejects animation/truncation',()=>{
+  const {c}=imageClipboardViewer(),limits={dimension:4096,pixels:8388608};
+  const chunk=(name,data)=>{const b=Buffer.alloc(8+data.length+data.length%2);b.write(name);b.writeUInt32LE(data.length,4);data.copy(b,8);return b;};
+  const riff=(...chunks)=>{const b=Buffer.concat([Buffer.from('RIFF0000WEBP'),...chunks]);b.writeUInt32LE(b.length-8,4);return b;};
+  const lossless=Buffer.from([47,0,0,0,0]);
+  const image=chunk('VP8L',lossless);
+  assert.doesNotThrow(()=>c.checkClipboardWebp(riff(image),limits));
+  const lossy=Buffer.from([0,0,0,157,1,42,2,0,3,0]);
+  assert.doesNotThrow(()=>c.checkClipboardWebp(riff(chunk('VP8 ',lossy)),limits));
+  lossy.writeUInt16LE(4097,6);assert.throws(()=>c.checkClipboardWebp(riff(chunk('VP8 ',lossy)),limits),/image_too_large/);
+  const extended=Buffer.alloc(10);
+  assert.doesNotThrow(()=>c.checkClipboardWebp(riff(chunk('VP8X',extended),image),limits));
+  extended[4]=1;assert.throws(()=>c.checkClipboardWebp(riff(chunk('VP8X',extended),image),limits),/invalid_image/);extended[4]=0;
+  extended[0]=2;assert.throws(()=>c.checkClipboardWebp(riff(chunk('VP8X',extended),image),limits),/unsupported/);
+  extended[0]=0;extended.writeUIntLE(4096,4,3);
+  assert.throws(()=>c.checkClipboardWebp(riff(chunk('VP8X',extended),image),limits),/image_too_large/);
+  lossless.writeUInt32LE(4096,1);assert.throws(()=>c.checkClipboardWebp(riff(chunk('VP8L',lossless)),limits),/image_too_large/);
+  assert.throws(()=>c.checkClipboardWebp(riff(image,chunk('ANMF',Buffer.alloc(16))),limits),/unsupported/);
+  assert.throws(()=>c.checkClipboardWebp(riff(image,image),limits),/invalid_image/);
+  const bad=riff(image);bad[bad.length-1]=1;assert.throws(()=>c.checkClipboardWebp(bad,limits),/invalid_image/);
+  assert.throws(()=>c.checkClipboardWebp(riff(image).subarray(0,25),limits),/invalid_image/);
+});
+
 test('browser image delivery retries permission denial only on flush and reports actual success',async()=>{
   const outcomes=[],writes=[];let allowed=false;
   const delivery=createClipboardDelivery({enabled:()=>true,report:v=>outcomes.push(v),write:blob=>{

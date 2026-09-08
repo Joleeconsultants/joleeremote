@@ -942,15 +942,56 @@ function checkClipboardJpeg(bytes,limits){
   }
   throw new Error('invalid_image');
 }
+function checkClipboardWebp(bytes,limits){
+  const text=(offset,length)=>String.fromCharCode(...bytes.subarray(offset,offset+length));
+  if(bytes.length<20||text(0,4)!=='RIFF'||text(8,4)!=='WEBP')throw new Error('invalid_image');
+  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  if(view.getUint32(4,true)!==bytes.length-8)throw new Error('invalid_image');
+  const uint24=offset=>bytes[offset]+bytes[offset+1]*256+bytes[offset+2]*65536;
+  let offset=12,canvasSize=null,imageSize=null;
+  const seen=new Set();
+  while(offset+8<=bytes.length){
+    const type=text(offset,4),length=view.getUint32(offset+4,true),data=offset+8;
+    if(length>bytes.length-data||data+length+(length%2)>bytes.length)throw new Error('invalid_image');
+    if(length%2&&bytes[data+length]!==0)throw new Error('invalid_image');
+    if(type==='ANIM'||type==='ANMF')throw new Error('unsupported');
+    if(['VP8X','ICCP','ALPH','VP8 ','VP8L'].includes(type)){
+      if(seen.has(type))throw new Error('invalid_image');seen.add(type);
+    }
+    if(type==='VP8X'){
+      if(offset!==12||length!==10)throw new Error('invalid_image');
+      if(bytes[data]&2)throw new Error('unsupported');
+      canvasSize=[uint24(data+4)+1,uint24(data+7)+1];checkClipboardGeometry(...canvasSize,limits);
+    }else if(type==='ICCP'||type==='ALPH'){
+      if(!canvasSize||imageSize)throw new Error('invalid_image');
+      if(type==='ICCP'&&length>1048576)throw new Error('image_too_large');
+    }else if(type==='VP8 '||type==='VP8L'){
+      if(imageSize)throw new Error('invalid_image');
+      if(type==='VP8 '){
+        if(length<10||(bytes[data]&1)||bytes[data+3]!==157||bytes[data+4]!==1||bytes[data+5]!==42)throw new Error('invalid_image');
+        imageSize=[view.getUint16(data+6,true)&16383,view.getUint16(data+8,true)&16383];
+      }else{
+        if(length<5||bytes[data]!==47)throw new Error('invalid_image');
+        const bits=view.getUint32(data+1,true);
+        if(bits>>>29)throw new Error('unsupported');
+        imageSize=[(bits&16383)+1,((bits>>>14)&16383)+1];
+      }
+      checkClipboardGeometry(...imageSize,limits);
+    }
+    offset=data+length+(length%2);
+  }
+  if(offset!==bytes.length||!imageSize||canvasSize&&canvasSize.some((v,i)=>v!==imageSize[i]))throw new Error('invalid_image');
+}
 async function normalizeClipboardImage(blob,limits){
-  if(!(blob instanceof Blob)||!['image/png','image/jpeg'].includes(blob.type))throw new Error('unsupported');
+  if(!(blob instanceof Blob)||!['image/png','image/jpeg','image/webp'].includes(blob.type))throw new Error('unsupported');
   if(blob.size>8388608)throw new Error('image_too_large');
   if(blob.type==='image/png'){
     const bytes=new Uint8Array(await blob.arrayBuffer());checkClipboardPng(bytes,limits);
     if(bytes.length>limits.bytes)throw new Error('image_too_large');
     return bytes;
   }
-  checkClipboardJpeg(new Uint8Array(await blob.arrayBuffer()),limits);
+  const source=new Uint8Array(await blob.arrayBuffer());
+  if(blob.type==='image/webp')checkClipboardWebp(source,limits);else checkClipboardJpeg(source,limits);
   const bitmap=await createImageBitmap(blob);
   try{
     checkClipboardGeometry(bitmap.width,bitmap.height,limits);

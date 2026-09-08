@@ -73,11 +73,12 @@ export function postToCore(message, targetOrigin = window.location.origin) {
   if (message && message.type === "requestFullscreen" && iframe) {
     const req = iframe.requestFullscreen || iframe.webkitRequestFullscreen;
     if (req) {
-      Promise.resolve(req.call(iframe)).catch(() => {
+      const fallback = () => {
         if (iframe.contentWindow) {
           iframe.contentWindow.postMessage(message, targetOrigin);
         }
-      });
+      };
+      try { Promise.resolve(req.call(iframe)).catch(fallback); } catch { fallback(); }
       return;
     }
   }

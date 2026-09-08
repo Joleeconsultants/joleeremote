@@ -73,7 +73,7 @@ function applyCursorMode(){
   cursorEl.style.display=show?"block":"none";
 }
 let sessionPaired=false;
-let latestSettings={video_protocol:1};
+let latestSettings={video_protocol:1,max_edge:3840};
 let pendingScreenRequest=null, screenAutoEnabled=false;
 let screenUseCssScaling=true, screenAligned=false, screenResizeTimer=null;
 function finishScreenRequest(status,reason,effective=null){

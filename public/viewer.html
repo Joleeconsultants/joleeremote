@@ -51,6 +51,7 @@ let microphoneStream=null, microphoneRecorder=null, microphoneGen=0, microphoneF
 let frameCount=0, statsStartedAt=performance.now(), bytesSinceStats=0;
 let hopFps=0, hopBandwidth=0;
 let agentStats={};
+let agentStatsReceivedAt=0;
 const printJobChunks=new Map();
 // Remote overlay is the default (Selkies idea). CSS cursors toggle (original UI) switches to a local pointer.
 let useBrowserCursors=false, pointerOver=false, agentCursorVisible=true;
@@ -97,7 +98,7 @@ function consumeLatencyReply(payload){
 function setStatus(state){
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
-  if(!sessionPaired){pendingLatency=null;measuredLatency=null;latencyReceivedAt=0;}
+  if(!sessionPaired){pendingLatency=null;measuredLatency=null;latencyReceivedAt=0;agentStats={};agentStatsReceivedAt=0;}
   if(sessionPaired&&!wasPaired&&Object.keys(latestSettings).length){
     sendInput({t:"settings",settings:latestSettings});
   }
@@ -610,7 +611,7 @@ function connect(opts){
     const file=fileFromFrame(env.payload);
     if(file!==null){downloadFile(file);return;}
     const stats=statsFromFrame(env.payload);
-    if(stats!==null){agentStats=stats;postStats();return;}
+    if(stats!==null){agentStats=stats;agentStatsReceivedAt=performance.now();postStats();return;}
     const print=printFromFrame(env.payload);
     if(print!==null){handlePrintFrame(print);return;}
     if(!videoEnabled) return;
@@ -671,6 +672,9 @@ async function sendFile(blob){
 function numberOr(value,fallback=0){return typeof value==="number"&&isFinite(value)?value:fallback;}
 function postStats(){
   const now=performance.now(), elapsed=Math.max(1,now-statsStartedAt);
+  // Endpoint telemetry normally arrives once a second. Never keep a frozen
+  // measurement looking live after its sender stops or disconnects.
+  if(now-agentStatsReceivedAt>=5000)agentStats={};
   // Agent telemetry and dashboard requests may arrive between timer ticks.
   // Publish them immediately without consuming a partial throughput sample.
   if(elapsed>=1000){

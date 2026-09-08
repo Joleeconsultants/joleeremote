@@ -6,7 +6,7 @@ import {
   fileFromFrame,
   filesGetFromFrame,
   filesListFromFrame,
-  isSafeFilesBasename,
+  isSafeFilesPath,
   type FilesListEntry,
 } from "./json-frame";
 import { timingSafeEqual } from "./tokens";
@@ -20,8 +20,8 @@ import {
 export const FILES_ASK_TIMEOUT_MS = 12_000;
 
 export type AgentFilesListResult =
-  | { ok: true; files: FilesListEntry[] }
-  | { ok: false; error: "agent_unavailable" | "timeout" };
+  | { ok: true; path: string; files: FilesListEntry[] }
+  | { ok: false; error: "agent_unavailable" | "timeout" | "bad_name" };
 
 export type AgentFilesGetResult =
   | { ok: true; name: string; mime: string; data: ArrayBuffer }
@@ -67,7 +67,7 @@ export class Session extends Server<Env> {
 
   private tearingDown = false;
 
-  /** In-flight Option A files asks keyed by `filesList` or `filesGet:<name>`. */
+  /** In-flight Option A files asks keyed by `filesList:<path>` or `filesGet:<name>`. */
   private filesAskPending = new Map<string, FilesAskWaiter[]>();
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -267,16 +267,17 @@ export class Session extends Server<Env> {
   }
 
   /**
-   * Option A: ask the joined agent for a root-only PC folder listing.
+   * Option A: ask the joined agent for a PC folder listing.
    * Browser connection is optional — sends kind 0x02 directly to agent sockets.
    */
-  async askAgentFilesList(): Promise<AgentFilesListResult> {
+  async askAgentFilesList(path = ""): Promise<AgentFilesListResult> {
+    if (!isSafeFilesPath(path, true)) return { ok: false, error: "bad_name" };
     if (!this.hasRole("agent")) {
       return { ok: false, error: "agent_unavailable" };
     }
-    const key = "filesList";
+    const key = "filesList:" + path;
     const wait = this.waitFilesAsk<AgentFilesListResult>(key, FILES_ASK_TIMEOUT_MS);
-    if (!this.sendInputToAgents(encodeFilesListRequest())) {
+    if (!this.sendInputToAgents(encodeFilesListRequest(path))) {
       this.cancelFilesAsk(key, { ok: false, error: "agent_unavailable" });
       return wait;
     }
@@ -284,11 +285,11 @@ export class Session extends Server<Env> {
   }
 
   /**
-   * Option A: ask the joined agent for one basename under the PC folder root.
+   * Option A: ask the joined agent for one relative path under the PC folder root.
    * Browser connection is optional — sends kind 0x02 directly to agent sockets.
    */
   async askAgentFilesGet(name: string): Promise<AgentFilesGetResult> {
-    if (!isSafeFilesBasename(name)) {
+    if (!isSafeFilesPath(name)) {
       return { ok: false, error: "bad_name" };
     }
     if (!this.hasRole("agent")) {
@@ -556,7 +557,7 @@ export class Session extends Server<Env> {
   private maybeResolveFilesAsk(payload: Uint8Array): void {
     const list = filesListFromFrame(payload);
     if (list) {
-      this.cancelFilesAsk("filesList", { ok: true, files: list.files });
+      this.cancelFilesAsk("filesList:" + list.path, { ok: true, path: list.path, files: list.files });
       return;
     }
     const get = filesGetFromFrame(payload);

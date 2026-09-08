@@ -14,6 +14,7 @@ Import (or copy) **`src/agent-tools.ts`** — the single entry for hop wire help
 - Input parse: `parseInputPayload` / `parseInputJson` (`src/input.ts`) — browser → agent kind `0x02` JSON
 - Frame builders: `encodeClipboard*Frame`, `encodeCursorFrame`, `encodeFileFrame`, `encodeStatsFrame`, `encodePrintFrames` (`src/agent-frames.ts`) — agent → browser kind `0x01` JSON
 - Frame parsers: `printFromFrame`, `fileFromFrame`, … (`src/json-frame.ts`)
+- PC file helpers: `encodeFilesListRequest(path?)`, `encodeFilesGetRequest(name)`, `filesListFromFrame`, `filesGetFromFrame`, `isSafeFilesPath` (exported from `src/agent-tools.ts`)
 
 **Wire format only.** Capture (DXGI / WGC / LetLeeIn native capture when you wire it), SendInput inject, Ghostscript PS→PDF, and IronRDP-style print job lifecycle stay in **your** agent — do not fork those designs into this repo. `examples/agent.mjs` stays a tiny synthetic pipe proof.
 
@@ -61,7 +62,7 @@ flowchart LR
 Prefer OS file I/O under the consumer agent's PC `FileManagerPath` / Desktop root. The consumer owns path resolution; the hop forwards opaque payloads.
 
 - Upload: browser → agent kind `0x02` `{t:"file",name,mime,data}` (`data` base64); the agent writes into that root.
-- List/get: `filesList` / `filesGet` requests in kind `0x02`, responses in kind `0x01`. Listing is root-only; get uses a basename. Exact shapes, errors, and `mtime` units: [agent.md — Files](agent.md#files-locked-option-a).
+- List/get: `filesList` / `filesGet` requests in kind `0x02`, responses in kind `0x01`. Listing accepts optional relative `path`; get accepts a nested relative ID. Entries include `id`, basename `name`, `type` (`dir`/`file`), `size`, and `mtime`, and the list response echoes `path`. Exact shapes, errors, and `mtime` units: [agent.md — Files](agent.md#files-locked-option-a).
 - Optional canary/push: agent → browser kind `0x01` `{t:"file",name,mime,data}` triggers a browser download; it is distinct from `filesGet`.
 - The whole binary envelope, including header, JSON, and base64 expansion, must be ≤ 1 MiB (`MAX_ENVELOPE_BYTES`). Do not build a new transfer protocol or envelope kinds in this hop.
 

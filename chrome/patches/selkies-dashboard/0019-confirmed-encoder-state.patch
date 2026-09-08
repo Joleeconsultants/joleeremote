@@ -1,0 +1,61 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index c4cd380..baf9bca 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -1285,6 +1285,20 @@ function Sidebar() {
+   const [encoder, setEncoder] = useState(
+     localStorage.getItem(getPrefixedKey("encoder")) || DEFAULT_ENCODER
+   );
++  const [agentCapabilities, setAgentCapabilities] = useState({});
++  useEffect(() => {
++    const receive = (event) => {
++      const core = document.getElementById('jolee-core');
++      if (event.origin !== window.location.origin || event.source !== core?.contentWindow || event.data?.type !== 'statsUpdate') return;
++      const message = event.data;
++      setAgentCapabilities({ active_encoder: message.active_encoder,
++        supported_encoders: message.supported_encoders,
++        microphone_supported: message.microphone_supported,
++        audio_bitrate_supported: message.audio_bitrate_supported });
++    };
++    window.addEventListener('message', receive);
++    return () => window.removeEventListener('message', receive);
++  }, []);
+   const [webcamEncoderChoice, setWebcamEncoderChoice] = useState(
+     localStorage.getItem(getPrefixedKey("webcam_encoder"))
+   );
+@@ -3048,7 +3062,9 @@ function Sidebar() {
+   );
+ 
+   /** One encoder knob serves both transports; CBR/CRF applies to every H.264 encoder on both. */
+-  const activeEncoder = encoder;
++  const activeEncoder = agentCapabilities.active_encoder || '';
++  const confirmedEncoderOptions = agentCapabilities.supported_encoders?.length
++    ? agentCapabilities.supported_encoders : dynamicEncoderOptions;
+   const H264_ENCODERS = ["h264enc", "h264enc-striped", "nvh264enc"];
+   const showFPS = [
+     "jpeg",
+@@ -3057,7 +3073,7 @@ function Sidebar() {
+   ].includes(encoder);
+   const showCRF = H264_ENCODERS.includes(activeEncoder);
+   const showH264Options = H264_ENCODERS.includes(activeEncoder);
+-  const showJpegOptions = encoder === 'jpeg';
++  const showJpegOptions = activeEncoder === 'jpeg';
+   const showPaintOverQualityToggle = showH264Options || showJpegOptions;
+   /**
+    * The mode the encoder is actually using, which picks the quality slider:
+@@ -3369,11 +3385,12 @@ function Sidebar() {
+                     </label>
+                     <select
+                       id="encoderSelect"
+-                      value={encoder}
++                      value={activeEncoder}
+                       onChange={handleEncoderChange}
+-                      disabled={!serverSettings || dynamicEncoderOptions.length <= 1}
++                      disabled={!serverSettings || confirmedEncoderOptions.length <= 1}
+                     >
+-                      {dynamicEncoderOptions.map((enc) => (
++                      {!activeEncoder && <option value="" disabled>Awaiting encoder confirmation</option>}
++                      {confirmedEncoderOptions.map((enc) => (
+                         <option key={enc} value={enc}>
+                           {displayLabel(enc)}
+                         </option>

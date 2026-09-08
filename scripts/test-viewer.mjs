@@ -132,7 +132,7 @@ test('settings chosen before socket open or agent join replay latest values on p
   c.sendInput({t:'settings',settings:{framerate:60,jpeg_quality:80}});
   assert.equal(sent.length,0);
   c.setStatus('paired');
-  assert.deepEqual(sent,[{t:'settings',settings:{framerate:60,jpeg_quality:80}}]);
+  assert.deepEqual(sent,[{t:'settings',settings:{video_protocol:1,framerate:60,jpeg_quality:80}}]);
   c.setStatus('paired');
   assert.equal(sent.length,1);
 });
@@ -147,7 +147,7 @@ test('re-pairing restores settings but never replays key or file actions',()=>{
   c.sendInput({t:'settings',settings:{jpeg_quality:90}});
   c.setStatus('waiting');
   c.setStatus('paired');
-  assert.deepEqual(sent.at(-1),{t:'settings',settings:{framerate:60,jpeg_quality:90}});
+  assert.deepEqual(sent.at(-1),{t:'settings',settings:{video_protocol:1,framerate:60,jpeg_quality:90}});
   assert.ok(sent.every(p=>p.t==='settings'));
 });
 
@@ -292,7 +292,7 @@ test('latency accepts only the pending reply and expires samples or disconnected
     sendInput: value => sent.push(value), parseJsonFrameObject: value => value, postStats() {} });
   vm.runInContext(html.slice(html.indexOf('let sessionPaired='), html.indexOf('function encodeInput(')), c);
   c.sendLatencyProbe(); assert.equal(sent.length, 0);
-  c.setStatus('paired'); c.sendLatencyProbe(); assert.equal(sent.length, 1);
+  c.setStatus('paired'); assert.equal(sent.pop().settings.video_protocol,1); c.sendLatencyProbe(); assert.equal(sent.length, 1);
   now = 50; c.sendLatencyProbe(); assert.equal(sent.length, 1);
   c.consumeLatencyReply({ t: 'pong', id: 'other' }); assert.equal(c.latencyReading(now), null);
   c.consumeLatencyReply({ t: 'pong', id: sent[0].id }); assert.equal(c.latencyReading(now), 50);
@@ -387,7 +387,7 @@ test('fullscreen denial and unsupported API produce explicit parent feedback',as
 
 test('late JPEG decodes cannot overwrite newer frames or repaint disabled/reconnected video',async()=>{
   const pending=[],painted=[],closed=[];
-  const c=vm.createContext({videoGeneration:0,receivedFrameSequence:0,latestPaintedFrame:0,videoEnabled:true,videoDecoder:null,
+  const c=vm.createContext({negotiatedVideo:{reset:()=>{}},videoGeneration:0,receivedFrameSequence:0,latestPaintedFrame:0,videoEnabled:true,videoDecoder:null,
     canvas:{},ctx:{drawImage:b=>painted.push(b.id)},applySmoothing:()=>{},observedEncoder:null,frameCount:0,Blob,
     createImageBitmap:()=>new Promise(resolve=>pending.push(resolve))});
   vm.runInContext(html.slice(html.indexOf('function invalidateVideoFrames('),html.indexOf('async function paintH264(')),c);

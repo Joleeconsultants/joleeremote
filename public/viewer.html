@@ -31,7 +31,7 @@ canvas.exact-resolution{position:absolute;width:auto;height:auto;left:50%;top:50
 // Must match root package.json partysocket (currently 1.1.6).
 import PartySocket from "https://esm.sh/partysocket@1.1.6";
 import { ClipboardPasteGate } from './clipboard-paste.js?v=jo-ui-41';
-import { SasControl } from './sas-control.js?v=jo-ui-44';
+import { SasControl } from './sas-control.js?v=jo-ui-47';
 const VERSION=1, KIND_FRAME=1, KIND_INPUT=2, KIND_AUDIO=3;
 const DEFAULT_CURSOR_SVG="data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round" d="M1 1v16.5l4.2-4.3 3.3 8 2.5-1-3.3-7.9H15z"/></svg>');
 const DEFAULT_CURSOR_HX=1, DEFAULT_CURSOR_HY=1;
@@ -82,6 +82,7 @@ const sasControl=new SasControl({
   },
   changed:state=>{if(window.parent!==window)window.parent.postMessage({type:'sasState',...state},window.location.origin);},
   report:status=>{if(window.parent!==window)window.parent.postMessage({type:'sasResult',status},window.location.origin);},
+  secureReport:result=>{if(window.parent!==window)window.parent.postMessage({type:'secureDesktopResult',...result},window.location.origin);},
 });
 let latestSettings={video_protocol:1,max_edge:3840};
 let pendingScreenRequest=null, screenAutoEnabled=false;

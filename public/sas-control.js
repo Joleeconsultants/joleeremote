@@ -10,6 +10,20 @@ const uuid = value => typeof value === 'string' &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value) &&
   value !== '00000000-0000-0000-0000-000000000000';
 const sessionId = value => typeof value === 'string' && value.length > 0 && value.length <= 200;
+const continuityCodes = {
+  observing: ['helper_ready'], active: ['secure_frame_received'],
+  warning: ['input_rejected', 'input_partial', 'input_unknown'],
+  returned: ['normal_frame_received'],
+  failed: ['prepare_failed', 'helper_lost', 'deadline_reached', 'session_changed',
+    'capture_unavailable', 'return_unobserved', 'cancelled'],
+};
+export function validSecureDesktopStatus(value) {
+  return exact(value, ['t', 'v', 'session_id', 'generation', 'id', 'sequence', 'status', 'code']) &&
+    value.t === 'secure_desktop_status' && value.v === 1 && sessionId(value.session_id) &&
+    generation(value.generation) && uuid(value.id) && Number.isSafeInteger(value.sequence) &&
+    value.sequence >= 1 && value.sequence <= 64 && typeof value.status === 'string' && typeof value.code === 'string' && Object.hasOwn(continuityCodes, value.status) &&
+    continuityCodes[value.status].includes(value.code);
+}
 
 export function validSasCapability(value, session, now, expiresAt = null) {
   return exact(value, ['t', 'v', 'session_id', 'generation', 'expires_at', 'sas']) &&
@@ -33,11 +47,12 @@ export function validSasResult(value) {
 
 /** Ephemeral session/connection-bound requests. Never persist or replay commands. */
 export class SasControl {
-  constructor({ send, changed, report, now = Date.now, makeId = () => crypto.randomUUID(),
+  constructor({ send, changed, report, secureReport = () => {}, now = Date.now, makeId = () => crypto.randomUUID(),
     schedule = (fn, delay) => setTimeout(fn, delay), unschedule = timer => clearTimeout(timer) }) {
-    Object.assign(this, { send, changed, report, now, makeId, schedule, unschedule });
+    Object.assign(this, { send, changed, report, secureReport, now, makeId, schedule, unschedule });
     this.connection = null; this.session = ''; this.capability = null; this.pending = null;
     this.expiryTimer = null; this.expiresAt = null; this.deadlines = new Map();
+    this.observations = new Map();
   }
   bind(connection, session, expiresAt = null) {
     if (connection === this.connection && session === this.session && expiresAt === this.expiresAt) return;
@@ -47,7 +62,11 @@ export class SasControl {
   }
   invalidate() {
     this.unschedule(this.expiryTimer); this.expiryTimer = null; this.capability = null;
+    this.observations.clear();
     this.finish('uncertain');
+  }
+  pruneObservations() {
+    for (const [id, entry] of this.observations) if (entry.deadline <= this.now()) this.observations.delete(id);
   }
   finish(status) {
     if (!this.pending) return;
@@ -55,7 +74,8 @@ export class SasControl {
     this.publish(); this.report(status);
   }
   publish() {
-    const available = !!(this.connection && this.capability?.sas.available && this.capability.expires_at > this.now());
+    this.pruneObservations();
+    const available = !!(this.connection && this.capability?.sas.available && this.capability.expires_at > this.now() && this.observations.size < 128);
     this.changed({ available: available && !this.pending, pending: !!this.pending,
       reason: this.pending ? 'pending' : available ? null : this.capability?.sas.reason || 'unsupported' });
   }
@@ -68,14 +88,31 @@ export class SasControl {
     }, Math.min(2147483647, Math.max(1, this.capability.expires_at - this.now())));
   }
   consume(message, connection) {
-    if (!message || !['control_capabilities', 'command_result'].includes(message.t)) return false;
+    if (!message || !['control_capabilities', 'command_result', 'secure_desktop_status'].includes(message.t)) return false;
     if (!connection || connection !== this.connection) return true;
+    if (message.t === 'secure_desktop_status') {
+      this.pruneObservations();
+      if (!validSecureDesktopStatus(message)) return true;
+      const entry = this.observations.get(message.id);
+      if (!entry || entry.terminal || entry.connection !== connection || message.session_id !== this.session ||
+          entry.generation !== message.generation || this.capability?.generation !== message.generation ||
+          message.sequence <= entry.sequence || message.status === 'observing' && entry.active) return true;
+      entry.sequence = message.sequence;
+      if (message.status === 'active') entry.active = true;
+      if (message.status === 'returned' || message.status === 'failed') entry.terminal = true;
+      if (['warning', 'returned', 'failed'].includes(message.status) && !entry.reported.has(message.code)) {
+        entry.reported.add(message.code);
+        this.secureReport({ status: message.status, code: message.code });
+      }
+      return true;
+    }
     if (message.t === 'control_capabilities') {
       if (!validSasCapability(message, this.session, this.now(), this.expiresAt) ||
           (this.deadlines.has(message.generation) && this.deadlines.get(message.generation) !== message.expires_at ||
             !this.deadlines.has(message.generation) && this.deadlines.size >= 128)) {
         this.invalidate(); this.publish(); return true;
       }
+      if (this.capability?.generation !== message.generation) this.observations.clear();
       if (!message.sas.available || this.capability?.generation !== message.generation) this.finish('uncertain');
       this.deadlines.set(message.generation, message.expires_at);
       this.capability = structuredClone(message);
@@ -90,12 +127,15 @@ export class SasControl {
     return true;
   }
   request() {
+    this.pruneObservations();
     const cap = this.capability;
-    if (!this.connection || !cap?.sas.available || cap.expires_at <= this.now() || this.pending) {
+    if (!this.connection || !cap?.sas.available || cap.expires_at <= this.now() || this.pending || this.observations.size >= 128) {
       this.publish(); return false;
     }
-    const id = this.makeId(); if (!uuid(id)) return false;
+    const id = this.makeId(); if (!uuid(id) || this.observations.has(id)) return false;
     const p = { id, generation: cap.generation, connection: this.connection, deadline: this.now() + 5000 };
+    this.observations.set(id, { connection: this.connection, generation: cap.generation,
+      deadline: Math.min(this.now() + 45000, cap.expires_at), sequence: 0, active: false, terminal: false, reported: new Set() });
     this.pending = p;
     p.timer = this.schedule(() => { if (this.pending === p) this.finish('uncertain'); }, 5000);
     this.publish();

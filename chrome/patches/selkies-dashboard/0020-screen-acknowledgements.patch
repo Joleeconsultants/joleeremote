@@ -1,0 +1,52 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index baf9bca..a0d3d32 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -2759,7 +2759,33 @@ function Sidebar() {
+       if (event.origin !== window.location.origin) return;
+       const message = event.data;
+       if (typeof message === "object" && message !== null) {
+-        if (message.type === "pipelineStatusUpdate") {
++        if (message.type === "screenResult") {
++          if (event.source !== document.getElementById('jolee-core')?.contentWindow) return;
++          if (!['applied', 'rejected'].includes(message.status)) return;
++          const reasons = {
++            application_disabled: 'Changing the desktop resolution is not enabled on this PC yet.',
++            unsupported_mode: 'This display does not support the requested resolution.',
++            invalid_request: 'The requested resolution is invalid.',
++            session_unavailable: 'The desktop session is unavailable.',
++            confirmation_timeout: 'The PC did not confirm the resolution request.',
++            display_changed: 'The display changed before the request completed.',
++            busy: 'Another display request is in progress.',
++            apply_failed: 'The PC could not apply the resolution.',
++            verify_failed: 'The PC could not verify the resulting resolution.',
++            restore_failed: 'The PC could not restore the previous resolution.',
++          };
++          const size = message.effective;
++          if (message.status === 'applied' && (!Number.isInteger(size?.width) || !Number.isInteger(size?.height) || size.width < 1 || size.height < 1)) return;
++          const text = message.status === 'applied'
++            ? `Desktop resolution confirmed: ${size.width} × ${size.height}.`
++            : reasons[message.reason] || 'The PC did not apply the requested resolution.';
++          const id = 'screen-resolution-result';
++          setNotifications(prev => [...prev.filter(n => n.id !== id), {
++            id, fileName: 'Screen Settings', status: message.status === 'applied' ? 'notice' : 'warn',
++            message: text, timestamp: Date.now(), fadingOut: false,
++          }].slice(-MAX_NOTIFICATIONS));
++          scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++        } else if (message.type === "pipelineStatusUpdate") {
+           if (message.video !== undefined) setIsVideoActive(message.video);
+           if (message.audio !== undefined) setIsAudioActive(message.audio);
+           // Microphone UI is owned by parent capture; ignore core ON snaps.
+@@ -4829,10 +4855,10 @@ function Sidebar() {
+                   )}
+                 </>
+               )}
+-              {n.status === "warn" && (
++              {(n.status === "warn" || n.status === "notice") && (
+                 <>
+                   {" "}
+-                  <span className="notification-status-text warn-text">
++                  <span className={`notification-status-text ${n.status === 'warn' ? 'warn-text' : ''}`}>
+                     {n.message ? n.message : t("notifications.warningPrefix")}
+                   </span>{" "}
+                 </>

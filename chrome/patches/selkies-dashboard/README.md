@@ -76,3 +76,5 @@ See also `docs/chrome.md`.
 `0030-sas-command-results.patch`: gate the existing shortcut on the active agent capability and show correlated outcomes using existing notifications. No new layout.
 
 `0031-confirm-audio-output.patch`: keep the existing speaker dropdown on the applied output until the core confirms routing; source-check returned selections.
+
+`0032-secure-desktop-feedback.patch`: report validated continuity failures and observed normal-stream return through existing notifications; no layout changes.

@@ -2853,6 +2853,33 @@ function Sidebar() {
       if (message?.type === 'status' && message.state !== 'paired') setSasState({ available: false, pending: false });
       if (message?.type === 'sasState' && typeof message.available === 'boolean' && typeof message.pending === 'boolean')
         setSasState({ available: message.available && !message.pending, pending: message.pending });
+      if (message?.type === 'secureDesktopResult') {
+        const texts = {
+          warning: {
+            input_rejected: 'The PC did not accept secure-screen input.',
+            input_partial: 'The PC accepted only part of the secure-screen input. Check the remote screen before trying again.',
+            input_unknown: 'Secure-screen input outcome is unknown. Check the remote screen before trying again.',
+          },
+          returned: { normal_frame_received: 'The normal desktop stream has resumed.' },
+          failed: {
+            prepare_failed: 'The secure-screen helper could not be prepared.',
+            helper_lost: 'The secure-screen helper stopped unexpectedly. Return to the normal desktop was not verified.',
+            deadline_reached: 'Secure-screen observation timed out. Return to the normal desktop was not verified.',
+            session_changed: 'The PC session changed. Return to the normal desktop was not verified.',
+            capture_unavailable: 'The secure-screen display is unavailable. Return to the normal desktop was not verified.',
+            return_unobserved: 'Return to the normal desktop was not verified.',
+            cancelled: 'Secure-screen observation stopped. Return to the normal desktop was not verified.',
+          },
+        };
+        if (typeof message.status !== 'string' || typeof message.code !== 'string' || !Object.hasOwn(texts, message.status) || !Object.hasOwn(texts[message.status], message.code)) return;
+        const id = 'secure-desktop-result';
+        setNotifications(prev => [...prev.filter(n => n.id !== id), {
+          id, fileName: 'Remote screen', status: message.status === 'returned' ? 'notice' : 'warn',
+          message: texts[message.status][message.code], timestamp: Date.now(), fadingOut: false,
+        }].slice(-MAX_NOTIFICATIONS));
+        scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
+        return;
+      }
       if (message?.type !== 'sasResult' || !['invoked', 'rejected', 'uncertain'].includes(message.status)) return;
       const id = 'sas-result';
       const text = message.status === 'invoked' ? 'Ctrl+Alt+Delete requested.'

@@ -148,3 +148,12 @@ it('accepts bounded latency ping IDs and rejects invalid IDs', () => {
     expect(parseInputJson(JSON.stringify({t:'ping',id}))).toBeNull();
   }
 });
+
+it("parses Option A filesList and filesGet inputs", () => {
+  expect(parseInputJson('{"t":"filesList"}')).toEqual({ t: "filesList" });
+  expect(parseInputJson('{"t":"filesGet","name":"report.txt"}')).toEqual({
+    t: "filesGet",
+    name: "report.txt",
+  });
+  expect(parseInputJson('{"t":"filesGet"}')).toBeNull();
+});

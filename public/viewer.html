@@ -307,13 +307,16 @@ class RemoteAudioPlayer {
   }
   async unlock(){
     if(!this.enabled)return;
+    const generation=this.generation;
     try{
       this.ensure();
       // Both starts happen in the gesture task; do not await one before the other.
       await Promise.all([this.context.resume(),this.element.play()]);
+      if(generation!==this.generation||!this.enabled)return;
       await this.setSink(this.sinkId);
+      if(generation!==this.generation||!this.enabled)return;
       if(this.context.state==='running'){if(this.state!=='playing')this.state='waiting';this.drain();}
-    }catch(error){this.state=error?.name==='NotAllowedError'?'blocked':'error';}
+    }catch(error){if(generation===this.generation&&this.enabled)this.state=error?.name==='NotAllowedError'?'blocked':'error';}
   }
   push(payload){
     if(!this.enabled)return;
@@ -808,6 +811,7 @@ function postStats(){
   stats.supported_encoders=Array.isArray(agentStats.supported_encoders)?agentStats.supported_encoders.filter(value=>['jpeg','h264enc'].includes(value)):null;
   stats.microphone_supported=typeof agentStats.microphone_supported==='boolean'?agentStats.microphone_supported:null;
   stats.webcam_supported=typeof agentStats.webcam_supported==='boolean'?agentStats.webcam_supported:null;
+  stats.dpi_scaling_supported=typeof agentStats.dpi_scaling_supported==='boolean'?agentStats.dpi_scaling_supported:null;
   stats.audio_bitrate_supported=typeof agentStats.audio_bitrate_supported==='boolean'?agentStats.audio_bitrate_supported:null;
   stats.screen=agentScreen;
   if(window.parent!==window) window.parent.postMessage(stats,window.location.origin);

@@ -1,0 +1,32 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index ac4bcfc..fdbeb52 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -1295,6 +1295,7 @@ function Sidebar() {
+         supported_encoders: message.supported_encoders,
+         microphone_supported: message.microphone_supported,
+         webcam_supported: message.webcam_supported,
++        dpi_scaling_supported: message.dpi_scaling_supported,
+         audio_bitrate_supported: message.audio_bitrate_supported });
+     };
+     window.addEventListener('message', receive);
+@@ -1755,6 +1756,7 @@ function Sidebar() {
+ 
+   /** UI scaling pick: persisted, so it pins across reloads and stops the startup derived-default post. */
+   const handleDpiScalingChange = (event) => {
++    if (agentCapabilities.dpi_scaling_supported !== true) return;
+     const newDpi = parseInt(event.target.value, 10);
+     setSelectedDpi(newDpi);
+     localStorage.setItem(getPrefixedKey("scaling_dpi"), newDpi.toString());
+@@ -3824,9 +3826,10 @@ function Sidebar() {
+                         </label>
+                         <select
+                           id="uiScalingSelect"
++                          title={agentCapabilities.dpi_scaling_supported === false ? 'Remote UI scaling is not supported by this PC yet.' : agentCapabilities.dpi_scaling_supported !== true ? 'The PC has not confirmed remote UI scaling support.' : undefined}
+                           value={selectedDpi}
+                           onChange={handleDpiScalingChange}
+-                          disabled={!serverSettings || serverSettings.scaling_dpi?.allowed?.length <= 1
++                          disabled={agentCapabilities.dpi_scaling_supported !== true || !serverSettings || serverSettings.scaling_dpi?.allowed?.length <= 1
+                             || serverSettings.scaling_dpi?.overridden === true}
+                         >
+                           {(serverSettings?.scaling_dpi?.allowed || []).map((dpiValue) => {

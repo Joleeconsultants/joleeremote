@@ -247,3 +247,7 @@ An agent may send `t:stats` with only a `screen` acknowledgement. The viewer for
 ### Clipboard write confirmation
 
 A text write with `id` receives a kind0x01 UTF-8 JSON frame `{t:"clipboard_result",id,status:"applied"|"rejected",reason:null|"invalid_text"|"clipboard_unavailable"}`. Applied means the native clipboard set succeeded. The viewer correlates only the latest outstanding write, expires it after15seconds, and reports disconnect/rejection through existing notifications. Invalid, stale or duplicate replies do not indicate success. Agent stats may advertise `clipboard_text_supported` and `clipboard_max_chars`. PC-to-browser changes continue using `{t:"clipboard",text}`. Do not export the initial OS clipboard or echo the browser’s own write as a PC change. Images remain a separate capability.
+
+### Remote DPI scaling capability
+
+`dpi_scaling_supported` in native stats is an explicit boolean. The existing UI Scaling selector is enabled only after true; false is unsupported and absent remains unconfirmed. This capability gating is interim truthful feedback, not completion of remote DPI scaling. The feature remains in the native parity backlog. It is separate from browser fit/Scale Locally and physical resolution requests. Do not advertise support until actual DPI changes and acknowledgement/restoration semantics are implemented and verified.

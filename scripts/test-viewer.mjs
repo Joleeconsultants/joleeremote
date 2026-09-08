@@ -51,6 +51,62 @@ test('assist defers composition and keeps named controls and physical shortcuts'
 
 // Exercise the shipped browser routine; stub only browser side effects.
 const html = readFileSync(new URL('../public/viewer.html', import.meta.url), 'utf8');
+test('native audio health validates state-dependent facts and expires without inventing silence',()=>{
+  const c=viewerContext({});
+  vm.runInContext(html.slice(html.indexOf('function audioCaptureReading('),html.indexOf('function acceptAgentStats(')),c);
+  const valid={state:'streaming',sample_rate_hz:48000,channels:2,sample_format:'pcm_s16le',last_chunk_age_ms:100,reason:null};
+  assert.equal(c.audioCaptureReading(valid,0).state,'streaming');
+  assert.equal(c.audioCaptureReading(valid,1401).state,'waiting');
+  assert.equal(c.audioCaptureReading(valid,3500),null);
+  assert.equal(c.audioCaptureReading(valid,-1),null);
+  assert.equal(c.audioCaptureReading(undefined,0),null);
+  for(const change of [{state:'silent'},{channels:6},{sample_rate_hz:7999},{sample_rate_hz:48000.5},{sample_format:'float32'},
+    {last_chunk_age_ms:-1},{last_chunk_age_ms:60001},{last_chunk_age_ms:1501},{reason:'device-error'},{state:'waiting'}])
+    assert.equal(c.audioCaptureReading({...valid,...change},0),null);
+  const waiting={...valid,state:'waiting',last_chunk_age_ms:59999};
+  assert.equal(c.audioCaptureReading(waiting,2000).last_chunk_age_ms,60000);
+  for(const state of ['disabled','starting','unavailable']){
+    const value={state,sample_rate_hz:null,channels:null,sample_format:null,last_chunk_age_ms:null,reason:state==='unavailable'?'helper_failed':null};
+    assert.equal(c.audioCaptureReading(value,0).state,state);
+    assert.equal(c.audioCaptureReading({...value,sample_rate_hz:48000},0),null);
+  }
+});
+
+test('audio tooltip refreshes capture and playback when other metrics stay constant',()=>{
+  const sidebar=readFileSync(new URL('../chrome/selkies-dashboard/src/components/Sidebar.jsx',import.meta.url),'utf8');
+  const body=sidebar.slice(sidebar.indexOf('case "audio": {')+'case "audio": {'.length,sidebar.indexOf('case "bandwidth":'));
+  const poll=sidebar.slice(sidebar.indexOf('const readStats = () => {'),sidebar.indexOf('const intervalId = setInterval(readStats'));
+  const values={},changed=[];
+  const c=vm.createContext({window:{currentAudioLevel:null,audioPlaybackState:'blocked',audioCaptureReceivedAt:0,
+    audioCaptureStatus:{state:'streaming',sample_rate_hz:48000,channels:2}},
+    document:{hidden:false},isOpen:true,performance:{now:()=>0},audioLevel:null,
+    audioPlaybackStatus:'unavailable',audioCaptureDescription:'PC capture: unknown',t:(_key,{value})=>`Audio level ${value}`});
+  for(const name of new Set(poll.match(/set[A-Z]\w+(?=\()/g))) c[name]=value=>{
+    if(!Object.is(values[name],value)) changed.push(name);
+    values[name]=value;
+    if(name==='setAudioLevel') c.audioLevel=value;
+    if(name==='setAudioPlaybackStatus') c.audioPlaybackStatus=value;
+    if(name==='setAudioCaptureDescription') c.audioCaptureDescription=value;
+  };
+  vm.runInContext('function tooltip(){'+body+poll+'globalThis.poll=readStats;',c);
+  c.poll();
+  assert.equal(c.tooltip(),'Audio: blocked; PC capture: streaming (48000 Hz, 2 ch, PCM16)');
+  for(const state of ['waiting','unavailable']){
+    changed.length=0;c.window.audioCaptureStatus={state};c.poll();
+    assert.deepEqual(changed,['setAudioCaptureDescription']);
+    assert.equal(c.tooltip(),`Audio: blocked; PC capture: ${state}`);
+  }
+  changed.length=0;c.performance.now=()=>3500;c.poll();
+  assert.deepEqual(changed,['setAudioCaptureDescription']);
+  assert.equal(c.tooltip(),'Audio: blocked; PC capture: unknown');
+  changed.length=0;c.window.audioPlaybackState='waiting';c.poll();
+  assert.deepEqual(changed,['setAudioPlaybackStatus']);
+  assert.equal(c.tooltip(),'Audio: waiting; PC capture: unknown');
+  c.window.currentAudioLevel=0;c.poll();
+  assert.equal(c.tooltip(),'Audio level 0; PC capture: unknown');
+  assert.match(sidebar,/useState\('PC capture: unknown'\)/);
+  assert.match(sidebar,/audioLevel,\s*audioPlaybackStatus,\s*audioCaptureDescription/);
+});
 test('clipboard writes require matching native confirmation and reject invalid text without truncation',()=>{
   const messages=[],sent=[],timers=new Map();let id=0,timerId=0;
   const c=viewerContext({window:{parent:{postMessage:m=>messages.push(m)},location:{origin:'https://example.test'}},

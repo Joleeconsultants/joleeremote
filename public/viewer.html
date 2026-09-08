@@ -1043,6 +1043,18 @@ async function sendFile(blob){
   }catch(e){}
 }
 function numberOr(value,fallback=0){return typeof value==="number"&&isFinite(value)?value:fallback;}
+function audioCaptureReading(value,receiptAge){
+  if(!value||typeof value!=='object'||Array.isArray(value)||!Number.isFinite(receiptAge)||receiptAge<0||receiptAge>=3500)return null;
+  const {state,sample_rate_hz:rate,channels,sample_format:format,last_chunk_age_ms:age,reason}=value;
+  const empty=rate===null&&channels===null&&format===null&&age===null;
+  if(state==='disabled'||state==='starting')return empty&&reason===null?{state,sample_rate_hz:null,channels:null,sample_format:null,last_chunk_age_ms:null,reason:null}:null;
+  if(state==='unavailable')return empty&&['start_failed','helper_failed','invalid_chunk'].includes(reason)?{state,sample_rate_hz:null,channels:null,sample_format:null,last_chunk_age_ms:null,reason}:null;
+  if(!['streaming','waiting'].includes(state)||!Number.isInteger(rate)||rate<8000||rate>192000||![1,2].includes(channels)||
+      format!=='pcm_s16le'||!Number.isInteger(age)||age<0||age>60000||reason!==null||
+      (state==='streaming'?age>1500:age<=1500))return null;
+  const currentAge=Math.min(60000,age+Math.floor(receiptAge));
+  return {state:currentAge<=1500?'streaming':'waiting',sample_rate_hz:rate,channels,sample_format:format,last_chunk_age_ms:currentAge,reason:null};
+}
 function acceptAgentStats(stats){
   if(stats.webcam_supported===false&&(webcamStream||webcamStarting))stopWebcam('Webcam forwarding is not supported by this PC.');
   if(Object.prototype.hasOwnProperty.call(stats,'screen')){agentScreen=stats.screen;consumeScreenAck(stats.screen);}
@@ -1077,6 +1089,7 @@ function postStats(){
   const network=Object.assign({bandwidth_mbps:numberOr(agentStats.bandwidth_mbps,hopBandwidth),latency_ms:numberOr(agentStats.latency_ms,latencyReading(now))},agentStats.network_stats||agentStats.network||{});
   const playback=remoteAudio.reading();
   const stats={type:"statsUpdate",system_stats:system,gpu_stats:gpu,fps:numberOr(agentStats.fps,hopFps),network_stats:network,currentAudioLevel:playback.level,audio_playback_state:playback.state};
+  stats.audio_capture=audioCaptureReading(agentStats.audio_capture,now-agentStatsReceivedAt);
   stats.active_encoder=observedEncoder||(['jpeg','h264enc'].includes(agentStats.active_encoder)?agentStats.active_encoder:null);
   stats.supported_encoders=Array.isArray(agentStats.supported_encoders)?agentStats.supported_encoders.filter(value=>['jpeg','h264enc'].includes(value)):null;
   stats.microphone_supported=typeof agentStats.microphone_supported==='boolean'?agentStats.microphone_supported:null;

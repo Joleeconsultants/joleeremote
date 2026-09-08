@@ -51,6 +51,38 @@ test('assist defers composition and keeps named controls and physical shortcuts'
 
 // Exercise the shipped browser routine; stub only browser side effects.
 const html = readFileSync(new URL('../public/viewer.html', import.meta.url), 'utf8');
+test('native audio health validates state-dependent facts and expires without inventing silence',()=>{
+  const c=viewerContext({});
+  vm.runInContext(html.slice(html.indexOf('function audioCaptureReading('),html.indexOf('function acceptAgentStats(')),c);
+  const valid={state:'streaming',sample_rate_hz:48000,channels:2,sample_format:'pcm_s16le',last_chunk_age_ms:100,reason:null};
+  assert.equal(c.audioCaptureReading(valid,0).state,'streaming');
+  assert.equal(c.audioCaptureReading(valid,1401).state,'waiting');
+  assert.equal(c.audioCaptureReading(valid,3500),null);
+  assert.equal(c.audioCaptureReading(valid,-1),null);
+  assert.equal(c.audioCaptureReading(undefined,0),null);
+  for(const change of [{state:'silent'},{channels:6},{sample_rate_hz:7999},{sample_rate_hz:48000.5},{sample_format:'float32'},
+    {last_chunk_age_ms:-1},{last_chunk_age_ms:60001},{last_chunk_age_ms:1501},{reason:'device-error'},{state:'waiting'}])
+    assert.equal(c.audioCaptureReading({...valid,...change},0),null);
+  const waiting={...valid,state:'waiting',last_chunk_age_ms:59999};
+  assert.equal(c.audioCaptureReading(waiting,2000).last_chunk_age_ms,60000);
+  for(const state of ['disabled','starting','unavailable']){
+    const value={state,sample_rate_hz:null,channels:null,sample_format:null,last_chunk_age_ms:null,reason:state==='unavailable'?'helper_failed':null};
+    assert.equal(c.audioCaptureReading(value,0).state,state);
+    assert.equal(c.audioCaptureReading({...value,sample_rate_hz:48000},0),null);
+  }
+});
+
+test('audio tooltip keeps measured browser playback separate from capture health',()=>{
+  const sidebar=readFileSync(new URL('../chrome/selkies-dashboard/src/components/Sidebar.jsx',import.meta.url),'utf8');
+  const body=sidebar.slice(sidebar.indexOf('case "audio": {')+'case "audio": {'.length,sidebar.indexOf('case "bandwidth":'));
+  const c=vm.createContext({window:{audioPlaybackState:'blocked',audioCaptureReceivedAt:0,audioCaptureStatus:{state:'streaming',sample_rate_hz:48000,channels:2}},
+    performance:{now:()=>0},audioLevel:null,t:(_key,{value})=>`Audio level ${value}`});
+  vm.runInContext('function tooltip(){'+body,c);
+  assert.equal(c.tooltip(),'Audio: blocked; PC capture: streaming (48000 Hz, 2 ch, PCM16)');
+  c.audioLevel=0;c.window.audioPlaybackState='silent';c.window.audioCaptureStatus={state:'waiting'};
+  assert.equal(c.tooltip(),'Audio level 0; PC capture: waiting');
+  c.performance.now=()=>3500;assert.equal(c.tooltip(),'Audio level 0; PC capture: unknown');
+});
 test('clipboard writes require matching native confirmation and reject invalid text without truncation',()=>{
   const messages=[],sent=[],timers=new Map();let id=0,timerId=0;
   const c=viewerContext({window:{parent:{postMessage:m=>messages.push(m)},location:{origin:'https://example.test'}},

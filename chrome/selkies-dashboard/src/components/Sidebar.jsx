@@ -2660,9 +2660,14 @@ function Sidebar() {
         }
         case "fps":
           return t("sections.stats.tooltipFps", { value: clientFps });
-        case "audio":
-          if (audioLevel === null) return `Audio: ${window.audioPlaybackState || 'unavailable'}`;
-          return t("sections.stats.tooltipAudioLevel", { value: audioLevel });
+        case "audio": {
+          const playback = audioLevel === null ? `Audio: ${window.audioPlaybackState || 'unavailable'}`
+            : t("sections.stats.tooltipAudioLevel", { value: audioLevel });
+          const receivedAge = performance.now() - window.audioCaptureReceivedAt;
+          const capture = receivedAge >= 0 && receivedAge < 3500 ? window.audioCaptureStatus : null;
+          const format = capture?.sample_rate_hz ? ` (${capture.sample_rate_hz} Hz, ${capture.channels} ch, PCM16)` : '';
+          return `${playback}; PC capture: ${capture?.state || 'unknown'}${format}`;
+        }
         case "bandwidth":
           return t("sections.stats.tooltipBandwidth", { value: bandwidthMbps.toFixed(2) }, `Bandwidth: ${bandwidthMbps.toFixed(2)} Mbps`);
         case "latency":

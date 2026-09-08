@@ -107,9 +107,11 @@ Core to parent (only when window.parent is not window):
 
 ## Files (locked Option A)
 
-**Download Files** / file UX will list and get files via hop `filesList` / `filesGet` toward the paired agent: requests in kind `0x02`, responses in kind `0x01`. UI and `letleeadmin` CLI target the same PC `FileManagerPath` / Desktop folder via the Worker asking that agent. The consumer owns PC path resolution; the hop stays opaque. A Session DO inbox, if used by a consumer, is interim only.
+**Download Files** / file UX lists and gets files via hop `filesList` / `filesGet` toward the paired agent: requests in kind `0x02`, responses in kind `0x01`. UI and `letleeadmin` CLI target the same PC `FileManagerPath` / Desktop folder via the Worker asking that agent. The consumer owns PC path resolution; the hop stays opaque. A Session DO inbox, if used by a consumer, is interim only.
 
-The existing `fileUpload` → `{t:"file",name,mime,data}` postMessage mapping above stays the upload path. Agent → browser `{t:"file",name,mime,data}` frames remain the canary/push download path, distinct from `filesGet`. All use the 1 MiB whole-envelope cap. See [agent.md — Files](agent.md#files-locked-option-a) for the locked shapes. This documents the contract; list/get Viewer/Worker wiring and new chrome postMessage types are not introduced here.
+The existing `fileUpload` → `{t:"file",name,mime,data}` postMessage mapping above stays the upload path. Agent → browser `{t:"file",name,mime,data}` frames remain the canary/push download path, distinct from `filesGet`. All use the 1 MiB whole-envelope cap. See [agent.md — Files](agent.md#files-locked-option-a) for the locked shapes. The Worker now serves `/api/files/` using stock `chrome/selkies-files/header.html` + `table#list` + `footer.html`. Folder links end in `/`, file links download, and the heading shows `/api/files/` plus the current relative directory. The stock footer hides `../` at root. Its injected path prefix preserves the public mount in the heading; the vendored shell is unchanged.
+
+Open `/api/files/?session=SESSION&token=TOKEN`; subsequent navigation uses session cookies. Bearer tokens are also supported. Add `format=json` for `{sessionId,source:"pc",path,files}`. Nested URLs list via `askAgentFilesList(path)` or download via `askAgentFilesGet(relativeId)`. The route reads the paired PC, never the Session inbox, and does not add portal Access/service logic or new postMessage types. Subfolders require agent 0.5.89+; uploads retain the existing envelope path.
 
 ## What's left
 

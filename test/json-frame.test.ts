@@ -8,6 +8,7 @@ import {
   filesGetFromFrame,
   filesListFromFrame,
   isSafeFilesBasename,
+  isSafeFilesPath,
   parseJsonFrameObject,
   printFromFrame,
   statsFromFrame,
@@ -136,7 +137,8 @@ describe("files Option A frames", () => {
       ),
     ).toEqual({
       t: "filesList",
-      files: [{ name: "a.txt", size: 3, mtime: 1000 }],
+      path: "",
+      files: [{ id: "a.txt", name: "a.txt", type: "file", size: 3, mtime: 1000 }],
     });
     expect(
       filesGetFromFrame(
@@ -163,5 +165,28 @@ describe("files Option A frames", () => {
     expect(isSafeFilesBasename("../x")).toBe(false);
     expect(isSafeFilesBasename("a/b")).toBe(false);
     expect(isSafeFilesBasename("a\\b")).toBe(false);
+  });
+});
+
+
+describe("relative file paths", () => {
+  it.each(["/a", "a//b", "a/", ".", "..", "a/../b", "a/./b", "a\\b", "C:/a", "a:stream", "a?", "a*", "a<", "a>", 'a"', "a|", "a\n", "a\u007f", "a.", "a ", "CON", "nul.txt", "a/COM1.log", "LPT9", "COM¹", "CONOUT$"])("rejects %j", (path) => {
+    expect(isSafeFilesPath(path, true)).toBe(false);
+  });
+  it("allows root only for list and clean nested names", () => {
+    expect(isSafeFilesPath("")).toBe(false);
+    expect(isSafeFilesPath("", true)).toBe(true);
+    expect(isSafeFilesPath("a/b report..txt")).toBe(true);
+    expect(encodeFilesListRequest("a/b")).toBe('{"t":"filesList","path":"a/b"}');
+    expect(encodeFilesGetRequest("a/b.txt")).toBe('{"t":"filesGet","name":"a/b.txt"}');
+  });
+  it("retains child IDs/types and drops unsafe or unrelated entries", () => {
+    const dir = { id: "a/b", name: "b", type: "dir", size: 0, mtime: 123 };
+    const parsed = filesListFromFrame(utf8(JSON.stringify({ t: "filesList", path: "a", files: [dir,
+      { ...dir, name: "../evil" }, { ...dir, id: "elsewhere/b" }, { ...dir, type: "symlink" },
+    ] })));
+    expect(parsed).toEqual({ t: "filesList", path: "a", files: [dir] });
+    expect(filesListFromFrame(utf8('{"t":"filesList","path":"../x","files":[]}'))).toBeNull();
+    expect(filesGetFromFrame(utf8('{"t":"filesGet","name":"a/b","data":""}'))?.name).toBe("a/b");
   });
 });

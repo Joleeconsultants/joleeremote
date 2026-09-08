@@ -46,6 +46,7 @@ export {
   type WebcamInput,
   type FileInput,
   type CommandInput,
+  type PingInput,
 } from "./input";
 
 export {

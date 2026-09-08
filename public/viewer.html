@@ -71,9 +71,33 @@ function applyCursorMode(){
 }
 let sessionPaired=false;
 let latestSettings={};
+let pendingLatency=null, measuredLatency=null, latencyReceivedAt=0;
+const LATENCY_TIMEOUT_MS=10000, LATENCY_MAX_AGE_MS=15000;
+function latencyReading(now){
+  return sessionPaired && measuredLatency!==null && now-latencyReceivedAt<LATENCY_MAX_AGE_MS ? measuredLatency : null;
+}
+function sendLatencyProbe(){
+  if(!sessionPaired||!socket||socket.readyState!==1)return;
+  const now=performance.now();
+  if(pendingLatency && now-pendingLatency.sentAt<LATENCY_TIMEOUT_MS)return;
+  pendingLatency={id:crypto.randomUUID(),sentAt:now};
+  try{sendInput({t:"ping",id:pendingLatency.id});}catch(e){pendingLatency=null;}
+}
+function consumeLatencyReply(payload){
+  const reply=parseJsonFrameObject(payload);
+  if(!reply||reply.t!=="pong")return false;
+  if(pendingLatency && reply.id===pendingLatency.id){
+    const now=performance.now(), elapsed=now-pendingLatency.sentAt;
+    if(elapsed>=0 && elapsed<LATENCY_TIMEOUT_MS){measuredLatency=elapsed;latencyReceivedAt=now;}
+    pendingLatency=null;
+    postStats();
+  }
+  return true;
+}
 function setStatus(state){
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
+  if(!sessionPaired){pendingLatency=null;measuredLatency=null;latencyReceivedAt=0;}
   if(sessionPaired&&!wasPaired&&Object.keys(latestSettings).length){
     sendInput({t:"settings",settings:latestSettings});
   }
@@ -566,6 +590,7 @@ function connect(opts){
     bytesSinceStats+=env.payload.length+2;
     if(env.kind==="audio"){playAudioChunk(env.payload);return;}
     if(env.kind!=="frame") return;
+    if(consumeLatencyReply(env.payload))return;
     const clip=clipboardTextFromFrame(env.payload);
     if(clip!==null){
       if(window.parent!==window){
@@ -664,11 +689,12 @@ function postStats(){
     mem_used:numberOr(agentStats.gpu_mem_used,0),
     mem_total:numberOr(agentStats.gpu_mem_total,0)
   }:null);
-  const network=Object.assign({bandwidth_mbps:numberOr(agentStats.bandwidth_mbps,hopBandwidth),latency_ms:numberOr(agentStats.latency_ms,null)},agentStats.network_stats||agentStats.network||{});
+  const network=Object.assign({bandwidth_mbps:numberOr(agentStats.bandwidth_mbps,hopBandwidth),latency_ms:numberOr(agentStats.latency_ms,latencyReading(now))},agentStats.network_stats||agentStats.network||{});
   const stats={type:"statsUpdate",system_stats:system,gpu_stats:gpu,fps:numberOr(agentStats.fps,hopFps),network_stats:network,currentAudioLevel:numberOr(agentStats.currentAudioLevel??agentStats.audio_level,0)};
   if(window.parent!==window) window.parent.postMessage(stats,window.location.origin);
 }
 setInterval(postStats,1000);
+setInterval(sendLatencyProbe,5000);
 canvas.addEventListener("pointermove",(e)=>{
   pointerOver=true;
   moveOverlay(e);

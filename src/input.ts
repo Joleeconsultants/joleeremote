@@ -72,6 +72,7 @@ export type FileInput = {
 };
 
 export type CommandInput = { t: "command"; command: string };
+export type PingInput = { t: "ping"; id: string };
 
 export type InputPayload =
   | PointerInput
@@ -86,7 +87,8 @@ export type InputPayload =
   | MicInput
   | WebcamInput
   | FileInput
-  | CommandInput;
+  | CommandInput
+  | PingInput;
 
 function isFiniteNumber(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
@@ -110,6 +112,9 @@ function parseObject(obj: Record<string, unknown>): InputPayload | null {
   if (typeof t !== "string") return null;
 
   switch (t) {
+    case "ping":
+      return typeof obj.id === "string" && obj.id.length > 0 && obj.id.length <= 64
+        ? { t: "ping", id: obj.id } : null;
     case "pointer": {
       const e = obj.e;
       if (e !== "move" && e !== "down" && e !== "up") return null;

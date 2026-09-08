@@ -131,7 +131,7 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   const sent = [];
   const c = vm.createContext({ performance: { now: () => now },
     window: { parent: { postMessage: value => sent.push(value) }, location: { origin: 'https://test.invalid' } },
-    frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {} });
+    frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, latencyReading: () => null });
   vm.runInContext(html.slice(html.indexOf('function numberOr('), html.indexOf('setInterval(postStats,1000)')), c);
   c.frameCount = 30; c.bytesSinceStats = 125000;
   now = 500; c.postStats();
@@ -187,4 +187,26 @@ test('local display preferences replay on iframe load without replaying actions'
     sent.length = 0; listeners.load();
     assert.deepEqual(sent, [{ type: 'setScaleLocally', value: false }, { type: 'setAntiAliasing', value: true }]);
   } finally { delete globalThis.document; delete globalThis.window; }
+});
+
+test('latency accepts only the pending reply and expires samples or disconnected state', () => {
+  let now = 0, nonce = 0;
+  const sent = [];
+  const c = vm.createContext({ performance: { now: () => now }, crypto: { randomUUID: () => `nonce-${++nonce}` },
+    socket: { readyState: 1 }, window: { parent: { postMessage() {} }, location: { origin: 'https://test.invalid' } },
+    sendInput: value => sent.push(value), parseJsonFrameObject: value => value, postStats() {} });
+  vm.runInContext(html.slice(html.indexOf('let sessionPaired='), html.indexOf('function encodeInput(')), c);
+  c.sendLatencyProbe(); assert.equal(sent.length, 0);
+  c.setStatus('paired'); c.sendLatencyProbe(); assert.equal(sent.length, 1);
+  now = 50; c.sendLatencyProbe(); assert.equal(sent.length, 1);
+  c.consumeLatencyReply({ t: 'pong', id: 'other' }); assert.equal(c.latencyReading(now), null);
+  c.consumeLatencyReply({ t: 'pong', id: sent[0].id }); assert.equal(c.latencyReading(now), 50);
+  now = 75; c.consumeLatencyReply({ t: 'pong', id: sent[0].id }); assert.equal(c.latencyReading(now), 50);
+  now = 15050; assert.equal(c.latencyReading(now), null);
+  c.sendLatencyProbe(); now += 10001;
+  c.consumeLatencyReply({ t: 'pong', id: sent[1].id }); assert.equal(c.latencyReading(now), null);
+  c.sendLatencyProbe(); now += 20;
+  c.consumeLatencyReply({ t: 'pong', id: sent[2].id }); assert.equal(c.latencyReading(now), 20);
+  c.setStatus('waiting'); assert.equal(c.latencyReading(now), null);
+  assert.equal(c.consumeLatencyReply({ t: 'stats' }), false);
 });

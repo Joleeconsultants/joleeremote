@@ -141,3 +141,10 @@ describe("parseInputPayload / parseInputJson", () => {
     ).toEqual({ t: "pointer", e: "move", x: 0, y: 0, b: 0 });
   });
 });
+
+it('accepts bounded latency ping IDs and rejects invalid IDs', () => {
+  expect(parseInputJson(JSON.stringify({t:'ping',id:'probe-123',extra:'ignored'}))).toEqual({t:'ping',id:'probe-123'});
+  for (const id of ['', 'x'.repeat(65), 123, null]) {
+    expect(parseInputJson(JSON.stringify({t:'ping',id}))).toBeNull();
+  }
+});

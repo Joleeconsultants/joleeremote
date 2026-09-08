@@ -94,6 +94,9 @@ export async function startParentMicrophone() {
   if (micRecorder && micRecorder.state === "recording") return true;
   if (micRecorder || micStream) clearMicrophoneResources();
   const gen = (micGen += 1);
+  // Each pending permission request owns its result until it is still current.
+  // A stale completion must never replace the stream used by a newer recorder.
+  let requestedStream = null;
   try {
     const md = navigator.mediaDevices;
     if (!md || typeof md.getUserMedia !== "function") {
@@ -104,24 +107,25 @@ export async function startParentMicrophone() {
       audioConstraints = { deviceId: { ideal: micDeviceId } };
     }
     try {
-      micStream = await md.getUserMedia({ audio: audioConstraints });
+      requestedStream = await md.getUserMedia({ audio: audioConstraints });
     } catch (constraintErr) {
+      if (gen !== micGen) return false;
       const n = constraintErr && constraintErr.name;
       if (
         audioConstraints !== true &&
         (n === "OverconstrainedError" || n === "NotFoundError" || n === "NotReadableError")
       ) {
-        micStream = await md.getUserMedia({ audio: true });
+        requestedStream = await md.getUserMedia({ audio: true });
       } else {
         throw constraintErr;
       }
     }
     if (gen !== micGen) {
       console.warn("Dashboard: microphone start aborted after getUserMedia (superseded)");
-      micStream.getTracks().forEach((track) => track.stop());
-      micStream = null;
+      requestedStream.getTracks().forEach((track) => track.stop());
       return false;
     }
+    micStream = requestedStream;
     let recorder = null;
     let startErr = null;
     try {
@@ -150,10 +154,8 @@ export async function startParentMicrophone() {
       } catch (e) {
         /* ignore */
       }
-      if (micStream) {
-        micStream.getTracks().forEach((track) => track.stop());
-        micStream = null;
-      }
+      requestedStream.getTracks().forEach((track) => track.stop());
+      if (micStream === requestedStream) micStream = null;
       return false;
     }
     micRecorder = recorder;

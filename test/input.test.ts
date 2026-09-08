@@ -10,6 +10,10 @@ function utf8(s: string): Uint8Array {
 }
 
 describe("parseInputPayload / parseInputJson", () => {
+  it("preserves clipboard correlation ids and rejects malformed ids", () => {
+    expect(parseInputJson(JSON.stringify({t:'clipboard',text:'hello',id:'write-1'}))).toEqual({t:'clipboard',text:'hello',id:'write-1'});
+    for (const id of ['', 'x'.repeat(65), 3, null]) expect(parseInputJson(JSON.stringify({t:'clipboard',text:'hello',id}))).toBeNull();
+  });
   it("parses pointer move/down/up", () => {
     expect(parseInputJson('{"t":"pointer","e":"move","x":0.5,"y":0.25,"b":1}')).toEqual({
       t: "pointer",

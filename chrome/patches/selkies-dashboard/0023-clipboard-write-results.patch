@@ -1,0 +1,28 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index a2b28a6..f5fd665 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -2771,6 +2771,23 @@ function Sidebar() {
+             status: 'warn', message: text, timestamp: Date.now(), fadingOut: false,
+           }].slice(-MAX_NOTIFICATIONS));
+           scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++        } else if (message.type === "clipboardResult") {
++          if (event.source !== document.getElementById('jolee-core')?.contentWindow) return;
++          if (!['applied', 'rejected'].includes(message.status)) return;
++          const reasons = {
++            invalid_text: 'Clipboard text is too large or contains unsupported characters.',
++            clipboard_unavailable: 'The PC could not update its clipboard.',
++            session_unavailable: 'The desktop session is unavailable.',
++            unsupported: 'Clipboard text is not supported by this PC yet.',
++            confirmation_timeout: 'The PC did not confirm the clipboard update.',
++          };
++          const id = 'clipboard-write-result';
++          setNotifications(prev => [...prev.filter(n => n.id !== id), {
++            id, fileName: 'Clipboard', status: message.status === 'applied' ? 'notice' : 'warn',
++            message: message.status === 'applied' ? 'PC clipboard updated.' : reasons[message.reason] || 'The PC did not update its clipboard.',
++            timestamp: Date.now(), fadingOut: false,
++          }].slice(-MAX_NOTIFICATIONS));
++          scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
+         } else if (message.type === "screenResult") {
+           if (event.source !== document.getElementById('jolee-core')?.contentWindow) return;
+           if (!['applied', 'rejected'].includes(message.status)) return;

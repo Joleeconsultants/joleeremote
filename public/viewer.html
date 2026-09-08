@@ -80,6 +80,22 @@ function finishScreenRequest(status,reason,effective=null){
   clearTimeout(request.timer);pendingScreenRequest=null;
   if(window.parent!==window)window.parent.postMessage({type:'screenResult',id:request.id,status,reason,effective},window.location.origin);
 }
+let pendingClipboardRequest=null;
+function finishClipboardRequest(status,reason){
+  if(!pendingClipboardRequest)return;
+  const request=pendingClipboardRequest;
+  clearTimeout(request.timer);pendingClipboardRequest=null;
+  if(window.parent!==window)window.parent.postMessage({type:'clipboardResult',id:request.id,status,reason},window.location.origin);
+}
+function consumeClipboardResult(payload){
+  const result=parseJsonFrameObject(payload);
+  if(!result||result.t!=='clipboard_result')return false;
+  if(pendingClipboardRequest&&result.id===pendingClipboardRequest.id&&
+      (result.status==='applied'&&result.reason===null||result.status==='rejected'&&['invalid_text','clipboard_unavailable'].includes(result.reason))){
+    finishClipboardRequest(result.status,result.reason);
+  }
+  return true;
+}
 function consumeScreenAck(screen){
   if(!screen||!pendingScreenRequest||screen.request_id!==pendingScreenRequest.id)return;
   if(screen.status==='applied'||screen.status==='rejected'){
@@ -136,6 +152,7 @@ function setStatus(state){
   if(!sessionPaired){
     if(wasPaired)stopAudioPlayback();
     finishScreenRequest('rejected','session_unavailable');
+    finishClipboardRequest('rejected','session_unavailable');
     if(screenResizeTimer!==null)clearTimeout(screenResizeTimer);
     screenResizeTimer=null;
   }else if(!wasPaired)scheduleScreenResize();
@@ -631,6 +648,7 @@ function connect(opts){
     if(env.kind==="audio"){playAudioChunk(env.payload);return;}
     if(env.kind!=="frame") return;
     if(consumeLatencyReply(env.payload))return;
+    if(consumeClipboardResult(env.payload))return;
     const clip=clipboardTextFromFrame(env.payload);
     if(clip!==null){
       if(window.parent!==window){
@@ -681,7 +699,15 @@ function showVirtualKeyboard(){
   // focus to canvas/vk — that was the mobile keyboard regression.
 }
 function clipboardUpdateFromUI(text){
-  sendInput({t:"clipboard",text:String(text||"")});
+  if(pendingClipboardRequest)clearTimeout(pendingClipboardRequest.timer);
+  const id=crypto.randomUUID();
+  pendingClipboardRequest={id,timer:setTimeout(()=>finishClipboardRequest('rejected','confirmation_timeout'),15000)};
+  const maxChars=Number.isInteger(agentStats.clipboard_max_chars)&&agentStats.clipboard_max_chars>0?Math.min(16384,agentStats.clipboard_max_chars):16384;
+  const invalid=typeof text!=='string'||text.length>maxChars||text.includes('\0')||Array.from(text).some(ch=>ch.length===1&&ch.charCodeAt(0)>=0xD800&&ch.charCodeAt(0)<=0xDFFF);
+  if(invalid){finishClipboardRequest('rejected','invalid_text');return;}
+  if(!sessionPaired){finishClipboardRequest('rejected','session_unavailable');return;}
+  if(agentStats.clipboard_text_supported===false){finishClipboardRequest('rejected','unsupported');return;}
+  sendInput({t:"clipboard",text,id});
 }
 const MAX_ENVELOPE_BYTES=1048576;
 function bytesToBase64(bytes){

@@ -44,6 +44,25 @@ test('assist defers composition and keeps named controls and physical shortcuts'
 
 // Exercise the shipped browser routine; stub only browser side effects.
 const html = readFileSync(new URL('../public/viewer.html', import.meta.url), 'utf8');
+test('clipboard writes require matching native confirmation and reject invalid text without truncation',()=>{
+  const messages=[],sent=[],timers=new Map();let id=0,timerId=0;
+  const c=vm.createContext({window:{parent:{postMessage:m=>messages.push(m)},location:{origin:'https://example.test'}},
+    crypto:{randomUUID:()=>String(++id)},agentStats:{clipboard_text_supported:true,clipboard_max_chars:16384},sessionPaired:true,
+    sendInput:m=>sent.push(m),parseJsonFrameObject:JSON.parse,
+    setTimeout:fn=>{timers.set(++timerId,fn);return timerId;},clearTimeout:id=>timers.delete(id)});
+  vm.runInContext(html.slice(html.indexOf('let pendingClipboardRequest='),html.indexOf('function consumeScreenAck(')),c);
+  vm.runInContext(html.slice(html.indexOf('function clipboardUpdateFromUI('),html.indexOf('const MAX_ENVELOPE_BYTES=')),c);
+  c.clipboardUpdateFromUI('é 😀');assert.equal(sent[0].text,'é 😀');assert.equal(messages.length,0);
+  c.clipboardUpdateFromUI('new');assert.equal(timers.size,1);
+  const ack=(id,status='applied',reason=null)=>c.consumeClipboardResult(JSON.stringify({t:'clipboard_result',id,status,reason}));
+  ack('1');ack('2','applied','invalid_text');assert.equal(messages.length,0);
+  ack('2');assert.equal(messages[0].status,'applied');assert.equal(timers.size,0);ack('2');assert.equal(messages.length,1);
+  for(const text of ['x'.repeat(16385),'bad\0text','\ud800']){c.clipboardUpdateFromUI(text);assert.equal(messages.at(-1).reason,'invalid_text');}
+  assert.equal(sent.length,2);
+  c.clipboardUpdateFromUI('');assert.equal(sent.at(-1).text,'');
+  Array.from(timers.values())[0]();assert.equal(messages.at(-1).reason,'confirmation_timeout');
+  c.sessionPaired=false;c.clipboardUpdateFromUI('offline');assert.equal(messages.at(-1).reason,'session_unavailable');
+});
 const source = html.slice(html.indexOf('function handlePrintFrame(pf){'), html.indexOf('function setVideoEnabled('));
 assert.ok(source.startsWith('function handlePrintFrame(pf){'));
 

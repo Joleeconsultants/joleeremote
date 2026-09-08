@@ -28,7 +28,7 @@ export type KeyInput = {
   code: string;
 };
 
-export type ClipboardTextInput = { t: "clipboard"; text: string };
+export type ClipboardTextInput = { t: "clipboard"; text: string; id?: string };
 export type ClipboardImageInput = {
   t: "clipboard";
   mime: string;
@@ -162,7 +162,8 @@ function parseObject(obj: Record<string, unknown>): InputPayload | null {
         return { t: "clipboard", mime: obj.mime, data: obj.data };
       }
       if (typeof obj.text === "string") {
-        return { t: "clipboard", text: obj.text };
+        if (obj.id !== undefined && (typeof obj.id !== "string" || obj.id.length < 1 || obj.id.length > 64)) return null;
+        return { t: "clipboard", text: obj.text, ...(obj.id !== undefined ? { id: obj.id as string } : {}) };
       }
       return null;
     }

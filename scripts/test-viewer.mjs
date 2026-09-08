@@ -117,7 +117,7 @@ function settingsViewer() {
   const sent=[];
   const window={}; window.parent=window;
   const context=vm.createContext({window, socket:{readyState:0,send:value=>sent.push(JSON.parse(value))},
-    stopAudioPlayback:()=>{}, invalidateVideoFrames:()=>{}, MAX_ENVELOPE_BYTES:1048576, encodeInput:JSON.stringify});
+    stopAudioPlayback:()=>{}, stopWebcam:()=>{}, invalidateVideoFrames:()=>{}, MAX_ENVELOPE_BYTES:1048576, encodeInput:JSON.stringify});
   const statusSource=html.slice(html.indexOf('let sessionPaired='),html.indexOf('function encodeInput('));
   const sendSource=html.slice(html.indexOf('function sendInput('),html.indexOf('function requestFullscreen('));
   vm.runInContext(statusSource+'\n'+sendSource,context);
@@ -287,7 +287,7 @@ test('local display preferences replay on iframe load without replaying actions'
 test('latency accepts only the pending reply and expires samples or disconnected state', () => {
   let now = 0, nonce = 0;
   const sent = [];
-  const c = vm.createContext({ stopAudioPlayback:()=>{}, invalidateVideoFrames:()=>{}, performance: { now: () => now }, crypto: { randomUUID: () => `nonce-${++nonce}` },
+  const c = vm.createContext({ stopAudioPlayback:()=>{}, stopWebcam:()=>{}, invalidateVideoFrames:()=>{}, performance: { now: () => now }, crypto: { randomUUID: () => `nonce-${++nonce}` },
     socket: { readyState: 1 }, window: { parent: { postMessage() {} }, location: { origin: 'https://test.invalid' } },
     sendInput: value => sent.push(value), parseJsonFrameObject: value => value, postStats() {} });
   vm.runInContext(html.slice(html.indexOf('let sessionPaired='), html.indexOf('function encodeInput(')), c);
@@ -400,4 +400,17 @@ test('late JPEG decodes cannot overwrite newer frames or repaint disabled/reconn
   assert.deepEqual(painted,['new']);assert.deepEqual(closed,['new','old','prior session','disabled']);
   c.videoEnabled=true;const resumed=c.paintJpegOrPng([255,216]);pending[4](bitmap('resumed'));await resumed;
   assert.deepEqual(painted,['new','resumed']);assert.equal(c.frameCount,2);
+});
+
+
+test('webcam capture requires confirmed support and a late permission grant cannot restart a stopped camera',async()=>{
+  let resolveCamera,calls=0,stopped=0;const status=[];
+  const c=vm.createContext({agentStats:{},webcamGen:0,webcamStarting:false,webcamStream:null,webcamTimer:null,
+    navigator:{mediaDevices:{getUserMedia:()=>{calls++;return new Promise(resolve=>resolveCamera=resolve);}}},
+    clearInterval:()=>{},postPipelineStatus:(...args)=>status.push(args)});
+  vm.runInContext(html.slice(html.indexOf('function stopWebcam('),html.indexOf('function downloadFile(')),c);
+  await c.setWebcamEnabled(true);assert.equal(calls,0);assert.equal(status.at(-1)[1],false);
+  c.agentStats.webcam_supported=true;const pending=c.setWebcamEnabled(true);await c.setWebcamEnabled(true);assert.equal(calls,1);
+  c.stopWebcam();resolveCamera({getTracks:()=>[{stop:()=>stopped++}]});await pending;
+  assert.equal(stopped,1);assert.equal(c.webcamStream,null);assert.equal(c.webcamStarting,false);assert.ok(status.every(x=>x[1]===false));
 });

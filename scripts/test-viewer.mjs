@@ -104,6 +104,8 @@ test('audio tooltip refreshes capture and playback when other metrics stay const
   assert.equal(c.tooltip(),'Audio: waiting; PC capture: unknown');
   c.window.currentAudioLevel=0;c.poll();
   assert.equal(c.tooltip(),'Audio level 0; PC capture: unknown');
+  c.window.audioPlaybackState='playing';c.poll();
+  assert.equal(c.tooltip(),'Audio level <1; PC capture: unknown');
   assert.match(sidebar,/useState\('PC capture: unknown'\)/);
   assert.match(sidebar,/audioLevel,\s*audioPlaybackStatus,\s*audioCaptureDescription/);
 });
@@ -433,6 +435,7 @@ test('audio buffers sequential playback, measures signal and expires silence vs 
   assert.equal(sources[1].time-sources[0].time,0.25);
   player.context.signal=0.5;
   assert.equal(player.reading().level,71);
+  player.context.signal=0.001;assert.equal(player.reading().level,0);assert.equal(player.reading().state,'playing');
   player.context.signal=0;assert.equal(player.reading().state,'silent');assert.equal(player.reading().level,0);
   player.context.currentTime=3;assert.equal(player.reading().level,null);assert.equal(player.reading().state,'waiting');
   await player.setSink('speaker');assert.equal(player.element.sink,'speaker');

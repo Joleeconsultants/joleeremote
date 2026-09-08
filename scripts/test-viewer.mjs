@@ -170,7 +170,7 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   const sent = [];
   const c = vm.createContext({ performance: { now: () => now },
     window: { parent: { postMessage: value => sent.push(value) }, location: { origin: 'https://test.invalid' } },
-    frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, latencyReading: () => null });
+    frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, agentStatsReceivedAt: 0, latencyReading: () => null });
   vm.runInContext(html.slice(html.indexOf('function numberOr('), html.indexOf('setInterval(postStats,1000)')), c);
   c.frameCount = 30; c.bytesSinceStats = 125000;
   now = 500; c.postStats();
@@ -193,6 +193,12 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   now = 2000; c.postStats();
   assert.equal(sent.at(-1).fps, 0);
   assert.equal(sent.at(-1).network_stats.bandwidth_mbps, 0);
+  now = 5000; c.postStats();
+  assert.equal(sent.at(-1).system_stats.cpu_percent, null);
+  assert.equal(sent.at(-1).system_stats.mem_total, null);
+  assert.equal(sent.at(-1).network_stats.latency_ms, null);
+  c.agentStats = { system_stats: { cpu_percent: 10 } }; c.agentStatsReceivedAt = now;
+  c.postStats(); assert.equal(sent.at(-1).system_stats.cpu_percent, 10);
 });
 
 test('exact-resolution pointer mapping uses the centered native image and smoothing reaches CSS', () => {

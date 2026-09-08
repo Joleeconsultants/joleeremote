@@ -66,3 +66,13 @@ test('Annex B type parsing tolerates AUD and SEI prefixes and rejects missing pa
   assert.equal(c.annexBChunkType(key),'key');assert.equal(c.annexBChunkType(delta),'delta');
   for(const bytes of [[0,0,1,0x65,1],[0,0,1,0xc1,1],[1,2,3],[0,0,0,1]])assert.equal(c.annexBChunkType(bytes),null);
 });
+test('a decoder that accepts input without output is bounded and eventually requests JPEG',async()=>{
+  const h=harness();h.consumer.configure(config());await settle();h.consumer.push(key);
+  for(let i=0;i<8;i++)h.consumer.push(delta);
+  assert.equal(h.decoded.length,8);assert.equal(h.fallback.length,1);
+  const stalled=harness();stalled.consumer.configure(config());await settle();stalled.consumer.push(key);
+  [...stalled.timers.values()][0]();assert.equal(stalled.fallback.length,1);
+  const healthy=harness();healthy.consumer.configure(config());await settle();healthy.consumer.push(key);
+  let closed=0;healthy.instances[0].callbacks.output({close:()=>closed++});
+  assert.equal(healthy.consumer.inFlight,0);assert.equal(healthy.timers.size,0);assert.equal(closed,1);
+});

@@ -274,7 +274,7 @@ class NegotiatedVideo {
     this.serial++;clearTimeout(this.timer);this.timer=null;
     if(this.decoder){try{this.decoder.close();}catch{}}
     this.decoder=null;this.config=null;this.pending=[];this.pendingBytes=0;
-    this.ready=false;this.keySeen=false;this.failed=false;this.timestamp=0;
+    this.ready=false;this.keySeen=false;this.failed=false;this.timestamp=0;this.inFlight=0;
   }
   fail(serial=this.serial){
     if(serial!==this.serial||this.failed)return;
@@ -303,7 +303,11 @@ class NegotiatedVideo {
       if(serial!==this.serial||this.failed)return;
       if(!support.supported){this.fail(serial);return;}
       this.decoder=new VideoDecoder({output:frame=>{
-        try{if(serial===this.serial&&!this.failed)this.output(frame);}finally{frame.close();}
+        try{if(serial===this.serial&&!this.failed){
+          this.inFlight=Math.max(0,this.inFlight-1);clearTimeout(this.timer);
+          this.timer=this.inFlight?setTimeout(()=>this.fail(serial),5000):null;
+          this.output(frame);
+        }}finally{frame.close();}
       },error:()=>this.fail(serial)});
       this.decoder.configure(options);this.ready=true;
       clearTimeout(this.timer);this.timer=null;
@@ -320,8 +324,9 @@ class NegotiatedVideo {
       this.pending.push(payload.slice());this.pendingBytes+=payload.length;return;
     }
     const type=annexBChunkType(payload);
-    if(!type||(!this.keySeen&&type!=='key')||this.decoder.decodeQueueSize>=8){this.fail();return;}
+    if(!type||(!this.keySeen&&type!=='key')||this.decoder.decodeQueueSize>=8||this.inFlight>=8){this.fail();return;}
     try{
+      if(this.inFlight++===0){const serial=this.serial;this.timer=setTimeout(()=>this.fail(serial),5000);}
       this.decoder.decode(new EncodedVideoChunk({type,timestamp:++this.timestamp*1000,data:payload}));
       this.keySeen=true;
     }catch{this.fail();}

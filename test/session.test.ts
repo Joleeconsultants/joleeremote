@@ -386,4 +386,92 @@ describe("session hop", () => {
     expect(join.status).toBe(404);
     expect(join.webSocket).toBeNull();
   });
+
+
+  it("askAgentFilesList talks to agent without a browser and resolves the frame reply", async () => {
+    const minted = await mint();
+    const agent = await openWs(minted.joins.agent);
+    await waitUntilState(minted.sessionId, "waiting");
+
+    const stub = env.Session.getByName(minted.sessionId);
+    const askPromise = runInDurableObject(stub, (instance: Session) =>
+      instance.askAgentFilesList(),
+    );
+
+    const req = decodeEnvelope(await waitBinary(agent));
+    expect(req?.kind).toBe("input");
+    expect(new TextDecoder().decode(req?.payload ?? new Uint8Array())).toBe(
+      '{"t":"filesList"}',
+    );
+
+    agent.send(
+      encodeEnvelope(
+        "frame",
+        JSON.stringify({
+          t: "filesList",
+          files: [{ name: "note.txt", size: 4, mtime: 1_700_000_000_000 }],
+        }),
+      ),
+    );
+
+    const result = await askPromise;
+    expect(result).toEqual({
+      ok: true,
+      files: [{ name: "note.txt", size: 4, mtime: 1_700_000_000_000 }],
+    });
+
+    agent.close(1000, "done");
+  });
+
+  it("askAgentFilesGet returns agent bytes and rejects unsafe basenames", async () => {
+    const minted = await mint();
+    const agent = await openWs(minted.joins.agent);
+    await waitUntilState(minted.sessionId, "waiting");
+    const stub = env.Session.getByName(minted.sessionId);
+
+    const bad = await runInDurableObject(stub, (instance: Session) =>
+      instance.askAgentFilesGet("../secret"),
+    );
+    expect(bad).toEqual({ ok: false, error: "bad_name" });
+
+    const askPromise = runInDurableObject(stub, (instance: Session) =>
+      instance.askAgentFilesGet("note.txt"),
+    );
+    const req = decodeEnvelope(await waitBinary(agent));
+    expect(req?.kind).toBe("input");
+    expect(new TextDecoder().decode(req?.payload ?? new Uint8Array())).toBe(
+      '{"t":"filesGet","name":"note.txt"}',
+    );
+
+    agent.send(
+      encodeEnvelope(
+        "frame",
+        JSON.stringify({
+          t: "filesGet",
+          name: "note.txt",
+          mime: "text/plain",
+          data: btoa("hi"),
+        }),
+      ),
+    );
+    const result = await askPromise;
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.name).toBe("note.txt");
+      expect(result.mime).toBe("text/plain");
+      expect(Array.from(new Uint8Array(result.data))).toEqual([104, 105]);
+    }
+
+    agent.close(1000, "done");
+  });
+
+  it("askAgentFilesList returns agent_unavailable when no agent is joined", async () => {
+    const minted = await mint();
+    const stub = env.Session.getByName(minted.sessionId);
+    const result = await runInDurableObject(stub, (instance: Session) =>
+      instance.askAgentFilesList(),
+    );
+    expect(result).toEqual({ ok: false, error: "agent_unavailable" });
+  });
+
 });

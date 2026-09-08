@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   clipboardTextFromFrame,
   cursorFromFrame,
+  encodeFilesGetRequest,
+  encodeFilesListRequest,
   fileFromFrame,
+  filesGetFromFrame,
+  filesListFromFrame,
+  isSafeFilesBasename,
   parseJsonFrameObject,
   printFromFrame,
   statsFromFrame,
@@ -120,5 +125,43 @@ describe("json frames (clipboard + cursor)", () => {
     ).toBeNull();
     expect(printFromFrame(utf8('{"t":"print"}'))).toBeNull();
     expect(printFromFrame(utf8('{"t":"file","name":"x","data":"YQ=="}'))).toBeNull();
+  });
+});
+
+describe("files Option A frames", () => {
+  it("parses filesList and filesGet success/error frames", () => {
+    expect(
+      filesListFromFrame(
+        utf8('{"t":"filesList","files":[{"name":"a.txt","size":3,"mtime":1000}]}'),
+      ),
+    ).toEqual({
+      t: "filesList",
+      files: [{ name: "a.txt", size: 3, mtime: 1000 }],
+    });
+    expect(
+      filesGetFromFrame(
+        utf8('{"t":"filesGet","name":"a.txt","mime":"text/plain","data":"YQ=="}'),
+      ),
+    ).toEqual({
+      t: "filesGet",
+      name: "a.txt",
+      mime: "text/plain",
+      data: "YQ==",
+    });
+    expect(
+      filesGetFromFrame(utf8('{"t":"filesGet","name":"missing","error":"not_found"}')),
+    ).toEqual({ t: "filesGet", name: "missing", error: "not_found" });
+    expect(filesListFromFrame(utf8('{"t":"file","name":"x","data":"YQ=="}'))).toBeNull();
+  });
+
+  it("encodes list/get requests and validates basenames", () => {
+    expect(encodeFilesListRequest()).toBe('{"t":"filesList"}');
+    expect(encodeFilesGetRequest("report.txt")).toBe(
+      '{"t":"filesGet","name":"report.txt"}',
+    );
+    expect(isSafeFilesBasename("report.txt")).toBe(true);
+    expect(isSafeFilesBasename("../x")).toBe(false);
+    expect(isSafeFilesBasename("a/b")).toBe(false);
+    expect(isSafeFilesBasename("a\\b")).toBe(false);
   });
 });

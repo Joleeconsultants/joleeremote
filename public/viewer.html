@@ -73,7 +73,7 @@ function applyCursorMode(){
   cursorEl.style.display=show?"block":"none";
 }
 let sessionPaired=false;
-let latestSettings={video_protocol:1};
+let latestSettings={video_protocol:1,max_edge:3840};
 let pendingScreenRequest=null, screenAutoEnabled=false;
 let screenUseCssScaling=true, screenAligned=false, screenResizeTimer=null;
 function finishScreenRequest(status,reason,effective=null){
@@ -274,7 +274,7 @@ class NegotiatedVideo {
     this.serial++;clearTimeout(this.timer);this.timer=null;
     if(this.decoder){try{this.decoder.close();}catch{}}
     this.decoder=null;this.config=null;this.pending=[];this.pendingBytes=0;
-    this.ready=false;this.keySeen=false;this.failed=false;this.timestamp=0;this.inFlight=0;
+    this.ready=false;this.started=false;this.keySeen=false;this.failed=false;this.timestamp=0;this.inFlight=0;
   }
   fail(serial=this.serial){
     if(serial!==this.serial||this.failed)return;
@@ -306,30 +306,37 @@ class NegotiatedVideo {
         try{if(serial===this.serial&&!this.failed){
           this.inFlight=Math.max(0,this.inFlight-1);clearTimeout(this.timer);
           this.timer=this.inFlight?setTimeout(()=>this.fail(serial),5000):null;
-          this.output(frame);
+          this.started=true;this.output(frame);this.drain();
         }}finally{frame.close();}
       },error:()=>this.fail(serial)});
+      this.decoder.ondequeue=()=>{if(serial===this.serial)this.drain();};
       this.decoder.configure(options);this.ready=true;
       clearTimeout(this.timer);this.timer=null;
-      const pending=this.pending;this.pending=[];this.pendingBytes=0;
-      for(const payload of pending)this.push(payload);
+      this.drain();
     }).catch(()=>this.fail(serial));
   }
   push(payload){
     if(this.failed)return;
     if(this.config?.encoder!=='h264enc'){this.fail();return;}
-    if(payload.length>8388608){this.fail();return;}
-    if(!this.ready){
-      if(this.pending.length>=8||this.pendingBytes+payload.length>8388608){this.fail();return;}
-      this.pending.push(payload.slice());this.pendingBytes+=payload.length;return;
+    if(payload.length>8388608||this.pending.length>=32||this.pendingBytes+payload.length>8388608){this.fail();return;}
+    this.pending.push({data:payload.slice(),at:performance.now()});this.pendingBytes+=payload.length;
+    this.drain();
+  }
+  drain(){
+    if(!this.ready||this.failed)return;
+    // Allow bounded compressed buffering while a cold decoder starts. Once
+    // output begins, don't let a persistently slow decoder accumulate latency.
+    if(this.started&&this.pending.length&&performance.now()-this.pending[0].at>500){this.fail();return;}
+    while(this.pending.length&&this.inFlight<8&&this.decoder.decodeQueueSize<8){
+      const {data:payload}=this.pending.shift();this.pendingBytes-=payload.length;
+      const type=annexBChunkType(payload);
+      if(!type||(!this.keySeen&&type!=='key')){this.fail();return;}
+      try{
+        if(this.inFlight++===0){const serial=this.serial;this.timer=setTimeout(()=>this.fail(serial),5000);}
+        this.decoder.decode(new EncodedVideoChunk({type,timestamp:++this.timestamp*1000,data:payload}));
+        this.keySeen=true;
+      }catch{this.fail();return;}
     }
-    const type=annexBChunkType(payload);
-    if(!type||(!this.keySeen&&type!=='key')||this.decoder.decodeQueueSize>=8||this.inFlight>=8){this.fail();return;}
-    try{
-      if(this.inFlight++===0){const serial=this.serial;this.timer=setTimeout(()=>this.fail(serial),5000);}
-      this.decoder.decode(new EncodedVideoChunk({type,timestamp:++this.timestamp*1000,data:payload}));
-      this.keySeen=true;
-    }catch{this.fail();}
   }
 }
 function annexBChunkType(bytes){
@@ -346,7 +353,9 @@ function annexBChunkType(bytes){
 }
 const negotiatedVideo=new NegotiatedVideo(frame=>{
   if(!videoEnabled)return;
-  canvas.width=frame.displayWidth;canvas.height=frame.displayHeight;applySmoothing();ctx.drawImage(frame,0,0);
+  if(canvas.width!==frame.displayWidth)canvas.width=frame.displayWidth;
+  if(canvas.height!==frame.displayHeight)canvas.height=frame.displayHeight;
+  applySmoothing();ctx.drawImage(frame,0,0);
   observedEncoder='h264enc';frameCount++;
 },()=>{observedEncoder=null;sendInput({t:'settings',settings:{encoder:'jpeg'}});});
 function invalidateVideoFrames(){

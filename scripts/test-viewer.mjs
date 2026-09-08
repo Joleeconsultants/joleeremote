@@ -132,7 +132,7 @@ test('settings chosen before socket open or agent join replay latest values on p
   c.sendInput({t:'settings',settings:{framerate:60,jpeg_quality:80}});
   assert.equal(sent.length,0);
   c.setStatus('paired');
-  assert.deepEqual(sent,[{t:'settings',settings:{video_protocol:1,framerate:60,jpeg_quality:80}}]);
+  assert.deepEqual(sent,[{t:'settings',settings:{video_protocol:1,max_edge:3840,framerate:60,jpeg_quality:80}}]);
   c.setStatus('paired');
   assert.equal(sent.length,1);
 });
@@ -147,7 +147,7 @@ test('re-pairing restores settings but never replays key or file actions',()=>{
   c.sendInput({t:'settings',settings:{jpeg_quality:90}});
   c.setStatus('waiting');
   c.setStatus('paired');
-  assert.deepEqual(sent.at(-1),{t:'settings',settings:{video_protocol:1,framerate:60,jpeg_quality:90}});
+  assert.deepEqual(sent.at(-1),{t:'settings',settings:{video_protocol:1,max_edge:3840,framerate:60,jpeg_quality:90}});
   assert.ok(sent.every(p=>p.t==='settings'));
 });
 

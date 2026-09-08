@@ -401,3 +401,13 @@ test('late JPEG decodes cannot overwrite newer frames or repaint disabled/reconn
   c.videoEnabled=true;const resumed=c.paintJpegOrPng([255,216]);pending[4](bitmap('resumed'));await resumed;
   assert.deepEqual(painted,['new','resumed']);assert.equal(c.frameCount,2);
 });
+
+
+test('Annex B classification finds masked IDR after parameter sets with either start code',()=>{
+  const c=vm.createContext({});vm.runInContext(html.slice(html.indexOf('function annexBChunkType('),html.indexOf('async function paintH264(')),c);
+  const unit=(n,short=false)=>[...(short?[0,0,1]:[0,0,0,1]),n,0x80];
+  assert.equal(c.annexBChunkType([...unit(0x67),...unit(0x68,true),...unit(0x65)]),'key');
+  assert.equal(c.annexBChunkType([...unit(0x09,true),...unit(0x67,true),...unit(0x68),...unit(0x65,true)]),'key');
+  assert.equal(c.annexBChunkType(unit(0x41)),'delta');
+  for(const invalid of [[],[0,0,1],unit(0x65),[...unit(0x67),...unit(0x68)],unit(0xc5),[1,2,3,4,5]])assert.equal(c.annexBChunkType(invalid),null);
+});

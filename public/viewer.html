@@ -276,7 +276,24 @@ async function paintJpegOrPng(payload,generation=videoGeneration,sequence=++rece
     latestPaintedFrame=sequence;observedEncoder=payload[0]===255&&payload[1]===216?"jpeg":null;frameCount++;
   }finally{bitmap.close();}
 }
-async function paintH264(payload){if(typeof VideoDecoder==="undefined")throw new Error("no WebCodecs");if(!videoDecoder||videoDecoder.state==="closed"){const generation=videoGeneration;videoDecoder=new VideoDecoder({output:(frame)=>{if(!videoEnabled||generation!==videoGeneration){frame.close();return;}canvas.width=frame.displayWidth;canvas.height=frame.displayHeight;applySmoothing();ctx.drawImage(frame,0,0);frame.close();observedEncoder="h264enc";frameCount++;},error:()=>{}});videoDecoder.configure({codec:"avc1.42E01E"});}videoDecoder.decode(new EncodedVideoChunk({type:payload.length>4&&payload[4]===5?"key":"delta",timestamp:performance.now()*1000,data:payload}));}
+// One complete Annex B access unit per frame. Key chunks carry IDR + SPS/PPS.
+function annexBChunkType(payload){
+  let idr=false,sps=false,pps=false,delta=false;
+  for(let i=0;i+2<payload.length;i++){
+    if(payload[i]!==0||payload[i+1]!==0)continue;
+    let header=-1;
+    if(payload[i+2]===1)header=i+3;
+    else if(payload[i+2]===0&&payload[i+3]===1)header=i+4;
+    if(header<0)continue;
+    if(header>=payload.length||(payload[header]&0x80))return null;
+    const type=payload[header]&0x1f;
+    idr ||= type===5;sps ||= type===7;pps ||= type===8;delta ||= type===1;
+    i=header;
+  }
+  if(idr)return sps&&pps?'key':null;
+  return delta?'delta':null;
+}
+async function paintH264(payload){const type=annexBChunkType(payload);if(!type)throw new Error("incomplete Annex B access unit");if(typeof VideoDecoder==="undefined")throw new Error("no WebCodecs");if(!videoDecoder||videoDecoder.state==="closed"){const generation=videoGeneration;videoDecoder=new VideoDecoder({output:(frame)=>{if(!videoEnabled||generation!==videoGeneration){frame.close();return;}canvas.width=frame.displayWidth;canvas.height=frame.displayHeight;applySmoothing();ctx.drawImage(frame,0,0);frame.close();observedEncoder="h264enc";frameCount++;},error:()=>{}});videoDecoder.configure({codec:"avc1.42E01E"});}videoDecoder.decode(new EncodedVideoChunk({type,timestamp:performance.now()*1000,data:payload}));}
 async function paintFrame(payload){
   const generation=videoGeneration,sequence=++receivedFrameSequence;
   try{await paintJpegOrPng(payload,generation,sequence);return;}catch(e){}

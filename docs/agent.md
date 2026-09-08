@@ -237,3 +237,7 @@ An agent may send `t:stats` with only a `screen` acknowledgement. The viewer for
 ### Clipboard write confirmation
 
 A text write with `id` receives a kind0x01 UTF-8 JSON frame `{t:"clipboard_result",id,status:"applied"|"rejected",reason:null|"invalid_text"|"clipboard_unavailable"}`. Applied means the native clipboard set succeeded. The viewer correlates only the latest outstanding write, expires it after15seconds, and reports disconnect/rejection through existing notifications. Invalid, stale or duplicate replies do not indicate success. Agent stats may advertise `clipboard_text_supported` and `clipboard_max_chars`. PC-to-browser changes continue using `{t:"clipboard",text}`. Do not export the initial OS clipboard or echo the browser’s own write as a PC change. Images remain a separate capability.
+
+### Planned H.264 frame contract (not enabled)
+
+Each future AVC frame payload is one complete Annex B access unit. Three- and four-byte start codes are recognized; NAL type uses the low five header bits. A key chunk includes an IDR picture plus SPS and PPS; a delta chunk includes non-IDR VCL. Parameter-set-only or truncated inputs are not independently decodable frame chunks. See the [W3C AVC registration](https://www.w3.org/TR/webcodecs-avc-codec-registration/). Native profile/configuration, decoding and JPEG fallback still require integrated verification before H.264 becomes the preferred default.

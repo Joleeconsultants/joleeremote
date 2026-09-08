@@ -78,3 +78,5 @@ See also `docs/chrome.md`.
 `0031-confirm-audio-output.patch`: keep the existing speaker dropdown on the applied output until the core confirms routing; source-check returned selections.
 
 `0032-secure-desktop-feedback.patch`: report validated continuity failures and observed normal-stream return through existing notifications; no layout changes.
+
+`0033-microphone-session-lifecycle.patch`: stop parent capture on lost sessions/capabilities and correlate asynchronous starts. The preserved microphone session module owns intent; no layout changes.

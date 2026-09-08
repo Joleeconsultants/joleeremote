@@ -31,7 +31,6 @@ canvas.exact-resolution{position:absolute;width:auto;height:auto;left:50%;top:50
 // Must match root package.json partysocket (currently 1.1.6).
 import PartySocket from "https://esm.sh/partysocket@1.1.6";
 const VERSION=1, KIND_FRAME=1, KIND_INPUT=2, KIND_AUDIO=3;
-const AUDIO_TYPES=["audio/wav","audio/webm","audio/ogg","audio/mpeg"];
 const DEFAULT_CURSOR_SVG="data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round" d="M1 1v16.5l4.2-4.3 3.3 8 2.5-1-3.3-7.9H15z"/></svg>');
 const DEFAULT_CURSOR_HX=1, DEFAULT_CURSOR_HY=1;
 const canvas=document.getElementById("surface");
@@ -45,8 +44,7 @@ let session=params.get("session")||"";
 let token=hashParams.get("token")||params.get("token")||"";
 let hop=params.get("hop")||"";
 let socket=null, videoDecoder=null, scaleLocally=true, antiAliasing=true;
-let audioEnabled=true, videoEnabled=true, audioSinkId="", playingAudio=null, audioUrl=null;
-let pendingAudioPayload=null, audioFailLogged=false;
+let audioEnabled=true, videoEnabled=true, audioSinkId="";
 let microphoneStream=null, microphoneRecorder=null, microphoneGen=0, microphoneForwarding=false, audioInputDeviceId="", webcamStream=null, webcamTimer=null;
 let frameCount=0, statsStartedAt=performance.now(), bytesSinceStats=0;
 let hopFps=0, hopBandwidth=0;
@@ -136,6 +134,7 @@ function setStatus(state){
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
   if(!sessionPaired){
+    if(wasPaired)stopAudioPlayback();
     finishScreenRequest('rejected','session_unavailable');
     if(screenResizeTimer!==null)clearTimeout(screenResizeTimer);
     screenResizeTimer=null;
@@ -249,18 +248,83 @@ function moveOverlay(e){
 async function paintJpegOrPng(payload){const bitmap=await createImageBitmap(new Blob([payload]));canvas.width=bitmap.width;canvas.height=bitmap.height;applySmoothing();ctx.drawImage(bitmap,0,0);bitmap.close();observedEncoder=payload[0]===255&&payload[1]===216?"jpeg":null;frameCount++;}
 async function paintH264(payload){if(typeof VideoDecoder==="undefined")throw new Error("no WebCodecs");if(!videoDecoder||videoDecoder.state==="closed"){videoDecoder=new VideoDecoder({output:(frame)=>{canvas.width=frame.displayWidth;canvas.height=frame.displayHeight;applySmoothing();ctx.drawImage(frame,0,0);frame.close();observedEncoder="h264enc";frameCount++;},error:()=>{}});videoDecoder.configure({codec:"avc1.42E01E"});}videoDecoder.decode(new EncodedVideoChunk({type:payload.length>4&&payload[4]===5?"key":"delta",timestamp:performance.now()*1000,data:payload}));}
 async function paintFrame(payload){try{await paintJpegOrPng(payload);return;}catch(e){}try{await paintH264(payload);}catch(e){ctx.fillStyle="#000";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle="#888";ctx.fillText("opaque frame "+payload.length+" bytes",16,24);}}
-function revokeAudioUrl(){
-  if(audioUrl){try{URL.revokeObjectURL(audioUrl);}catch(e){}audioUrl=null;}
-}
-function stopAudioPlayback(){
-  if(playingAudio){
-    try{playingAudio.pause();}catch(e){}
-    playingAudio.removeAttribute("src");
-    try{playingAudio.load();}catch(e){}
-    playingAudio=null;
+// One decoded stream with bounded buffering and a pre-output playback meter.
+// Keep HTMLMediaElement output routing so the existing output selector remains valid.
+class RemoteAudioPlayer {
+  constructor(){this.generation=0;this.sources=new Set();this.queue=[];this.draining=false;this.state='unavailable';this.sinkId='';this.enabled=true;}
+  ensure(){
+    if(this.context)return;
+    const Context=window.AudioContext||window.webkitAudioContext;
+    if(!Context)throw new Error('Web Audio is unavailable');
+    this.context=new Context();this.analyser=this.context.createAnalyser();this.analyser.fftSize=2048;
+    this.samples=new Float32Array(this.analyser.fftSize);
+    this.destination=this.context.createMediaStreamDestination();this.analyser.connect(this.destination);
+    this.element=new Audio();this.element.srcObject=this.destination.stream;
+    this.nextTime=0;this.lastScheduled=0;
   }
-  revokeAudioUrl();
+  async setSink(id){
+    this.sinkId=id;
+    if(this.element&&typeof this.element.setSinkId==='function')await this.element.setSinkId(id);
+  }
+  async unlock(){
+    if(!this.enabled)return;
+    try{
+      this.ensure();
+      // Both starts happen in the gesture task; do not await one before the other.
+      await Promise.all([this.context.resume(),this.element.play()]);
+      await this.setSink(this.sinkId);
+      if(this.context.state==='running'){if(this.state!=='playing')this.state='waiting';this.drain();}
+    }catch(error){this.state=error?.name==='NotAllowedError'?'blocked':'error';}
+  }
+  push(payload){
+    if(!this.enabled)return;
+    this.queue.push(payload.slice());
+    // Drop oldest waiting audio rather than letting a slow decoder build latency.
+    if(this.queue.length>4)this.queue.shift();
+    try{this.ensure();}catch{this.state='unavailable';return;}
+    if(this.context.state!=='running'||this.element.paused){this.state='blocked';return;}
+    this.drain();
+  }
+  async drain(){
+    if(this.draining||!this.context||this.context.state!=='running')return;
+    this.draining=true;const generation=this.generation;
+    try{
+      while(this.queue.length&&this.enabled&&generation===this.generation){
+        const bytes=this.queue.shift();
+        const buffer=await this.context.decodeAudioData(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
+        if(generation!==this.generation||!this.enabled)return;
+        const now=this.context.currentTime;
+        if(buffer.duration<=0||buffer.duration>1)continue;
+        if(Math.max(now+0.02,this.nextTime)+buffer.duration-now>1.25)continue;
+        const source=this.context.createBufferSource();source.buffer=buffer;source.connect(this.analyser);
+        const start=Math.max(now+0.02,this.nextTime);
+        this.sources.add(source);
+        source.onended=()=>{source.disconnect();this.sources.delete(source);};
+        source.start(start);this.nextTime=start+buffer.duration;this.lastScheduled=this.nextTime;
+        this.state='playing';
+      }
+    }catch{if(generation===this.generation)this.state='error';}
+    finally{this.draining=false;if(this.queue.length&&this.enabled&&this.context?.state==='running')this.drain();}
+  }
+  reading(){
+    if(!this.enabled)return {level:null,state:'disabled'};
+    if(!this.context||this.context.state!=='running'||this.element?.paused)return {level:null,state:this.state==='playing'?'blocked':this.state};
+    if(this.context.currentTime>this.lastScheduled+0.5)return {level:null,state:'waiting'};
+    if(this.state!=='playing')return {level:null,state:this.state};
+    this.analyser.getFloatTimeDomainData(this.samples);
+    let sum=0;for(const sample of this.samples)sum+=sample*sample;
+    const level=Math.min(100,Math.round(Math.sqrt(sum/this.samples.length)*141));
+    return {level,state:level===0?'silent':'playing'};
+  }
+  stop(){
+    this.generation++;this.queue=[];this.nextTime=0;this.lastScheduled=0;
+    for(const source of this.sources){try{source.stop();source.disconnect();}catch{}}
+    this.sources.clear();this.element?.pause();
+    this.state='unavailable';
+  }
 }
+const remoteAudio=new RemoteAudioPlayer();
+function stopAudioPlayback(){remoteAudio.stop();}
 function postPipelineStatus(pipeline,enabled,error){
   const msg={type:"pipelineStatusUpdate",[pipeline]:!!enabled};
   if(error) msg.error=error;
@@ -509,12 +573,6 @@ function handlePrintFrame(pf){
   for(const chunk of job.chunks){merged.set(chunk,offset);offset+=chunk.length;}
   openPrintPreview({name:job.name,mime:job.mime,bytes:merged});
 }
-function applyAudioSink(el){
-  if(!el || !audioSinkId) return;
-  if(typeof HTMLMediaElement!=="undefined" && typeof HTMLMediaElement.prototype.setSinkId==="function" && typeof el.setSinkId==="function"){
-    Promise.resolve(el.setSinkId(audioSinkId)).catch(()=>{});
-  }
-}
 function setVideoEnabled(enabled){
   videoEnabled=!!enabled;
   if(!videoEnabled){
@@ -526,73 +584,12 @@ function setVideoEnabled(enabled){
   postPipelineStatus("video", videoEnabled);
 }
 function setAudioEnabled(enabled){
-  audioEnabled=!!enabled;
-  if(playingAudio) playingAudio.muted=!audioEnabled;
-  postPipelineStatus("audio", audioEnabled);
-  if(!audioEnabled){pendingAudioPayload=null;stopAudioPlayback();return;}
-  // Sound toggle is a user gesture in chrome — retry pending chunk if autoplay blocked earlier.
-  if(pendingAudioPayload){
-    const pending=pendingAudioPayload;
-    pendingAudioPayload=null;
-    playAudioChunk(pending);
-  }
+  audioEnabled=!!enabled;remoteAudio.enabled=audioEnabled;
+  if(audioEnabled)remoteAudio.unlock();else stopAudioPlayback();
+  postPipelineStatus('audio',audioEnabled);
 }
-function audioTypesFor(payload){
-  // Prefer real container from magic bytes so WAV is not tried as webm/ogg first.
-  if(payload&&payload.length>=12&&payload[0]===0x52&&payload[1]===0x49&&payload[2]===0x46&&payload[3]===0x46&&payload[8]===0x57&&payload[9]===0x41&&payload[10]===0x56&&payload[11]===0x45){
-    return ["audio/wav","audio/wave"].concat(AUDIO_TYPES.filter((t)=>t!=="audio/wav"));
-  }
-  if(payload&&payload.length>=4&&payload[0]===0x4f&&payload[1]===0x67&&payload[2]===0x67&&payload[3]===0x53){
-    return ["audio/ogg"].concat(AUDIO_TYPES.filter((t)=>t!=="audio/ogg"));
-  }
-  if(payload&&payload.length>=4&&payload[0]===0x1a&&payload[1]===0x45&&payload[2]===0xdf&&payload[3]===0xa3){
-    return ["audio/webm"].concat(AUDIO_TYPES.filter((t)=>t!=="audio/webm"));
-  }
-  return AUDIO_TYPES.slice();
-}
-async function playAudioChunk(payload){
-  if(!audioEnabled) return;
-  const types=audioTypesFor(payload);
-  let lastErr=null;
-  let blocked=false;
-  for(const type of types){
-    const url=URL.createObjectURL(new Blob([payload],{type}));
-    const el=new Audio();
-    el.muted=!audioEnabled;
-    try{
-      applyAudioSink(el);
-      el.src=url;
-      await el.play();
-      stopAudioPlayback();
-      audioUrl=url;
-      playingAudio=el;
-      pendingAudioPayload=null;
-      audioFailLogged=false;
-      el.muted=!audioEnabled;
-      applyAudioSink(el);
-      el.addEventListener("ended",()=>{if(audioUrl===url){revokeAudioUrl();if(playingAudio===el)playingAudio=null;}},{once:true});
-      console.info("[jolee] audio play ok", type, payload.length);
-      return;
-    }catch(e){
-      lastErr=e;
-      try{URL.revokeObjectURL(url);}catch(err){}
-      if(e&&e.name==="NotAllowedError"){blocked=true;break;}
-    }
-  }
-  if(blocked) pendingAudioPayload=payload;
-  if(!audioFailLogged){
-    audioFailLogged=true;
-    const name=lastErr&&lastErr.name||"Error";
-    const msg=lastErr&&lastErr.message||String(lastErr||"play failed");
-    console.warn("[jolee] audio play failed", name, msg, blocked?"(autoplay; click canvas or sound toggle to retry)":"");
-  }
-}
-function unlockAudioFromGesture(){
-  if(!pendingAudioPayload||!audioEnabled) return;
-  const pending=pendingAudioPayload;
-  pendingAudioPayload=null;
-  playAudioChunk(pending);
-}
+function playAudioChunk(payload){remoteAudio.push(payload);}
+function unlockAudioFromGesture(){remoteAudio.unlock();}
 function disconnect(){if(socket){socket.close();socket=null;}if(videoDecoder){try{videoDecoder.close();}catch(e){}videoDecoder=null;}stopAudioPlayback();stopMicrophone();stopWebcam();printJobChunks.clear();setStatus("disconnected");}
 function connect(opts){
   if(opts&&typeof opts==="object"){
@@ -743,7 +740,8 @@ function postStats(){
     mem_total:numberOr(agentStats.gpu_mem_total,0)
   }:null);
   const network=Object.assign({bandwidth_mbps:numberOr(agentStats.bandwidth_mbps,hopBandwidth),latency_ms:numberOr(agentStats.latency_ms,latencyReading(now))},agentStats.network_stats||agentStats.network||{});
-  const stats={type:"statsUpdate",system_stats:system,gpu_stats:gpu,fps:numberOr(agentStats.fps,hopFps),network_stats:network,currentAudioLevel:numberOr(agentStats.currentAudioLevel??agentStats.audio_level,0)};
+  const playback=remoteAudio.reading();
+  const stats={type:"statsUpdate",system_stats:system,gpu_stats:gpu,fps:numberOr(agentStats.fps,hopFps),network_stats:network,currentAudioLevel:playback.level,audio_playback_state:playback.state};
   stats.active_encoder=observedEncoder||(['jpeg','h264enc'].includes(agentStats.active_encoder)?agentStats.active_encoder:null);
   stats.supported_encoders=Array.isArray(agentStats.supported_encoders)?agentStats.supported_encoders.filter(value=>['jpeg','h264enc'].includes(value)):null;
   stats.microphone_supported=typeof agentStats.microphone_supported==='boolean'?agentStats.microphone_supported:null;
@@ -854,7 +852,7 @@ window.addEventListener("message",(event)=>{
       }
       if(msg.context==="output"){
         audioSinkId=typeof msg.deviceId==="string"?msg.deviceId:"";
-        applyAudioSink(playingAudio);
+        remoteAudio.setSink(audioSinkId).catch(()=>postPipelineStatus('audio',audioEnabled,'The output device could not be selected.'));
       }
       break;
     case "setManualResolution":

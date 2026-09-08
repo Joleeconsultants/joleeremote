@@ -414,3 +414,27 @@ test('webcam capture requires confirmed support and a late permission grant cann
   c.stopWebcam();resolveCamera({getTracks:()=>[{stop:()=>stopped++}]});await pending;
   assert.equal(stopped,1);assert.equal(c.webcamStream,null);assert.equal(c.webcamStarting,false);assert.ok(status.every(x=>x[1]===false));
 });
+
+test('replaced sockets cannot change status, deliver data or close the current session',()=>{
+  const sockets=[],states=[];
+  class Socket {
+    constructor(){this.listeners={};this.maxRetries=3;sockets.push(this);}
+    addEventListener(name,fn){this.listeners[name]=fn;}
+    close(){this.closed=true;}
+    fire(name,event={}){this.listeners[name](event);}
+  }
+  const c=vm.createContext({PartySocket:Socket,URL,session:'test',token:'owned-test-token',hop:'',socket:null,
+    location:{host:'test.invalid',href:'https://test.invalid/viewer.html'},history:{replaceState:()=>{}},
+    videoDecoder:null,stopAudioPlayback:()=>{},stopMicrophone:()=>{},stopWebcam:()=>{},printJobChunks:new Map(),
+    setStatus:s=>states.push(s),decodeEnvelope:()=>{throw new Error('stale binary message consumed');}});
+  vm.runInContext(html.slice(html.indexOf('function disconnect(){'),html.indexOf('function sendInput(')),c);
+  c.connect();const old=sockets[0];c.connect();const current=sockets[1];
+  current.fire('open');current.fire('message',{data:JSON.stringify({type:'status',state:'paired'})});
+  const count=states.length;
+  old.fire('open');old.fire('message',{data:JSON.stringify({type:'status',state:'expired'})});
+  old.fire('message',{data:new ArrayBuffer(2)});old.fire('close',{code:4000});
+  assert.equal(states.length,count);assert.equal(states.at(-1),'paired');
+  assert.equal(c.socket,current);assert.equal(current.closed,undefined);assert.equal(current.maxRetries,3);
+  current.fire('close',{code:4000});assert.equal(current.closed,true);assert.equal(c.socket,null);
+  assert.equal(states.at(-1),'disconnected');
+});

@@ -637,7 +637,7 @@ function setAudioEnabled(enabled){
 }
 function playAudioChunk(payload){remoteAudio.push(payload);}
 function unlockAudioFromGesture(){remoteAudio.unlock();}
-function disconnect(){if(socket){socket.close();socket=null;}if(videoDecoder){try{videoDecoder.close();}catch(e){}videoDecoder=null;}stopAudioPlayback();stopMicrophone();stopWebcam();printJobChunks.clear();setStatus("disconnected");}
+function disconnect(){const previous=socket;socket=null;if(previous)previous.close();if(videoDecoder){try{videoDecoder.close();}catch(e){}videoDecoder=null;}stopAudioPlayback();stopMicrophone();stopWebcam();printJobChunks.clear();setStatus("disconnected");}
 function connect(opts){
   if(opts&&typeof opts==="object"){
     if(typeof opts.session==="string") session=opts.session;
@@ -657,9 +657,11 @@ function connect(opts){
   url.hash=token?"token="+encodeURIComponent(token):"";
   history.replaceState(null,"",url);
   socket=new PartySocket({host:host,party:"session",room:session,query:{token:token,role:"browser"},maxRetries:3});
-  socket.binaryType="arraybuffer";
-  socket.addEventListener("open",()=>setStatus("waiting"));
-  socket.addEventListener("close",(ev)=>{
+  const currentSocket=socket;
+  currentSocket.binaryType="arraybuffer";
+  currentSocket.addEventListener("open",()=>{if(socket===currentSocket)setStatus("waiting");});
+  currentSocket.addEventListener("close",(ev)=>{
+    if(socket!==currentSocket)return;
     if(ev&&(ev.code===4000||ev.code===4004||ev.code===4010)){
       try{if(socket)socket.maxRetries=0;}catch(e){}
       disconnect();
@@ -667,7 +669,8 @@ function connect(opts){
     }
     setStatus("disconnected");
   });
-  socket.addEventListener("message",(ev)=>{
+  currentSocket.addEventListener("message",(ev)=>{
+    if(socket!==currentSocket)return;
     if(typeof ev.data==="string"){
       try{const msg=JSON.parse(ev.data);if(msg.type==="status")setStatus(msg.state);}catch(e){}
       return;

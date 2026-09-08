@@ -1,7 +1,7 @@
 import { env, SELF, runInDurableObject, evictDurableObject } from "cloudflare:test";
 import type { Session } from "../src/session";
 import { expect, it } from "vitest";
-function input(context: string | null = "private-context") { return {sessionId:crypto.randomUUID(),browserToken:crypto.randomUUID(),agentToken:crypto.randomUUID(),ttlSeconds:900,mintContext:context}; }
+function input(context: string | null = "private-context"): {sessionId:string;browserToken:string;agentToken:string;ttlSeconds:number;mintContext:string|null} { return {sessionId:crypto.randomUUID(),browserToken:crypto.randomUUID(),agentToken:crypto.randomUUID(),ttlSeconds:900,mintContext:context}; }
 async function attempt(stub: DurableObjectStub<Session>, value: ReturnType<typeof input>) {
  return runInDurableObject(stub,async(instance:Session)=>{try{return {ok:true,value:await instance.mint(value)};}catch(e){return {ok:false,error:String(e)};}});
 }

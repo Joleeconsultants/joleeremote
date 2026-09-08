@@ -153,7 +153,7 @@ Frames and audio stay agent → browser. Input stays browser → agent.
 
 ### Files (locked Option A)
 
-List/get use UTF-8 JSON inside the existing input / frame envelopes. The hop does not interpret these payloads; the consumer agent applies them to its PC `FileManagerPath` / Desktop root, including uploads above. The consumer owns PC path resolution.
+List/get use UTF-8 JSON inside the existing input / frame envelopes. The consumer agent applies them to its PC `FileManagerPath` / Desktop root, including uploads above. The consumer owns PC path resolution. The Session DO may correlate Worker `askAgentFilesList` / `askAgentFilesGet` RPC waits against agent frame replies (still no PC path logic in the hop); browser↔agent forward stays opaque for other payloads.
 
 | Operation | Direction / kind | JSON payload shape |
 | --- | --- | --- |

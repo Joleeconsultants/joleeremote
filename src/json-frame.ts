@@ -125,3 +125,82 @@ export function printFromFrame(payload: Uint8Array): PrintFrame | null {
     parts,
   };
 }
+
+export type FilesListEntry = { name: string; size: number; mtime: number };
+
+export type FilesListFrame = { t: "filesList"; files: FilesListEntry[] };
+
+export type FilesGetSuccessFrame = {
+  t: "filesGet";
+  name: string;
+  mime: string;
+  data: string;
+};
+
+export type FilesGetErrorFrame = {
+  t: "filesGet";
+  name: string;
+  error: "not_found" | "too_large" | "unavailable";
+};
+
+export type FilesGetFrame = FilesGetSuccessFrame | FilesGetErrorFrame;
+
+const FILES_GET_ERRORS = new Set(["not_found", "too_large", "unavailable"]);
+
+/** Basename-only get: no path separators, no `..`, no NUL. */
+export function isSafeFilesBasename(name: string): boolean {
+  if (!name || name.length > 512) return false;
+  if (name === "." || name === "..") return false;
+  if (name.includes("/") || name.includes("\\") || name.includes("\0")) return false;
+  if (name.includes("..")) return false;
+  return true;
+}
+
+export function encodeFilesListRequest(): string {
+  return JSON.stringify({ t: "filesList" });
+}
+
+export function encodeFilesGetRequest(name: string): string {
+  return JSON.stringify({ t: "filesGet", name });
+}
+
+export function filesListFromFrame(payload: Uint8Array): FilesListFrame | null {
+  const obj = parseJsonFrameObject(payload);
+  if (!obj || !(obj.t === "filesList" || obj.type === "filesList")) return null;
+  if (!Array.isArray(obj.files)) return null;
+  const files: FilesListEntry[] = [];
+  for (const entry of obj.files) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const rec = entry as Record<string, unknown>;
+    if (typeof rec.name !== "string" || !rec.name) continue;
+    if (typeof rec.size !== "number" || !Number.isFinite(rec.size) || rec.size < 0) continue;
+    if (typeof rec.mtime !== "number" || !Number.isFinite(rec.mtime)) continue;
+    files.push({
+      name: rec.name,
+      size: Math.floor(rec.size),
+      mtime: Math.floor(rec.mtime),
+    });
+  }
+  return { t: "filesList", files };
+}
+
+export function filesGetFromFrame(payload: Uint8Array): FilesGetFrame | null {
+  const obj = parseJsonFrameObject(payload);
+  if (!obj || !(obj.t === "filesGet" || obj.type === "filesGet")) return null;
+  if (typeof obj.name !== "string" || !obj.name) return null;
+  if (typeof obj.error === "string" && FILES_GET_ERRORS.has(obj.error)) {
+    return {
+      t: "filesGet",
+      name: obj.name,
+      error: obj.error as FilesGetErrorFrame["error"],
+    };
+  }
+  if (typeof obj.data !== "string") return null;
+  return {
+    t: "filesGet",
+    name: obj.name,
+    mime: typeof obj.mime === "string" && obj.mime ? obj.mime : "application/octet-stream",
+    data: obj.data,
+  };
+}
+

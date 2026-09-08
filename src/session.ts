@@ -1,12 +1,45 @@
 import { Server, type Connection, type ConnectionContext, type WSMessage } from "partyserver";
-import { decodeEnvelope, envelopeByteLength, MAX_ENVELOPE_BYTES } from "./envelope";
-import { fileFromFrame } from "./json-frame";
+import { decodeEnvelope, encodeEnvelope, envelopeByteLength, MAX_ENVELOPE_BYTES } from "./envelope";
+import {
+  encodeFilesGetRequest,
+  encodeFilesListRequest,
+  fileFromFrame,
+  filesGetFromFrame,
+  filesListFromFrame,
+  isSafeFilesBasename,
+  type FilesListEntry,
+} from "./json-frame";
 import { timingSafeEqual } from "./tokens";
 import {
   DEFAULT_TTL_SECONDS,
   clampTtlSeconds,
   type PublicStatus,
 } from "./types";
+
+/** Worker → paired agent files ask timeout (Option A). */
+export const FILES_ASK_TIMEOUT_MS = 12_000;
+
+export type AgentFilesListResult =
+  | { ok: true; files: FilesListEntry[] }
+  | { ok: false; error: "agent_unavailable" | "timeout" };
+
+export type AgentFilesGetResult =
+  | { ok: true; name: string; mime: string; data: ArrayBuffer }
+  | {
+      ok: false;
+      error:
+        | "agent_unavailable"
+        | "timeout"
+        | "bad_name"
+        | "not_found"
+        | "too_large"
+        | "unavailable";
+    };
+
+type FilesAskWaiter = {
+  resolve: (value: unknown) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
 
 export type Env = {
   Session: DurableObjectNamespace<Session>;
@@ -33,6 +66,9 @@ export class Session extends Server<Env> {
   static options = { hibernate: true };
 
   private tearingDown = false;
+
+  /** In-flight Option A files asks keyed by `filesList` or `filesGet:<name>`. */
+  private filesAskPending = new Map<string, FilesAskWaiter[]>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -152,13 +188,21 @@ export class Session extends Server<Env> {
     if (!decoded) return;
     const row = this.loadRow();
     if (!row || row.state === "ended" || Date.now() >= row.expires_at) return;
-    if (!this.hasRole("browser") || !this.hasRole("agent")) return;
 
     const sender = this.roleOf(connection);
     // Frames and audio are agent → browser only. Input is browser → agent.
     // Unknown kinds are already dropped by decodeEnvelope.
     if ((decoded.kind === "frame" || decoded.kind === "audio") && sender !== "agent") return;
     if (decoded.kind === "input" && sender !== "browser") return;
+
+    // Option A: resolve Worker askAgent* waits from agent frame JSON even when
+    // no browser is joined (HTTP list/get must not require browser↔agent forward).
+    if (decoded.kind === "frame" && sender === "agent") {
+      this.maybeResolveFilesAsk(decoded.payload);
+    }
+
+    // Browser↔agent relay still requires both roles (inbox stash + forward).
+    if (!this.hasRole("browser") || !this.hasRole("agent")) return;
 
     // Stash hop file transfers into the session inbox for /api/files/.
     if (decoded.kind === "frame" || decoded.kind === "input") {
@@ -193,6 +237,7 @@ export class Session extends Server<Env> {
     if (!this.isJoined(connection)) return;
     const role = this.roleOf(connection);
     if (role === "agent") {
+      this.rejectAllFilesAsks({ ok: false, error: "agent_unavailable" });
       await this.teardown();
       return;
     }
@@ -219,6 +264,43 @@ export class Session extends Server<Env> {
     if (timingSafeEqual(token, row.browser_token)) return "browser";
     if (timingSafeEqual(token, row.agent_token)) return "agent";
     return null;
+  }
+
+  /**
+   * Option A: ask the joined agent for a root-only PC folder listing.
+   * Browser connection is optional — sends kind 0x02 directly to agent sockets.
+   */
+  async askAgentFilesList(): Promise<AgentFilesListResult> {
+    if (!this.hasRole("agent")) {
+      return { ok: false, error: "agent_unavailable" };
+    }
+    const key = "filesList";
+    const wait = this.waitFilesAsk<AgentFilesListResult>(key, FILES_ASK_TIMEOUT_MS);
+    if (!this.sendInputToAgents(encodeFilesListRequest())) {
+      this.cancelFilesAsk(key, { ok: false, error: "agent_unavailable" });
+      return wait;
+    }
+    return wait;
+  }
+
+  /**
+   * Option A: ask the joined agent for one basename under the PC folder root.
+   * Browser connection is optional — sends kind 0x02 directly to agent sockets.
+   */
+  async askAgentFilesGet(name: string): Promise<AgentFilesGetResult> {
+    if (!isSafeFilesBasename(name)) {
+      return { ok: false, error: "bad_name" };
+    }
+    if (!this.hasRole("agent")) {
+      return { ok: false, error: "agent_unavailable" };
+    }
+    const key = "filesGet:" + name;
+    const wait = this.waitFilesAsk<AgentFilesGetResult>(key, FILES_ASK_TIMEOUT_MS);
+    if (!this.sendInputToAgents(encodeFilesGetRequest(name))) {
+      this.cancelFilesAsk(key, { ok: false, error: "agent_unavailable" });
+      return wait;
+    }
+    return wait;
   }
 
   async listSessionFiles(): Promise<
@@ -428,6 +510,77 @@ export class Session extends Server<Env> {
 
 
 
+  private sendInputToAgents(payloadJson: string): boolean {
+    const envelope = encodeEnvelope("input", payloadJson);
+    let sent = false;
+    for (const peer of this.getConnections<ConnState>("agent")) {
+      if (!this.isJoined(peer)) continue;
+      peer.send(envelope);
+      sent = true;
+    }
+    return sent;
+  }
+
+  private waitFilesAsk<T>(key: string, timeoutMs: number): Promise<T> {
+    return new Promise<T>((resolve) => {
+      const timer = setTimeout(() => {
+        const waiters = this.filesAskPending.get(key);
+        if (!waiters) return;
+        const next = waiters.filter((w) => w.timer !== timer);
+        if (next.length === 0) this.filesAskPending.delete(key);
+        else this.filesAskPending.set(key, next);
+        resolve({ ok: false, error: "timeout" } as T);
+      }, timeoutMs);
+      const waiter: FilesAskWaiter = { resolve: resolve as (value: unknown) => void, timer };
+      const existing = this.filesAskPending.get(key);
+      if (existing) existing.push(waiter);
+      else this.filesAskPending.set(key, [waiter]);
+    });
+  }
+
+  private cancelFilesAsk(key: string, value: unknown): void {
+    const waiters = this.filesAskPending.get(key);
+    if (!waiters || waiters.length === 0) return;
+    this.filesAskPending.delete(key);
+    for (const w of waiters) {
+      clearTimeout(w.timer);
+      w.resolve(value);
+    }
+  }
+
+  private rejectAllFilesAsks(value: unknown): void {
+    const keys = [...this.filesAskPending.keys()];
+    for (const key of keys) this.cancelFilesAsk(key, value);
+  }
+
+  private maybeResolveFilesAsk(payload: Uint8Array): void {
+    const list = filesListFromFrame(payload);
+    if (list) {
+      this.cancelFilesAsk("filesList", { ok: true, files: list.files });
+      return;
+    }
+    const get = filesGetFromFrame(payload);
+    if (!get) return;
+    const key = "filesGet:" + get.name;
+    if ("error" in get) {
+      this.cancelFilesAsk(key, { ok: false, error: get.error });
+      return;
+    }
+    try {
+      const bin = Uint8Array.from(atob(get.data), (c) => c.charCodeAt(0));
+      const copy = new Uint8Array(bin.byteLength);
+      copy.set(bin);
+      this.cancelFilesAsk(key, {
+        ok: true,
+        name: get.name,
+        mime: get.mime,
+        data: copy.buffer,
+      });
+    } catch {
+      this.cancelFilesAsk(key, { ok: false, error: "unavailable" });
+    }
+  }
+
   private async maybeStoreTransferredFile(payload: Uint8Array, sender: Role | null): Promise<void> {
     try {
       const file = fileFromFrame(payload);
@@ -469,6 +622,7 @@ export class Session extends Server<Env> {
   private async teardown(): Promise<void> {
     if (this.tearingDown) return;
     this.tearingDown = true;
+    this.rejectAllFilesAsks({ ok: false, error: "agent_unavailable" });
     this.ctx.storage.sql.exec("UPDATE session SET state = ?", "ended");
     for (const conn of this.getConnections()) {
       try {

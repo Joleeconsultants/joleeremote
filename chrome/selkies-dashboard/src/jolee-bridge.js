@@ -15,6 +15,23 @@
 const settingsByFrame = new WeakMap();
 const localPreferences = new Set(["setScaleLocally", "setAntiAliasing"]);
 
+/** Enumerate playback devices even when microphone access is unavailable. */
+export async function listAudioDevices(mediaDevices) {
+  let devices = await mediaDevices.enumerateDevices();
+  const audioDevices = devices.filter(device => device.kind === "audioinput" || device.kind === "audiooutput");
+  if (!audioDevices.length || audioDevices.some(device => !device.label)) {
+    try {
+      const stream = await mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      devices = await mediaDevices.enumerateDevices();
+    } catch (error) {
+      // Microphone permission is not a prerequisite for hearing PC sound.
+      if (!audioDevices.some(device => device.deviceId)) throw error;
+    }
+  }
+  return devices;
+}
+
 /** Coalesce slider bursts by key, so adjusting another control loses no values. */
 export function debounceSettings(send, delay) {
   let timer;

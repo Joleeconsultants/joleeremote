@@ -1,0 +1,53 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index e941ca8..c4cd380 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -69,7 +69,7 @@ import {
+   resolveFailedAppCommand,
+   writeInstalledApps,
+ } from "../jolee-shims/app-commands.js";
+-import { postToCore, debounceSettings } from "../jolee-bridge.js";
++import { postToCore, debounceSettings, listAudioDevices } from "../jolee-bridge.js";
+ import {
+   startParentMicrophone,
+   stopParentMicrophone,
+@@ -1908,7 +1908,7 @@ function Sidebar() {
+   }, []);
+ 
+   /**
+-   * Lists the audio devices for the audio section, taking a momentary
++   * Lists the audio devices for the audio section, optionally taking a momentary
+    * microphone permission so labels are readable. Output routing goes through
+    * whatever the active core plays on: the WebRTC core's `<video>` element
+    * (`HTMLMediaElement.setSinkId`) or the WebSocket core's AudioContext
+@@ -1923,9 +1923,9 @@ function Sidebar() {
+     setAudioDeviceError(null);
+     setAudioInputDevices([]);
+     setAudioOutputDevices([]);
+-    const supportsSinkId = isWebrtc
+-      ? "setSinkId" in HTMLMediaElement.prototype
+-      : typeof AudioContext !== "undefined" && "setSinkId" in AudioContext.prototype;
++    // Jolee plays audio chunks with HTMLMediaElement in either dashboard mode.
++    const supportsSinkId = typeof HTMLMediaElement !== "undefined"
++      && typeof HTMLMediaElement.prototype.setSinkId === "function";
+     setIsOutputSelectionSupported(supportsSinkId);
+     console.log(
+       "Dashboard: Output device selection supported:",
+@@ -1933,15 +1933,9 @@ function Sidebar() {
+     );
+     try {
+       console.log(
+-        "Dashboard: Requesting temporary microphone permission for device listing..."
++        "Dashboard: Listing devices; microphone permission is optional for labels..."
+       );
+-      const tempStream = await navigator.mediaDevices.getUserMedia({
+-        audio: true,
+-      });
+-      tempStream.getTracks().forEach((track) => track.stop());
+-      console.log("Dashboard: Temporary permission granted/available.");
+-      console.log("Dashboard: Enumerating media devices...");
+-      const devices = await navigator.mediaDevices.enumerateDevices();
++      const devices = await listAudioDevices(navigator.mediaDevices);
+       console.log("Dashboard: Devices found:", devices);
+       const inputs = [];
+       const outputs = [];

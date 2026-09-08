@@ -132,7 +132,25 @@ test('re-pairing restores settings but never replays key or file actions',()=>{
   assert.ok(sent.every(p=>p.t==='settings'));
 });
 
-import { debounceSettings, postToCore } from '../chrome/selkies-dashboard/src/jolee-bridge.js';
+import { debounceSettings, postToCore, listAudioDevices } from '../chrome/selkies-dashboard/src/jolee-bridge.js';
+
+test('speaker enumeration survives unavailable microphone permission', async () => {
+  const devices = [{ kind: 'audiooutput', deviceId: 'speaker', label: '' }];
+  assert.equal(await listAudioDevices({ enumerateDevices: async () => devices,
+    getUserMedia: async () => { throw Object.assign(new Error('denied'), { name: 'NotAllowedError' }); } }), devices);
+  await assert.rejects(listAudioDevices({ enumerateDevices: async () => [],
+    getUserMedia: async () => { throw Object.assign(new Error('missing'), { name: 'NotFoundError' }); } }), { name: 'NotFoundError' });
+});
+
+test('audio labels need no repeat permission and temporary microphone tracks are stopped', async () => {
+  let stopped = 0, enumerations = 0;
+  const labeled = [{ kind: 'audioinput', deviceId: 'mic', label: 'Microphone' }];
+  assert.equal(await listAudioDevices({ enumerateDevices: async () => labeled,
+    getUserMedia: async () => { throw new Error('must not request'); } }), labeled);
+  assert.equal(await listAudioDevices({ enumerateDevices: async () => ++enumerations === 1 ? [] : labeled,
+    getUserMedia: async () => ({ getTracks: () => [{ stop: () => stopped++ }] }) }), labeled);
+  assert.equal(stopped, 1);
+});
 
 test('rapid settings changes preserve different keys and only the latest value per key', async () => {
   const sent = [];

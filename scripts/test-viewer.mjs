@@ -438,3 +438,25 @@ test('replaced sockets cannot change status, deliver data or close the current s
   current.fire('close',{code:4000});assert.equal(current.closed,true);assert.equal(c.socket,null);
   assert.equal(states.at(-1),'disconnected');
 });
+
+test('audio start finishing after stop cannot revive state or overwrite the stopped status',async()=>{
+  const {player}=audioHarness();player.ensure();let resume;
+  player.context.resume=()=>new Promise(resolve=>{resume=()=>{player.context.state='running';resolve();};});
+  const pending=player.unlock();player.stop();resume();await pending;
+  assert.equal(player.state,'unavailable');assert.equal(player.element.paused,true);
+  let rejectStart;player.context.resume=()=>new Promise((resolve,reject)=>{rejectStart=reject;});
+  const rejected=player.unlock();player.stop();rejectStart(new Error('late failure'));await rejected;
+  assert.equal(player.state,'unavailable');
+});
+
+test('DPI selection requires confirmed endpoint support before persisting or sending a change',()=>{
+  const sidebar=readFileSync(new URL('../chrome/selkies-dashboard/src/components/Sidebar.jsx',import.meta.url),'utf8');
+  const changes=[];
+  const c=vm.createContext({agentCapabilities:{},setSelectedDpi:v=>changes.push(v),
+    localStorage:{setItem:(...args)=>changes.push(args)},getPrefixedKey:k=>k,debouncedPostSetting:v=>changes.push(v)});
+  vm.runInContext(sidebar.slice(sidebar.indexOf('const handleDpiScalingChange ='),sidebar.indexOf('const DRAG_THRESHOLD ='))+'\nglobalThis.changeDpi=handleDpiScalingChange;',c);
+  for(const support of [undefined,null,false]){c.agentCapabilities.dpi_scaling_supported=support;c.changeDpi({target:{value:'144'}});}
+  assert.equal(changes.length,0);
+  c.agentCapabilities.dpi_scaling_supported=true;c.changeDpi({target:{value:'144'}});
+  assert.equal(changes[0],144);assert.equal(changes[2].scaling_dpi,144);
+});

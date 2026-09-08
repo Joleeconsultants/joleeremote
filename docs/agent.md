@@ -124,6 +124,7 @@ The hop forwards input bytes opaquely. The Selkies chrome viewer sends UTF-8 JSO
 - `{t:"file", name, mime, data}` — browser → agent upload in kind `0x02`; `data` is base64. The consumer agent writes into its PC `FileManagerPath` / Desktop root; the consumer owns path resolution.
 - `{t:"webcam", mime:"image/jpeg", data}` — periodic browser webcam JPEG still; `data` is base64
 - `{t:"command", command:"ctrl-alt-delete"}` — normalized secure-attention shortcut; other command payloads are forwarded
+- `{t:"ping", id}` — latency probe; `id` is a nonempty string of at most 64 characters. Reply on the same paired session with a frame envelope containing `{t:"pong", id}`. Echo only the ID; do not execute input or return host information. The browser sends probes every 5 seconds with at most one pending, rejects replies after 10 seconds, and expires measured round-trip latency after 15 seconds. It measures elapsed time locally, so clocks need not be synchronized. Agents without this capability leave latency unavailable.
 
 To fill the sidebar PC Clipboard, the agent may send a *frame* envelope whose payload is UTF-8 JSON (not pixels). The hop does not parse it; the viewer does:
 

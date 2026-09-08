@@ -911,6 +911,9 @@ function postStats(){
   stats.webcam_supported=typeof agentStats.webcam_supported==='boolean'?agentStats.webcam_supported:null;
   stats.dpi_scaling_supported=typeof agentStats.dpi_scaling_supported==='boolean'?agentStats.dpi_scaling_supported:null;
   stats.audio_bitrate_supported=typeof agentStats.audio_bitrate_supported==='boolean'?agentStats.audio_bitrate_supported:null;
+  stats.capture_backend=['gdi','gdi-bootstrap','dxgi','paused'].includes(agentStats.capture_backend)?agentStats.capture_backend:null;
+  stats.capture_max_edge=Number.isInteger(agentStats.capture_max_edge)&&agentStats.capture_max_edge>=320&&agentStats.capture_max_edge<=3840?agentStats.capture_max_edge:null;
+  stats.jpeg_quality_effective=stats.active_encoder==='jpeg'&&Number.isInteger(agentStats.jpeg_quality_effective)&&agentStats.jpeg_quality_effective>=1&&agentStats.jpeg_quality_effective<=100?agentStats.jpeg_quality_effective:null;
   stats.screen=agentScreen;
   if(window.parent!==window) window.parent.postMessage(stats,window.location.origin);
 }

@@ -249,6 +249,16 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   assert.deepEqual(Array.from(sent.at(-1).supported_encoders), ['jpeg']);
   assert.equal(sent.at(-1).microphone_supported, false);
   assert.equal(sent.at(-1).audio_bitrate_supported, null);
+  Object.assign(c.agentStats,{capture_backend:'dxgi',capture_max_edge:3840,jpeg_quality_effective:40});
+  c.postStats();
+  assert.equal(sent.at(-1).capture_backend,'dxgi');assert.equal(sent.at(-1).capture_max_edge,3840);
+  assert.equal(sent.at(-1).jpeg_quality_effective,40);
+  c.observedEncoder='h264enc';c.postStats();assert.equal(sent.at(-1).jpeg_quality_effective,null);
+  c.observedEncoder='jpeg';Object.assign(c.agentStats,{capture_backend:'invented',capture_max_edge:9000,jpeg_quality_effective:101});
+  c.postStats();assert.equal(sent.at(-1).capture_backend,null);assert.equal(sent.at(-1).capture_max_edge,null);assert.equal(sent.at(-1).jpeg_quality_effective,null);
+  Object.assign(c.agentStats,{capture_backend:'gdi-bootstrap',capture_max_edge:320,jpeg_quality_effective:1});
+  c.agentStatsReceivedAt=now;c.postStats();assert.equal(sent.at(-1).jpeg_quality_effective,1);
+  now+=5000;c.postStats();assert.equal(sent.at(-1).capture_backend,null);assert.equal(sent.at(-1).capture_max_edge,null);assert.equal(sent.at(-1).jpeg_quality_effective,null);
 });
 
 test('exact-resolution pointer mapping uses the centered native image and smoothing reaches CSS', () => {

@@ -65,6 +65,7 @@ const en = {
             streamingModeLabel: "Turbo",
             useCpuLabel: "CPU Encoding",
             jpegQualityLabel: "Base Quality: {jpegQuality}",
+            jpegQualityEffective: "PC used {quality}",
             paintOverJpegQualityLabel: "Paintover Quality: {paintOverJpegQuality}",
             paintoverCrfLabel: "Paint-Overs CRF ({crf}):",
             paintoverBurstLabel: "Paint-Over Burst Frames ({frames}):",

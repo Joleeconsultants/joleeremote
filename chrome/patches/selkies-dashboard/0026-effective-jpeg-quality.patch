@@ -1,0 +1,44 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index fdbeb52..4d23de8 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -1292,6 +1292,7 @@ function Sidebar() {
+       if (event.origin !== window.location.origin || event.source !== core?.contentWindow || event.data?.type !== 'statsUpdate') return;
+       const message = event.data;
+       setAgentCapabilities({ active_encoder: message.active_encoder,
++        jpeg_quality_effective: message.jpeg_quality_effective,
+         supported_encoders: message.supported_encoders,
+         microphone_supported: message.microphone_supported,
+         webcam_supported: message.webcam_supported,
+@@ -3121,6 +3122,9 @@ function Sidebar() {
+ 
+   /** One encoder knob serves both transports; CBR/CRF applies to every H.264 encoder on both. */
+   const activeEncoder = agentCapabilities.active_encoder || '';
++  const effectiveJpegQuality = activeEncoder === 'jpeg' && Number.isInteger(agentCapabilities.jpeg_quality_effective)
++    && agentCapabilities.jpeg_quality_effective >= 1 && agentCapabilities.jpeg_quality_effective <= 100
++    ? agentCapabilities.jpeg_quality_effective : null;
+   const confirmedEncoderOptions = agentCapabilities.supported_encoders?.length
+     ? agentCapabilities.supported_encoders : dynamicEncoderOptions;
+   const H264_ENCODERS = ["h264enc", "h264enc-striped", "nvh264enc"];
+@@ -3542,6 +3546,9 @@ function Sidebar() {
+                           {t("sections.video.jpegQualityLabel", {
+                             jpegQuality: jpeg_quality,
+                           })}
++                          {effectiveJpegQuality !== null && effectiveJpegQuality !== jpeg_quality && (
++                            <> ({t('sections.video.jpegQualityEffective', { quality: effectiveJpegQuality })})</>
++                          )}
+                         </label>
+                         <input
+                           type="range"
+diff --git a/src/translations.js b/src/translations.js
+index 5359d0e..af720ee 100644
+--- a/src/translations.js
++++ b/src/translations.js
+@@ -65,6 +65,7 @@ const en = {
+             streamingModeLabel: "Turbo",
+             useCpuLabel: "CPU Encoding",
+             jpegQualityLabel: "Base Quality: {jpegQuality}",
++            jpegQualityEffective: "PC used {quality}",
+             paintOverJpegQualityLabel: "Paintover Quality: {paintOverJpegQuality}",
+             paintoverCrfLabel: "Paint-Overs CRF ({crf}):",
+             paintoverBurstLabel: "Paint-Over Burst Frames ({frames}):",

@@ -79,6 +79,16 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
   var fileUpload = document.getElementById("jolee-file-upload");
   function postToCore(msg) {
     if (iframe && iframe.contentWindow) {
+      // Queue committed text before later physical viewer keys can overtake
+      // postMessage delivery on another event turn.
+      var assistKey;
+      if (msg.type === "assistKey") {
+        try { assistKey = iframe.contentWindow.joleeAssistKey; } catch (e) {}
+        if (typeof assistKey === "function") {
+          assistKey(msg);
+          return;
+        }
+      }
       iframe.contentWindow.postMessage(msg, location.origin);
     }
   }

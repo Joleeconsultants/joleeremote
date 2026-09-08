@@ -43,7 +43,29 @@ test('assist defers composition and keeps named controls and physical shortcuts'
 });
 
 // Exercise the shipped browser routine; stub only browser side effects.
+test('same-origin assist delivery precedes physical keys and preserves fallback without duplicates',()=>{
+  const shell=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
+  const delivered=[],posted=[];
+  const core={joleeAssistKey:msg=>delivered.push(msg.key),postMessage:msg=>posted.push(msg)};
+  const c=vm.createContext({iframe:{contentWindow:core},location:{origin:'https://example.test'}});
+  vm.runInContext(shell.slice(shell.indexOf('function postToCore(msg)'),shell.indexOf('// Do not post showVirtualKeyboard')),c);
+  c.postToCore({type:'assistKey',key:'text'});delivered.push('physical Enter');
+  assert.deepEqual(delivered,['text','physical Enter']);assert.equal(posted.length,0);
+  delete core.joleeAssistKey;c.postToCore({type:'assistKey',key:'fallback'});
+  c.postToCore({type:'fileUpload'});assert.equal(posted.length,2);
+  core.joleeAssistKey=()=>{throw new Error('delivery failed');};
+  assert.throws(()=>c.postToCore({type:'assistKey'}),/delivery failed/);
+  assert.equal(posted.length,2);
+});
 const html = readFileSync(new URL('../public/viewer.html', import.meta.url), 'utf8');
+test('assist bridge validates key envelopes before paced delivery',()=>{
+  const sent=[],c=vm.createContext({sendKeyInput:(payload,paced)=>sent.push({payload,paced}),window:{}});
+  vm.runInContext(html.slice(html.indexOf('function handleAssistKey('),html.indexOf('window.addEventListener("message",(event)=>{')),c);
+  for(const msg of [null,{}, {e:'sideways',key:'A',code:''},{e:'down',key:7,code:''}])c.window.joleeAssistKey(msg);
+  assert.equal(sent.length,0);
+  c.window.joleeAssistKey({e:'down',key:'😀',code:''});
+  assert.equal(sent[0].payload.key,'😀');assert.equal(sent[0].paced,true);
+});
 const source = html.slice(html.indexOf('function handlePrintFrame(pf){'), html.indexOf('function setVideoEnabled('));
 assert.ok(source.startsWith('function handlePrintFrame(pf){'));
 
@@ -98,7 +120,7 @@ function settingsViewer() {
   const sent=[];
   const window={}; window.parent=window;
   const context=vm.createContext({window, socket:{readyState:0,send:value=>sent.push(JSON.parse(value))},
-    stopAudioPlayback:()=>{}, MAX_ENVELOPE_BYTES:1048576, encodeInput:JSON.stringify});
+    keyDelivery:{clear(){}}, stopAudioPlayback:()=>{}, MAX_ENVELOPE_BYTES:1048576, encodeInput:JSON.stringify});
   const statusSource=html.slice(html.indexOf('let sessionPaired='),html.indexOf('function encodeInput('));
   const sendSource=html.slice(html.indexOf('function sendInput('),html.indexOf('function requestFullscreen('));
   vm.runInContext(statusSource+'\n'+sendSource,context);
@@ -268,7 +290,7 @@ test('local display preferences replay on iframe load without replaying actions'
 test('latency accepts only the pending reply and expires samples or disconnected state', () => {
   let now = 0, nonce = 0;
   const sent = [];
-  const c = vm.createContext({ stopAudioPlayback:()=>{}, performance: { now: () => now }, crypto: { randomUUID: () => `nonce-${++nonce}` },
+  const c = vm.createContext({ keyDelivery:{clear(){}}, stopAudioPlayback:()=>{}, performance: { now: () => now }, crypto: { randomUUID: () => `nonce-${++nonce}` },
     socket: { readyState: 1 }, window: { parent: { postMessage() {} }, location: { origin: 'https://test.invalid' } },
     sendInput: value => sent.push(value), parseJsonFrameObject: value => value, postStats() {} });
   vm.runInContext(html.slice(html.indexOf('let sessionPaired='), html.indexOf('function encodeInput(')), c);
@@ -363,4 +385,31 @@ test('fullscreen denial and unsupported API produce explicit parent feedback',as
   assert.equal(messages.at(-1).type,'fullscreenError');assert.match(messages.at(-1).message,/not granted/);
   c.stage={};c.requestFullscreen();assert.match(messages.at(-1).message,/not supported/);
   c.stage={requestFullscreen:()=>{throw new Error('inactive');}};c.requestFullscreen();assert.equal(messages.length,3);
+});
+
+test('committed keys and Enter boundaries stay ordered while physical shortcuts wait for text',()=>{
+  const sent=[],timers=new Map();let clock=0,id=0;
+  const c=vm.createContext({sendInputNow:p=>sent.push({key:p.key,e:p.e,at:clock}),setTimeout:fn=>{timers.set(++id,fn);return id;},clearTimeout:id=>timers.delete(id)});
+  vm.runInContext(html.slice(html.indexOf('class KeyDeliveryQueue'),html.indexOf('function sendKeyInput('))+'\nglobalThis.queue=keyDelivery;',c);
+  const key=(name,paced)=>{for(const e of ['down','up'])c.queue.enqueue({t:'key',key:name,e,code:''},paced);};
+  key('Enter',false);key('E',true);key('😀',true);key('Control',false);key('s',false);
+  assert.deepEqual(sent.map(x=>x.key),['Enter','Enter']);
+  while(timers.size){clock+=50;const [i,fn]=timers.entries().next().value;timers.delete(i);fn();}
+  assert.deepEqual(sent.map(x=>x.key),['Enter','Enter','E','E','😀','😀','Control','Control','s','s']);
+  assert.equal(sent[2].at,50);assert.equal(sent[4].at,100);assert.equal(sent[6].at,150);assert.equal(sent[8].at,200);
+  key('A',true);key('B',true);const count=sent.length;c.queue.clear();
+  assert.equal(timers.size,0);assert.equal(sent.length,count);assert.equal(c.queue.items.length,0);
+});
+
+test('pending committed text keeps clicks ordered without delaying telemetry',()=>{
+  const sent=[],timers=new Map();let id=0;
+  const c=vm.createContext({sessionPaired:true,latestSettings:{},MAX_ENVELOPE_BYTES:1048576,
+    socket:{readyState:1,send:value=>sent.push(JSON.parse(value))},encodeInput:JSON.stringify,
+    setTimeout:fn=>{timers.set(++id,fn);return id;},clearTimeout:id=>timers.delete(id)});
+  vm.runInContext(html.slice(html.indexOf('class KeyDeliveryQueue'),html.indexOf('function requestFullscreen(')),c);
+  for(const key of ['A','B'])for(const e of ['down','up'])c.sendKeyInput({t:'key',key,e,code:''},true);
+  c.sendInput({t:'pointer',e:'down',x:0.5,y:0.5,b:0});c.sendInput({t:'ping',id:'still-live'});
+  assert.deepEqual(sent.map(x=>x.t),['key','key','ping']);
+  while(timers.size){const [i,fn]=timers.entries().next().value;timers.delete(i);fn();}
+  assert.deepEqual(sent.map(x=>x.t),['key','key','ping','key','key','pointer']);
 });

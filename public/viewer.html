@@ -134,6 +134,7 @@ function setStatus(state){
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
   if(!sessionPaired){
+    keyDelivery.clear();
     if(wasPaired)stopAudioPlayback();
     finishScreenRequest('rejected','session_unavailable');
     if(screenResizeTimer!==null)clearTimeout(screenResizeTimer);
@@ -657,7 +658,31 @@ function connect(opts){
     paintFrame(env.payload);
   });
 }
+// Keep committed text and named-key boundaries in one FIFO. Physical typing
+// remains immediate when no committed text is waiting.
+class KeyDeliveryQueue {
+  constructor(send){this.send=send;this.items=[];this.timer=null;}
+  get pending(){return this.timer!==null||this.items.length>0;}
+  enqueue(payload,paced=false){this.items.push({payload,paced:paced||(payload.t==='key'&&this.pending)});this.flush();}
+  flush(){
+    if(this.timer!==null)return;
+    while(this.items.length){
+      const {payload,paced}=this.items.shift();this.send(payload);
+      if(payload.e==='up'&&(paced||['Enter','Tab','Backspace'].includes(payload.key))){
+        this.timer=setTimeout(()=>{this.timer=null;this.flush();},50);return;
+      }
+    }
+  }
+  clear(){if(this.timer!==null)clearTimeout(this.timer);this.timer=null;this.items=[];}
+}
+const keyDelivery=new KeyDeliveryQueue(payload=>sendInputNow(payload));
+function sendKeyInput(payload,paced=false){if(sessionPaired)keyDelivery.enqueue(payload,paced);}
 function sendInput(payload){
+  const ordered=payload.t==='command'||payload.t==='wheel'||(payload.t==='pointer'&&payload.e!=='move');
+  if(ordered&&keyDelivery.pending){keyDelivery.enqueue(payload);return;}
+  sendInputNow(payload);
+}
+function sendInputNow(payload){
   if(payload.t==="settings"&&payload.settings&&typeof payload.settings==="object"){
     const merged=Object.assign({},latestSettings,payload.settings);
     if(encodeInput({t:"settings",settings:merged}).length>MAX_ENVELOPE_BYTES)return;
@@ -798,10 +823,15 @@ canvas.addEventListener("wheel",(e)=>{
 },{passive:false});
 canvas.addEventListener("contextmenu",(e)=>{e.preventDefault();});
 // Keys stay on the canvas (and #vk). Do not window-capture: dashboard .allow-native-input must keep typing.
-canvas.addEventListener("keydown",(e)=>{sendInput({t:"key",e:"down",key:e.key,code:e.code});e.preventDefault();});
-canvas.addEventListener("keyup",(e)=>{sendInput({t:"key",e:"up",key:e.key,code:e.code});e.preventDefault();});
-vk.addEventListener("keydown",(e)=>{sendInput({t:"key",e:"down",key:e.key,code:e.code});});
-vk.addEventListener("keyup",(e)=>{sendInput({t:"key",e:"up",key:e.key,code:e.code});});
+canvas.addEventListener("keydown",(e)=>{sendKeyInput({t:"key",e:"down",key:e.key,code:e.code});e.preventDefault();});
+canvas.addEventListener("keyup",(e)=>{sendKeyInput({t:"key",e:"up",key:e.key,code:e.code});e.preventDefault();});
+vk.addEventListener("keydown",(e)=>{sendKeyInput({t:"key",e:"down",key:e.key,code:e.code});});
+vk.addEventListener("keyup",(e)=>{sendKeyInput({t:"key",e:"up",key:e.key,code:e.code});});
+function handleAssistKey(msg){
+  if(!msg || (msg.e!=="down" && msg.e!=="up") || typeof msg.key!=="string" || typeof msg.code!=="string") return;
+  sendKeyInput({t:"key",e:msg.e,key:msg.key,code:msg.code},true);
+}
+window.joleeAssistKey=handleAssistKey;
 window.addEventListener("message",(event)=>{
   if(event.origin!==window.location.origin) return;
   if(window.parent!==window && event.source!==window.parent) return;
@@ -822,7 +852,7 @@ window.addEventListener("message",(event)=>{
       break;
     case "fileUpload": sendFile(msg.file); break;
     case "assistKey":
-      sendInput({t:"key",e:msg.e==="up"?"up":"down",key:msg.key,code:msg.code});
+      handleAssistKey(msg);
       break;
     case "setAntiAliasing":
       antiAliasing=!!msg.value;

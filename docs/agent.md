@@ -251,3 +251,19 @@ A text write with `id` receives a kind0x01 UTF-8 JSON frame `{t:"clipboard_resul
 ### Remote DPI scaling capability
 
 `dpi_scaling_supported` in native stats is an explicit boolean. The existing UI Scaling selector is enabled only after true; false is unsupported and absent remains unconfirmed. This capability gating is interim truthful feedback, not completion of remote DPI scaling. The feature remains in the native parity backlog. It is separate from browser fit/Scale Locally and physical resolution requests. Do not advertise support until actual DPI changes and acknowledgement/restoration semantics are implemented and verified.
+
+### Negotiated H.264 video (integration candidate)
+
+The viewer includes `settings.video_protocol:1` on initial pairing, settings updates and rejoin. An endpoint must retain JPEG for clients without this opt-in, even if an old client requests `h264enc`.
+
+Immediately before a new H.264 stream, send a kind0x01 JSON frame under the same send gate as the first access unit:
+
+```json
+{"t":"video_config","generation":"unique-stream-id","encoder":"h264enc","codec":"avc1.42c014","format":"annexb","width":320,"height":240,"colorSpace":{"matrix":"bt709","primaries":"bt709","transfer":"bt709","fullRange":false}}
+```
+
+The codec is derived from the actual SPS; dimensions are the actual even encoded raster, not desktop geometry. The viewer must supply these dimensions as `codedWidth` and `codedHeight` to WebCodecs. Generation is a nonempty string of at most64characters. Each following kind0x01 binary frame is one complete Annex B access unit. The first access unit includes SPS, PPS and IDR; AUD/SEI prefixes are allowed. Start, resize, rejoin and Video OFF→ON require a fresh generation and key access unit. No B-frame reordering is assumed by this low-latency protocol.
+
+Switching to JPEG sends `{t:"video_config",generation:"new-id",encoder:"jpeg"}` before the image. Optional native reasons are `encoder_unavailable` or `encode_failed`. Legacy JPEG/PNG without a configuration remains accepted. Unsupported/invalid configuration, decode failure or overload requests `encoder:jpeg` once for that failed generation. The viewer bounds negotiation buffering and decode backlog, cancels stale callbacks on reset, and reports H.264 as observed only after a decoded frame is painted.
+
+Local validation:108Worker tests,30viewer/protocol tests and TypeScript pass. Windows-native320×240 color bars decoded in Edge through this consumer for8frames and another8after a generation change; maximum sampled RGB error2, zero unexpected fallback. Invalid width321 requests JPEG once. These synthetic checks do not establish full-desktop performance, resize acceptance or a deployable native release. Keep JPEG as the current default until integrated acceptance; verified H.264 as preferred default remains the target.

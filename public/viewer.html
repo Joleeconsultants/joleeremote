@@ -43,7 +43,7 @@ const hashParams=new URLSearchParams((location.hash||"").replace(/^#/, ""));
 let session=params.get("session")||"";
 let token=hashParams.get("token")||params.get("token")||"";
 let hop=params.get("hop")||"";
-let socket=null, videoDecoder=null, scaleLocally=true, antiAliasing=true;
+let socket=null, scaleLocally=true, antiAliasing=true;
 let audioEnabled=true, videoEnabled=true, audioSinkId="";
 let webcamGen=0,webcamStarting=false;
 let microphoneStream=null, microphoneRecorder=null, microphoneGen=0, microphoneForwarding=false, audioInputDeviceId="", webcamStream=null, webcamTimer=null;
@@ -73,7 +73,7 @@ function applyCursorMode(){
   cursorEl.style.display=show?"block":"none";
 }
 let sessionPaired=false;
-let latestSettings={};
+let latestSettings={video_protocol:1};
 let pendingScreenRequest=null, screenAutoEnabled=false;
 let screenUseCssScaling=true, screenAligned=false, screenResizeTimer=null;
 function finishScreenRequest(status,reason,effective=null){
@@ -265,9 +265,88 @@ function moveOverlay(e){
   const r=stage.getBoundingClientRect();
   cursorEl.style.transform="translate("+(e.clientX-r.left-cursorHx)+"px,"+(e.clientY-r.top-cursorHy)+"px)";
 }
+// Each native generation starts with a config followed by complete Annex B access units.
+// Bound both support-negotiation buffering and decode backlog; dropping reference
+// pictures would corrupt later frames, so overload requests a fresh JPEG stream.
+class NegotiatedVideo {
+  constructor(output,fallback){this.output=output;this.fallback=fallback;this.serial=0;this.reset();}
+  reset(){
+    this.serial++;clearTimeout(this.timer);this.timer=null;
+    if(this.decoder){try{this.decoder.close();}catch{}}
+    this.decoder=null;this.config=null;this.pending=[];this.pendingBytes=0;
+    this.ready=false;this.keySeen=false;this.failed=false;this.timestamp=0;
+  }
+  fail(serial=this.serial){
+    if(serial!==this.serial||this.failed)return;
+    this.failed=true;clearTimeout(this.timer);this.timer=null;
+    this.pending=[];this.pendingBytes=0;
+    if(this.decoder){try{this.decoder.close();}catch{}this.decoder=null;}
+    this.fallback();
+  }
+  configure(config){
+    if(this.config&&config.generation===this.config.generation)return;
+    this.reset();this.config=config;
+    const validGeneration=typeof config.generation==='string'&&config.generation.length>0&&config.generation.length<=64;
+    if(!validGeneration){this.fail();return;}
+    if(config.encoder==='jpeg')return;
+    const cs=config.colorSpace;
+    if(config.encoder!=='h264enc'||config.format!=='annexb'||!/^avc1\.[0-9a-f]{6}$/i.test(config.codec)||
+       !Number.isInteger(config.width)||!Number.isInteger(config.height)||config.width<2||config.height<2||
+       config.width>8192||config.height>8192||config.width%2||config.height%2||config.width*config.height>33554432||
+       !cs||cs.matrix!=='bt709'||cs.primaries!=='bt709'||cs.transfer!=='bt709'||cs.fullRange!==false||
+       typeof VideoDecoder==='undefined'){this.fail();return;}
+    const serial=this.serial;
+    const options={codec:config.codec,codedWidth:config.width,codedHeight:config.height,
+      colorSpace:{matrix:'bt709',primaries:'bt709',transfer:'bt709',fullRange:false},optimizeForLatency:true};
+    this.timer=setTimeout(()=>this.fail(serial),5000);
+    Promise.resolve().then(()=>VideoDecoder.isConfigSupported(options)).then(support=>{
+      if(serial!==this.serial||this.failed)return;
+      if(!support.supported){this.fail(serial);return;}
+      this.decoder=new VideoDecoder({output:frame=>{
+        try{if(serial===this.serial&&!this.failed)this.output(frame);}finally{frame.close();}
+      },error:()=>this.fail(serial)});
+      this.decoder.configure(options);this.ready=true;
+      clearTimeout(this.timer);this.timer=null;
+      const pending=this.pending;this.pending=[];this.pendingBytes=0;
+      for(const payload of pending)this.push(payload);
+    }).catch(()=>this.fail(serial));
+  }
+  push(payload){
+    if(this.failed)return;
+    if(this.config?.encoder!=='h264enc'){this.fail();return;}
+    if(payload.length>8388608){this.fail();return;}
+    if(!this.ready){
+      if(this.pending.length>=8||this.pendingBytes+payload.length>8388608){this.fail();return;}
+      this.pending.push(payload.slice());this.pendingBytes+=payload.length;return;
+    }
+    const type=annexBChunkType(payload);
+    if(!type||(!this.keySeen&&type!=='key')||this.decoder.decodeQueueSize>=8){this.fail();return;}
+    try{
+      this.decoder.decode(new EncodedVideoChunk({type,timestamp:++this.timestamp*1000,data:payload}));
+      this.keySeen=true;
+    }catch{this.fail();}
+  }
+}
+function annexBChunkType(bytes){
+  const nals=[];
+  for(let i=0;i+3<bytes.length;i++){
+    if(bytes[i]!==0||bytes[i+1]!==0)continue;
+    const offset=bytes[i+2]===1?3:bytes[i+2]===0&&bytes[i+3]===1?4:0;
+    if(!offset)continue;
+    if(i+offset>=bytes.length||(bytes[i+offset]&128))return null;
+    nals.push(bytes[i+offset]&31);i+=offset;
+  }
+  if(nals.includes(5))return nals.includes(7)&&nals.includes(8)?'key':null;
+  return nals.includes(1)?'delta':null;
+}
+const negotiatedVideo=new NegotiatedVideo(frame=>{
+  if(!videoEnabled)return;
+  canvas.width=frame.displayWidth;canvas.height=frame.displayHeight;applySmoothing();ctx.drawImage(frame,0,0);
+  observedEncoder='h264enc';frameCount++;
+},()=>{observedEncoder=null;sendInput({t:'settings',settings:{encoder:'jpeg'}});});
 function invalidateVideoFrames(){
   videoGeneration++;
-  if(videoDecoder){try{videoDecoder.close();}catch{}videoDecoder=null;}
+  negotiatedVideo.reset();
 }
 async function paintJpegOrPng(payload,generation=videoGeneration,sequence=++receivedFrameSequence){
   const bitmap=await createImageBitmap(new Blob([payload]));
@@ -277,15 +356,14 @@ async function paintJpegOrPng(payload,generation=videoGeneration,sequence=++rece
     latestPaintedFrame=sequence;observedEncoder=payload[0]===255&&payload[1]===216?"jpeg":null;frameCount++;
   }finally{bitmap.close();}
 }
-async function paintH264(payload){if(typeof VideoDecoder==="undefined")throw new Error("no WebCodecs");if(!videoDecoder||videoDecoder.state==="closed"){const generation=videoGeneration;videoDecoder=new VideoDecoder({output:(frame)=>{if(!videoEnabled||generation!==videoGeneration){frame.close();return;}canvas.width=frame.displayWidth;canvas.height=frame.displayHeight;applySmoothing();ctx.drawImage(frame,0,0);frame.close();observedEncoder="h264enc";frameCount++;},error:()=>{}});videoDecoder.configure({codec:"avc1.42E01E"});}videoDecoder.decode(new EncodedVideoChunk({type:payload.length>4&&payload[4]===5?"key":"delta",timestamp:performance.now()*1000,data:payload}));}
+async function paintH264(payload){negotiatedVideo.push(payload);}
 async function paintFrame(payload){
   const generation=videoGeneration,sequence=++receivedFrameSequence;
-  try{await paintJpegOrPng(payload,generation,sequence);return;}catch(e){}
-  if(!videoEnabled||generation!==videoGeneration||sequence<=latestPaintedFrame)return;
-  try{await paintH264(payload);}catch(e){
-    if(!videoEnabled||generation!==videoGeneration)return;
-    ctx.fillStyle="#000";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle="#888";ctx.fillText("opaque frame "+payload.length+" bytes",16,24);
-  }
+  const image=(payload[0]===255&&payload[1]===216)||(payload[0]===137&&payload[1]===80&&payload[2]===78&&payload[3]===71);
+  if(image){
+    if(negotiatedVideo.config?.encoder==='h264enc')negotiatedVideo.reset();
+    try{await paintJpegOrPng(payload,generation,sequence);}catch{}
+  }else if(videoEnabled&&generation===videoGeneration)await paintH264(payload);
 }
 // One decoded stream with bounded buffering and a pre-output playback meter.
 // Keep HTMLMediaElement output routing so the existing output selector remains valid.
@@ -640,7 +718,7 @@ function setAudioEnabled(enabled){
 }
 function playAudioChunk(payload){remoteAudio.push(payload);}
 function unlockAudioFromGesture(){remoteAudio.unlock();}
-function disconnect(){const previous=socket;socket=null;if(previous)previous.close();if(videoDecoder){try{videoDecoder.close();}catch(e){}videoDecoder=null;}stopAudioPlayback();stopMicrophone();stopWebcam();printJobChunks.clear();setStatus("disconnected");}
+function disconnect(){const previous=socket;socket=null;if(previous)previous.close();stopAudioPlayback();stopMicrophone();stopWebcam();printJobChunks.clear();setStatus("disconnected");}
 function connect(opts){
   if(opts&&typeof opts==="object"){
     if(typeof opts.session==="string") session=opts.session;
@@ -685,6 +763,11 @@ function connect(opts){
     if(env.kind!=="frame") return;
     if(consumeLatencyReply(env.payload))return;
     if(consumeClipboardResult(env.payload))return;
+    const videoConfig=parseJsonFrameObject(env.payload);
+    if(videoConfig?.t==='video_config'){
+      if(videoEnabled&&(!negotiatedVideo.config||videoConfig.generation!==negotiatedVideo.config.generation)){invalidateVideoFrames();negotiatedVideo.configure(videoConfig);}
+      return;
+    }
     const clip=clipboardTextFromFrame(env.payload);
     if(clip!==null){
       if(window.parent!==window){
@@ -713,6 +796,7 @@ function connect(opts){
 }
 function sendInput(payload){
   if(payload.t==="settings"&&payload.settings&&typeof payload.settings==="object"){
+    payload={...payload,settings:{...payload.settings,video_protocol:1}};
     const merged=Object.assign({},latestSettings,payload.settings);
     if(encodeInput({t:"settings",settings:merged}).length>MAX_ENVELOPE_BYTES)return;
     latestSettings=merged;

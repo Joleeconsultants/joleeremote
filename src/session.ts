@@ -81,6 +81,10 @@ export class Session extends Server<Env> {
         created_at INTEGER NOT NULL,
         state TEXT NOT NULL
       )`);
+      this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS session_mint_context (
+        session_id TEXT PRIMARY KEY,
+        context TEXT
+      )`);
       this.ensureFilesTable();
     });
   }
@@ -90,27 +94,46 @@ export class Session extends Server<Env> {
     browserToken: string;
     agentToken: string;
     ttlSeconds?: number;
+    /** Internal Worker context only. HTTP mint never forwards this field. */
+    mintContext?: string | null;
   }): Promise<{ sessionId: string; expiresAt: number; ttlSeconds: number }> {
-    // Persist PartyServer name for alarms/hibernation when ctx.id.name is missing.
+    const context = input.mintContext ?? null;
+    if (context !== null && (typeof context !== "string" || new TextEncoder().encode(context).length > 8192))
+      throw new Error("invalid mint context");
     await this.setName(input.sessionId);
-    const existing = this.loadRow();
-    if (existing) {
-      throw new Error("session already minted");
-    }
     const ttlSeconds = clampTtl(input.ttlSeconds);
-    const now = Date.now();
-    const expiresAt = now + ttlSeconds * 1000;
-    this.ctx.storage.sql.exec(
-      "INSERT INTO session (id, browser_token, agent_token, expires_at, created_at, state) VALUES (?, ?, ?, ?, ?, ?)",
-      input.sessionId,
-      input.browserToken,
-      input.agentToken,
-      expiresAt,
-      now,
-      "waiting",
-    );
-    await this.ctx.storage.setAlarm(expiresAt);
-    return { sessionId: input.sessionId, expiresAt, ttlSeconds };
+    const minted = this.ctx.storage.transactionSync(() => {
+      const existing = this.loadRow();
+      if (existing) {
+        const sealed = this.ctx.storage.sql.exec<{ context: string | null }>(
+          "SELECT context FROM session_mint_context WHERE session_id = ?", existing.id).toArray();
+        // Never backfill legacy sessions. Exact internal retries preserve the original deadline.
+        if (sealed.length === 1 && existing.id === input.sessionId && existing.state !== "ended" &&
+            Date.now() < existing.expires_at && timingSafeEqual(existing.browser_token, input.browserToken) &&
+            timingSafeEqual(existing.agent_token, input.agentToken) && sealed[0].context === context &&
+            existing.expires_at - existing.created_at === ttlSeconds * 1000)
+          return { sessionId: existing.id, expiresAt: existing.expires_at, ttlSeconds };
+        throw new Error("session already minted");
+      }
+      const now = Date.now();
+      const expiresAt = now + ttlSeconds * 1000;
+      this.ctx.storage.sql.exec(
+        "INSERT INTO session (id, browser_token, agent_token, expires_at, created_at, state) VALUES (?, ?, ?, ?, ?, ?)",
+        input.sessionId, input.browserToken, input.agentToken, expiresAt, now, "waiting");
+      this.ctx.storage.sql.exec("INSERT INTO session_mint_context (session_id, context) VALUES (?, ?)", input.sessionId, context);
+      return { sessionId: input.sessionId, expiresAt, ttlSeconds };
+    });
+    await this.ctx.storage.setAlarm(minted.expiresAt);
+    return minted;
+  }
+
+  /** Worker RPC only: this context is deliberately absent from HTTP/WebSocket status. */
+  async readMintContext(): Promise<{ sessionId: string; expiresAt: number; context: string | null } | null> {
+    const row = this.loadRow();
+    if (!row || row.state === "ended" || Date.now() >= row.expires_at) return null;
+    const sealed = this.ctx.storage.sql.exec<{ context: string | null }>(
+      "SELECT context FROM session_mint_context WHERE session_id = ?", row.id).toArray();
+    return { sessionId: row.id, expiresAt: row.expires_at, context: sealed[0]?.context ?? null };
   }
 
   async status(): Promise<PublicStatus | null> {

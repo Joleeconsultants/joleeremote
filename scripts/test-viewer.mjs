@@ -117,7 +117,7 @@ function settingsViewer() {
   const sent=[];
   const window={}; window.parent=window;
   const context=vm.createContext({window, socket:{readyState:0,send:value=>sent.push(JSON.parse(value))},
-    stopAudioPlayback:()=>{}, MAX_ENVELOPE_BYTES:1048576, encodeInput:JSON.stringify});
+    stopAudioPlayback:()=>{}, invalidateVideoFrames:()=>{}, MAX_ENVELOPE_BYTES:1048576, encodeInput:JSON.stringify});
   const statusSource=html.slice(html.indexOf('let sessionPaired='),html.indexOf('function encodeInput('));
   const sendSource=html.slice(html.indexOf('function sendInput('),html.indexOf('function requestFullscreen('));
   vm.runInContext(statusSource+'\n'+sendSource,context);
@@ -287,7 +287,7 @@ test('local display preferences replay on iframe load without replaying actions'
 test('latency accepts only the pending reply and expires samples or disconnected state', () => {
   let now = 0, nonce = 0;
   const sent = [];
-  const c = vm.createContext({ stopAudioPlayback:()=>{}, performance: { now: () => now }, crypto: { randomUUID: () => `nonce-${++nonce}` },
+  const c = vm.createContext({ stopAudioPlayback:()=>{}, invalidateVideoFrames:()=>{}, performance: { now: () => now }, crypto: { randomUUID: () => `nonce-${++nonce}` },
     socket: { readyState: 1 }, window: { parent: { postMessage() {} }, location: { origin: 'https://test.invalid' } },
     sendInput: value => sent.push(value), parseJsonFrameObject: value => value, postStats() {} });
   vm.runInContext(html.slice(html.indexOf('let sessionPaired='), html.indexOf('function encodeInput(')), c);
@@ -382,4 +382,22 @@ test('fullscreen denial and unsupported API produce explicit parent feedback',as
   assert.equal(messages.at(-1).type,'fullscreenError');assert.match(messages.at(-1).message,/not granted/);
   c.stage={};c.requestFullscreen();assert.match(messages.at(-1).message,/not supported/);
   c.stage={requestFullscreen:()=>{throw new Error('inactive');}};c.requestFullscreen();assert.equal(messages.length,3);
+});
+
+
+test('late JPEG decodes cannot overwrite newer frames or repaint disabled/reconnected video',async()=>{
+  const pending=[],painted=[],closed=[];
+  const c=vm.createContext({videoGeneration:0,receivedFrameSequence:0,latestPaintedFrame:0,videoEnabled:true,videoDecoder:null,
+    canvas:{},ctx:{drawImage:b=>painted.push(b.id)},applySmoothing:()=>{},observedEncoder:null,frameCount:0,Blob,
+    createImageBitmap:()=>new Promise(resolve=>pending.push(resolve))});
+  vm.runInContext(html.slice(html.indexOf('function invalidateVideoFrames('),html.indexOf('async function paintH264(')),c);
+  const bitmap=id=>({id,width:10,height:10,close:()=>closed.push(id)});
+  const a=c.paintJpegOrPng([255,216]),b=c.paintJpegOrPng([255,216]);
+  pending[1](bitmap('new'));await b;pending[0](bitmap('old'));await a;
+  assert.deepEqual(painted,['new']);assert.equal(c.frameCount,1);
+  const late=c.paintJpegOrPng([255,216]);c.invalidateVideoFrames();pending[2](bitmap('prior session'));await late;
+  const off=c.paintJpegOrPng([255,216]);c.videoEnabled=false;pending[3](bitmap('disabled'));await off;
+  assert.deepEqual(painted,['new']);assert.deepEqual(closed,['new','old','prior session','disabled']);
+  c.videoEnabled=true;const resumed=c.paintJpegOrPng([255,216]);pending[4](bitmap('resumed'));await resumed;
+  assert.deepEqual(painted,['new','resumed']);assert.equal(c.frameCount,2);
 });

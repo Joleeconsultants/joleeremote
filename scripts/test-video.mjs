@@ -11,7 +11,7 @@ const config=(generation='one')=>({t:'video_config',generation,encoder:'h264enc'
   colorSpace:{matrix:'bt709',primaries:'bt709',transfer:'bt709',fullRange:false}});
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function harness(support=async()=>({supported:true})){
-  const instances=[],decoded=[],painted=[],fallback=[],timers=new Map();let id=0;
+  const instances=[],decoded=[],painted=[],fallback=[],timers=new Map();let id=0,now=0;
   class Decoder {
     static isConfigSupported= support;
     constructor(callbacks){this.callbacks=callbacks;this.decodeQueueSize=0;instances.push(this);}
@@ -19,11 +19,11 @@ function harness(support=async()=>({supported:true})){
     decode(chunk){decoded.push(chunk);}
     close(){this.closed=true;}
   }
-  const c=vm.createContext({VideoDecoder:Decoder,EncodedVideoChunk:class{constructor(options){Object.assign(this,options);}},
+  const c=vm.createContext({performance:{now:()=>now},VideoDecoder:Decoder,EncodedVideoChunk:class{constructor(options){Object.assign(this,options);}},
     setTimeout:fn=>{timers.set(++id,fn);return id;},clearTimeout:id=>timers.delete(id)});
   vm.runInContext(source+'\nglobalThis.Consumer=NegotiatedVideo;',c);
   const consumer=new c.Consumer(frame=>painted.push(frame),()=>fallback.push(true));
-  return {consumer,instances,decoded,painted,fallback,timers};
+  return {consumer,instances,decoded,painted,fallback,timers,advance:ms=>{now+=ms;}};
 }
 test('native Annex B config uses actual codec and coded dimensions, queues in order and requires parameter sets plus IDR',async()=>{
   const h=harness();h.consumer.configure(config());h.consumer.push(key);h.consumer.push(delta);await settle();
@@ -53,13 +53,15 @@ test('unsupported config, malformed dimensions, missing WebCodecs and decode err
   const c=vm.createContext({setTimeout,clearTimeout});vm.runInContext(source+'\nglobalThis.Consumer=NegotiatedVideo;',c);
   let count=0;new c.Consumer(()=>{},()=>count++).configure(config());assert.equal(count,1);
 });
-test('bounded buffering, support timeout and decode overload fall back without dropping reference frames',async()=>{
+test('bounded buffering and support timeout recover while temporary decode pressure preserves reference frames',async()=>{
   const pending=harness(()=>new Promise(()=>{}));pending.consumer.configure(config());
-  for(let i=0;i<9;i++)pending.consumer.push(key);assert.equal(pending.fallback.length,1);assert.equal(pending.consumer.pending.length,0);
+  for(let i=0;i<33;i++)pending.consumer.push(key);assert.equal(pending.fallback.length,1);assert.equal(pending.consumer.pending.length,0);
   const timeout=harness(()=>new Promise(()=>{}));timeout.consumer.configure(config());[...timeout.timers.values()][0]();
   assert.equal(timeout.fallback.length,1);
   const h=harness();h.consumer.configure(config());await settle();h.consumer.push(key);h.instances[0].decodeQueueSize=8;h.consumer.push(delta);
-  assert.equal(h.decoded.length,1);assert.equal(h.fallback.length,1);
+  assert.equal(h.decoded.length,1);assert.equal(h.fallback.length,0);assert.equal(h.consumer.pending.length,1);
+  h.instances[0].decodeQueueSize=0;h.instances[0].callbacks.output({close(){}});
+  assert.equal(h.decoded.length,2);assert.equal(h.decoded[1].type,'delta');assert.equal(h.consumer.pending.length,0);
 });
 test('Annex B type parsing tolerates AUD and SEI prefixes and rejects missing parameter sets or forbidden headers',()=>{
   const c=vm.createContext({});vm.runInContext(source,c);
@@ -68,11 +70,26 @@ test('Annex B type parsing tolerates AUD and SEI prefixes and rejects missing pa
 });
 test('a decoder that accepts input without output is bounded and eventually requests JPEG',async()=>{
   const h=harness();h.consumer.configure(config());await settle();h.consumer.push(key);
-  for(let i=0;i<8;i++)h.consumer.push(delta);
+  for(let i=0;i<40;i++)h.consumer.push(delta);
   assert.equal(h.decoded.length,8);assert.equal(h.fallback.length,1);
   const stalled=harness();stalled.consumer.configure(config());await settle();stalled.consumer.push(key);
   [...stalled.timers.values()][0]();assert.equal(stalled.fallback.length,1);
   const healthy=harness();healthy.consumer.configure(config());await settle();healthy.consumer.push(key);
   let closed=0;healthy.instances[0].callbacks.output({close:()=>closed++});
   assert.equal(healthy.consumer.inFlight,0);assert.equal(healthy.timers.size,0);assert.equal(closed,1);
+});
+test('a slow first output does not falsely fall back and queued references drain in order',async()=>{
+  const h=harness();h.consumer.configure(config());await settle();h.consumer.push(key);
+  for(let i=0;i<11;i++){h.advance(33);h.consumer.push(delta);}
+  assert.equal(h.decoded.length,8);assert.equal(h.consumer.pending.length,4);assert.equal(h.fallback.length,0);
+  for(let i=0;i<12;i++)h.instances[0].callbacks.output({close(){}});
+  assert.equal(h.decoded.length,12);assert.equal(h.consumer.inFlight,0);assert.equal(h.consumer.pending.length,0);
+  assert.deepEqual(h.decoded.map(c=>c.type),['key',...Array(11).fill('delta')]);assert.equal(h.fallback.length,0);
+});
+test('sustained queued latency after output starts requests JPEG instead of accumulating lag',async()=>{
+  const h=harness();h.consumer.configure(config());await settle();h.consumer.push(key);
+  h.instances[0].callbacks.output({close(){}});
+  for(let i=0;i<9;i++)h.consumer.push(delta);
+  h.advance(501);h.instances[0].callbacks.output({close(){}});
+  assert.equal(h.fallback.length,1);assert.equal(h.consumer.pending.length,0);
 });

@@ -37,12 +37,12 @@ export class SasControl {
     schedule = (fn, delay) => setTimeout(fn, delay), unschedule = timer => clearTimeout(timer) }) {
     Object.assign(this, { send, changed, report, now, makeId, schedule, unschedule });
     this.connection = null; this.session = ''; this.capability = null; this.pending = null;
-    this.expiryTimer = null; this.expiresAt = null;
+    this.expiryTimer = null; this.expiresAt = null; this.deadlines = new Map();
   }
   bind(connection, session, expiresAt = null) {
     if (connection === this.connection && session === this.session && expiresAt === this.expiresAt) return;
     this.invalidate();
-    this.connection = connection; this.session = session; this.expiresAt = expiresAt;
+    this.connection = connection; this.session = session; this.expiresAt = expiresAt; this.deadlines.clear();
     this.publish();
   }
   invalidate() {
@@ -72,10 +72,12 @@ export class SasControl {
     if (!connection || connection !== this.connection) return true;
     if (message.t === 'control_capabilities') {
       if (!validSasCapability(message, this.session, this.now(), this.expiresAt) ||
-          this.capability?.generation === message.generation && this.capability.expires_at !== message.expires_at) {
+          (this.deadlines.has(message.generation) && this.deadlines.get(message.generation) !== message.expires_at ||
+            !this.deadlines.has(message.generation) && this.deadlines.size >= 128)) {
         this.invalidate(); this.publish(); return true;
       }
       if (!message.sas.available || this.capability?.generation !== message.generation) this.finish('uncertain');
+      this.deadlines.set(message.generation, message.expires_at);
       this.capability = structuredClone(message);
       this.armExpiry(); this.publish(); return true;
     }

@@ -87,6 +87,9 @@ test('disconnect, generation change, malformed/lost capability and expiry retire
 test('same-generation updates cannot extend expiry; delayed browser timers do not admit expired results', () => {
   const h = harness(); h.control.consume(capability(), h.connection);
   h.control.consume(capability({ expires_at: 9999 }), h.connection); assert.equal(h.control.request(), false);
+  h.control.consume(capability({ expires_at: 9999 }), h.connection); assert.equal(h.control.request(), false);
+  h.control.consume(capability({ extra: true }), h.connection);
+  h.control.consume(capability({ expires_at: 9999 }), h.connection); assert.equal(h.control.request(), false);
   h.control.consume(capability(), h.connection); h.control.request(); h.jump(5001);
   h.control.consume(result(), h.connection); assert.deepEqual(h.reports, ['uncertain']);
 });

@@ -452,9 +452,17 @@ class RemoteAudioPlayer {
     this.element=new Audio();this.element.srcObject=this.destination.stream;
     this.nextTime=0;this.lastScheduled=0;
   }
-  async setSink(id){
-    this.sinkId=id;
-    if(this.element&&typeof this.element.setSinkId==='function')await this.element.setSinkId(id);
+  setSink(id){
+    const apply=async()=>{
+      this.ensure();
+      if(typeof this.element.setSinkId==='function')await this.element.setSinkId(id);
+      else if(id!==''&&id!=='default')throw new Error('Output selection is unavailable');
+      this.sinkId=id;
+    };
+    const operation=(this.sinkQueue||Promise.resolve()).then(apply);
+    // A rejected selection must not poison later selections or playback startup.
+    this.sinkQueue=operation.catch(()=>{});
+    return operation;
   }
   async unlock(){
     if(!this.enabled)return;
@@ -464,7 +472,7 @@ class RemoteAudioPlayer {
       // Both starts happen in the gesture task; do not await one before the other.
       await Promise.all([this.context.resume(),this.element.play()]);
       if(generation!==this.generation||!this.enabled)return;
-      await this.setSink(this.sinkId);
+      await this.sinkQueue;
       if(generation!==this.generation||!this.enabled)return;
       if(this.context.state==='running'){if(this.state!=='playing')this.state='waiting';this.drain();}
     }catch(error){if(generation===this.generation&&this.enabled)this.state=error?.name==='NotAllowedError'?'blocked':'error';}
@@ -518,6 +526,16 @@ class RemoteAudioPlayer {
 }
 const remoteAudio=new RemoteAudioPlayer();
 function stopAudioPlayback(){remoteAudio.stop();}
+let audioOutputRequest=0;
+async function selectAudioOutput(id){
+  const request=++audioOutputRequest;
+  try{await remoteAudio.setSink(id);}
+  catch{if(request===audioOutputRequest)postPipelineStatus('audio',audioEnabled,'The output device could not be selected.');}
+  if(request!==audioOutputRequest)return;
+  audioSinkId=remoteAudio.sinkId;
+  if(window.parent!==window)window.parent.postMessage({type:'audioDeviceSelected',context:'output',deviceId:audioSinkId||'default'},window.location.origin);
+}
+
 function postPipelineStatus(pipeline,enabled,error){
   const msg={type:"pipelineStatusUpdate",[pipeline]:!!enabled};
   if(error) msg.error=error;
@@ -1224,8 +1242,7 @@ window.addEventListener("message",(event)=>{
         // Parent owns live mic capture + device swap; viewer only tracks the id.
       }
       if(msg.context==="output"){
-        audioSinkId=typeof msg.deviceId==="string"?msg.deviceId:"";
-        remoteAudio.setSink(audioSinkId).catch(()=>postPipelineStatus('audio',audioEnabled,'The output device could not be selected.'));
+        selectAudioOutput(typeof msg.deviceId==="string"?msg.deviceId:"");
       }
       break;
     case "setManualResolution":

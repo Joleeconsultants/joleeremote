@@ -74,3 +74,5 @@ See also `docs/chrome.md`.
 `0027-image-clipboard-delivery.patch`: wire bounded inbound clipboard delivery and existing result notifications, including explicit pending-Paste feedback. Hop-specific delivery queue lives in the preserved `src/jolee-clipboard-delivery.js` overlay. No panel layout changes.
 
 `0030-sas-command-results.patch`: gate the existing shortcut on the active agent capability and show correlated outcomes using existing notifications. No new layout.
+
+`0031-confirm-audio-output.patch`: keep the existing speaker dropdown on the applied output until the core confirms routing; source-check returned selections.

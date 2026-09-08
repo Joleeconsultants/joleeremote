@@ -1,0 +1,22 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index e3ea3b1..1585628 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -2205,7 +2205,6 @@ function Sidebar() {
+   };
+   const handleAudioOutputChange = (event) => {
+     const deviceId = event.target.value;
+-    setSelectedOutputDeviceId(deviceId);
+     postToCore(
+       { type: "audioDeviceSelected", context: "output", deviceId: deviceId },
+       window.location.origin
+@@ -3016,7 +3015,8 @@ function Sidebar() {
+             setDashboardClipboardTruncated(message.truncated === true);
+           }
+         } else if (message.type === "audioDeviceSelected") {
+-          if (message.deviceId) {
++          if (event.source !== document.getElementById('jolee-core')?.contentWindow) return;
++          if (typeof message.deviceId === 'string') {
+             if (message.context === "input")
+               setSelectedInputDeviceId(message.deviceId);
+             else if (message.context === "output")

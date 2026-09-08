@@ -427,6 +427,39 @@ function audioHarness() {
   return {player:c.player,sources,resolve:()=>decodeResolve({duration:0.25})};
 }
 
+test('failed output routing preserves the last applied sink and audio can start again',async()=>{
+  const {player}=audioHarness();player.ensure();await player.setSink('speaker-ok');
+  const apply=player.element.setSinkId.bind(player.element);
+  player.element.setSinkId=id=>id==='missing'?Promise.reject(new Error('device removed')):apply(id);
+  await assert.rejects(player.setSink('missing'));
+  assert.equal(player.sinkId,'speaker-ok');assert.equal(player.element.sink,'speaker-ok');
+  await player.unlock();assert.equal(player.state,'waiting');
+});
+
+test('output selection before playback is applied and concurrent changes finish in user order',async()=>{
+  const {player}=audioHarness();await player.setSink('first');
+  assert.equal(player.element.sink,'first');
+  const pending=[];player.element.setSinkId=id=>new Promise(resolve=>pending.push(()=>{player.element.sink=id;resolve();}));
+  const a=player.setSink('second'),b=player.setSink('third');
+  await new Promise(done=>setImmediate(done));assert.equal(pending.length,1);
+  pending.shift()();await a;await new Promise(done=>setImmediate(done));
+  assert.equal(pending.length,1);pending.shift()();await b;
+  assert.equal(player.sinkId,'third');assert.equal(player.element.sink,'third');
+});
+
+test('output UI feedback reports the applied sink and ignores superseded requests',async()=>{
+  const messages=[],errors=[],pending=[];
+  const remoteAudio={sinkId:'default',setSink:id=>new Promise((resolve,reject)=>pending.push({id,resolve:()=>{remoteAudio.sinkId=id;resolve();},reject}))};
+  const c=viewerContext({remoteAudio,audioEnabled:true,audioSinkId:'default',postPipelineStatus:(...args)=>errors.push(args),
+    window:{parent:{postMessage:m=>messages.push(m)},location:{origin:'https://test.invalid'}}});
+  vm.runInContext(html.slice(html.indexOf('let audioOutputRequest='),html.indexOf('function postPipelineStatus(')),c);
+  const a=c.selectAudioOutput('speaker'),b=c.selectAudioOutput('missing');
+  pending[0].resolve();await a;assert.equal(messages.length,0);
+  pending[1].reject(Error('missing'));await b;
+  assert.equal(messages.at(-1).deviceId,'speaker');assert.equal(c.audioSinkId,'speaker');assert.equal(errors.length,1);
+  const d=c.selectAudioOutput('');pending[2].resolve();await d;assert.equal(messages.at(-1).deviceId,'default');
+});
+
 test('audio buffers sequential playback, measures signal and expires silence vs missing audio',async()=>{
   const {player,sources}=audioHarness();const bytes=new Uint8Array([1,2]);
   for(let i=0;i<7;i++)player.push(bytes);

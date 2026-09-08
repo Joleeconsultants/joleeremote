@@ -2664,7 +2664,7 @@ function Sidebar() {
           return t("sections.stats.tooltipFps", { value: clientFps });
         case "audio": {
           const playback = audioLevel === null ? `Audio: ${audioPlaybackStatus}`
-            : t("sections.stats.tooltipAudioLevel", { value: audioLevel });
+            : t("sections.stats.tooltipAudioLevel", { value: audioLevel === 0 && audioPlaybackStatus === 'playing' ? '<1' : audioLevel });
           return `${playback}; ${audioCaptureDescription}`;
         }
         case "bandwidth":

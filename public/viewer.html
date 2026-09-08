@@ -497,7 +497,7 @@ class RemoteAudioPlayer {
     this.analyser.getFloatTimeDomainData(this.samples);
     let sum=0;for(const sample of this.samples)sum+=sample*sample;
     const level=Math.min(100,Math.round(Math.sqrt(sum/this.samples.length)*141));
-    return {level,state:level===0?'silent':'playing'};
+    return {level,state:sum===0?'silent':'playing'};
   }
   stop(){
     this.generation++;this.queue=[];this.nextTime=0;this.lastScheduled=0;

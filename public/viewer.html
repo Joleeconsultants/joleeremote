@@ -1147,7 +1147,7 @@ setInterval(sendLatencyProbe,5000);
 // Track only button presses owned by this viewer; never replay them after reconnect.
 function createPointerInput(send, point, paired){
   let pointer=null, position=null;
-  const held=new Set(), bits=[1,4,2,8,16];
+  const held=new Set(), bits=[1,4,2];
   function location(event, clamp){
     const p=point(event);
     if(!Number.isFinite(p.x)||!Number.isFinite(p.y)) return null;
@@ -1159,7 +1159,7 @@ function createPointerInput(send, point, paired){
   function cancel(){for(const b of held)emit("up",b);reset();}
   return {
     down(event){
-      if(!paired()||event.isPrimary===false||!Number.isInteger(event.button)||event.button<0||event.button>4||
+      if(!paired()||event.isPrimary===false||!Number.isInteger(event.button)||event.button<0||event.button>2||
           pointer!==null&&pointer!==event.pointerId) return false;
       const p=location(event,false);if(!p)return false;
       pointer=event.pointerId;position=p;
@@ -1178,7 +1178,7 @@ function createPointerInput(send, point, paired){
         }
         if(!held.size)pointer=null;
       }
-      emit("move",pointer===null?0:event.buttons);
+      emit("move",pointer===null?0:event.buttons&7);
     },
     up(event){if(pointer!==event.pointerId)return;position=location(event,true)||position;cancel();},
     lost(event){if(pointer===event.pointerId)cancel();},

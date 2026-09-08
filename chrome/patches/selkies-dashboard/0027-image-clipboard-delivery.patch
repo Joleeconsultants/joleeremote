@@ -1,0 +1,169 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index 4d23de8..7f39903 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -70,6 +70,7 @@ import {
+   writeInstalledApps,
+ } from "../jolee-shims/app-commands.js";
+ import { postToCore, debounceSettings, listAudioDevices } from "../jolee-bridge.js";
++import { createClipboardDelivery, clipboardImageBlob } from "../jolee-clipboard-delivery.js";
+ import {
+   startParentMicrophone,
+   stopParentMicrophone,
+@@ -1401,6 +1402,9 @@ function Sidebar() {
+     const saved = localStorage.getItem(getPrefixedKey("enable_binary_clipboard"));
+     return saved !== null ? saved === 'true' : DEFAULT_ENABLE_BINARY_CLIPBOARD;
+   });
++  const binaryClipboardEnabledRef = useRef(enableBinaryClipboard);
++  binaryClipboardEnabledRef.current = enableBinaryClipboard;
++  const clipboardDeliveryRef = useRef(null);
+   const [presetValue, setPresetValue] = useState("");
+   const [clientFps, setClientFps] = useState(0);
+   const [audioLevel, setAudioLevel] = useState(null);
+@@ -2326,6 +2330,8 @@ function Sidebar() {
+   };
+   const handleEnableBinaryClipboardToggle = () => {
+     const newState = !enableBinaryClipboard;
++    binaryClipboardEnabledRef.current = newState;
++    if (!newState) clipboardDeliveryRef.current?.clearImages();
+     setEnableBinaryClipboard(newState);
+     debouncedPostSetting({ enable_binary_clipboard: newState });
+   };
+@@ -2460,8 +2466,10 @@ function Sidebar() {
+     if (document.fullscreenElement) exitFullscreen();
+     else postToCore({ type: "requestFullscreen" }, window.location.origin);
+   };
+-  const handleClipboardChange = (event) =>
++  const handleClipboardChange = (event) => {
++    clipboardDeliveryRef.current?.clear();
+     setDashboardClipboardContent(event.target.value);
++  };
+   const clipboardImageInputRef = useRef(null);
+   /**
+    * Hands a picked image to the core's `clipboardImageUpdate` path (a File
+@@ -2472,6 +2480,7 @@ function Sidebar() {
+   const handleClipboardImageUpload = (event) => {
+     const file = event.target.files && event.target.files[0];
+     if (file && file.type.startsWith("image/")) {
++      clipboardDeliveryRef.current?.clear();
+       postToCore(
+         { type: "clipboardImageUpdate", imageBlob: file },
+         window.location.origin
+@@ -2759,6 +2768,66 @@ function Sidebar() {
+     return () => clearInterval(intervalId);
+   }, [isOpen]);
+ 
++  // The original core defers browser-blocked clipboard writes until a gesture.
++  // Keep the same panel and report actual browser outcomes in existing notices.
++  useEffect(() => {
++    const frame = document.getElementById('jolee-core');
++    const delivery = createClipboardDelivery({
++      enabled: content => typeof content === 'string' || binaryClipboardEnabledRef.current,
++      write: content => typeof content === 'string' ? navigator.clipboard.writeText(content)
++        : navigator.clipboard.write([new ClipboardItem({ 'image/png': content })]),
++      report: outcome => {
++        const id = 'clipboard-local-result';
++        const message = outcome === 'applied' ? 'PC clipboard copied to this device.'
++          : outcome === 'gesture_required' ? 'PC clipboard received. Tap the remote screen to allow copying to this device.'
++          : 'This browser could not copy the PC clipboard to this device.';
++        setNotifications(prev => [...prev.filter(n => n.id !== id), {
++          id, fileName: 'Clipboard', status: outcome === 'applied' ? 'notice' : 'warn',
++          message, timestamp: Date.now(), fadingOut: false,
++        }].slice(-MAX_NOTIFICATIONS));
++        scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++      },
++    });
++    clipboardDeliveryRef.current = delivery;
++    const receive = event => {
++      if (event.origin !== window.location.origin || event.source !== frame?.contentWindow) return;
++      const message = event.data;
++      if (message?.type === 'status' && message.state !== 'paired') delivery.clear();
++      if (message?.type === 'clipboardContentUpdate') {
++        delivery.clear();
++        if (typeof message.text === 'string' && message.text.length <= 16384 && !message.text.includes('\0') && !message.truncated)
++          delivery.receive(message.text);
++        return;
++      }
++      if (message?.type !== 'clipboardImageUpdate' || !binaryClipboardEnabledRef.current) return;
++      try { delivery.receive(clipboardImageBlob(message)); } catch { delivery.clear(); }
++    };
++    const gesture = event => {
++      if (!event.isTrusted || !['surface', 'keyboard-input-assist'].includes(event.target?.id)) return;
++      delivery.flush();
++    };
++    let coreDocument;
++    const bind = () => {
++      delivery.clear();
++      coreDocument?.removeEventListener('pointerdown', gesture, true);
++      coreDocument?.removeEventListener('keydown', gesture, true);
++      try { coreDocument = frame?.contentDocument; } catch { coreDocument = null; }
++      coreDocument?.addEventListener('pointerdown', gesture, true);
++      coreDocument?.addEventListener('keydown', gesture, true);
++    };
++    bind();
++    frame?.addEventListener('load', bind);
++    window.addEventListener('message', receive);
++    return () => {
++      delivery.clear();
++      clipboardDeliveryRef.current = null;
++      frame?.removeEventListener('load', bind);
++      coreDocument?.removeEventListener('pointerdown', gesture, true);
++      coreDocument?.removeEventListener('keydown', gesture, true);
++      window.removeEventListener('message', receive);
++    };
++  }, [scheduleNotificationRemoval]);
++
+   /** The core message listener; the module docblock lists the message types handled. */
+   useEffect(() => {
+     const handleWindowMessage = (event) => {
+@@ -2775,20 +2844,45 @@ function Sidebar() {
+             status: 'warn', message: text, timestamp: Date.now(), fadingOut: false,
+           }].slice(-MAX_NOTIFICATIONS));
+           scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
+-        } else if (message.type === "clipboardResult") {
++        } else if (message.type === 'clipboardPasteResult') {
++          if (event.source !== document.getElementById('jolee-core')?.contentWindow ||
++              !['injected', 'rejected', 'uncertain'].includes(message.status)) return;
++          const reasons = {
++            unsupported: 'Wait for the clipboard update, then press Paste again.',
++            modified_shortcut: 'Wait for the clipboard update before using this modified Paste shortcut.',
++            clipboard_unconfirmed: 'The PC did not confirm the clipboard update. Paste was cancelled.',
++            superseded: 'Clipboard content changed. Paste was cancelled.',
++            conflicting_input: 'Another input cancelled the pending Paste.',
++            target_unavailable: 'The target changed or is unavailable. Paste was cancelled.',
++            modifiers_active: 'Release the shortcut keys before trying Paste again.',
++            session_unavailable: 'The session is unavailable. Paste was cancelled.',
++          };
++          const id = 'clipboard-paste-result';
++          setNotifications(prev => [...prev.filter(n => n.id !== id), {
++            id, fileName: 'Clipboard', status: message.status === 'injected' ? 'notice' : 'warn',
++            message: message.status === 'injected' ? 'Paste shortcut sent.' : message.status === 'uncertain'
++              ? 'Paste was not confirmed. Check the target before trying again.'
++              : reasons[message.reason] || 'Paste was cancelled. Check the clipboard and try again.',
++            timestamp: Date.now(), fadingOut: false,
++          }].slice(-MAX_NOTIFICATIONS));
++          scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++        } else if ((message.type === "clipboardResult" || message.type === "clipboardReadError")) {
+           if (event.source !== document.getElementById('jolee-core')?.contentWindow) return;
+-          if (!['applied', 'rejected'].includes(message.status)) return;
++          if (message.type === 'clipboardResult' && !['applied', 'rejected'].includes(message.status)) return;
+           const reasons = {
+             invalid_text: 'Clipboard text is too large or contains unsupported characters.',
++            invalid_image: 'The clipboard image could not be decoded.',
++            image_too_large: 'The clipboard image exceeds the supported size or dimensions.',
+             clipboard_unavailable: 'The PC could not update its clipboard.',
+             session_unavailable: 'The desktop session is unavailable.',
+-            unsupported: 'Clipboard text is not supported by this PC yet.',
++            unsupported: 'This clipboard operation or image format is not supported.',
+             confirmation_timeout: 'The PC did not confirm the clipboard update.',
+           };
+-          const id = 'clipboard-write-result';
++          const readError = message.type === 'clipboardReadError';
++          const id = readError ? 'clipboard-read-result' : 'clipboard-write-result';
+           setNotifications(prev => [...prev.filter(n => n.id !== id), {
+             id, fileName: 'Clipboard', status: message.status === 'applied' ? 'notice' : 'warn',
+-            message: message.status === 'applied' ? 'PC clipboard updated.' : reasons[message.reason] || 'The PC did not update its clipboard.',
++            message: message.status === 'applied' ? 'PC clipboard updated.' : (readError ? 'PC clipboard transfer failed. ' : '') + (reasons[message.reason] || 'The PC did not update its clipboard.'),
+             timestamp: Date.now(), fadingOut: false,
+           }].slice(-MAX_NOTIFICATIONS));
+           scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);

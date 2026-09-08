@@ -33,8 +33,10 @@ export type ClipboardImageInput = {
   t: "clipboard";
   mime: string;
   data: string;
+  id?: string;
 };
 export type ClipboardInput = ClipboardTextInput | ClipboardImageInput;
+export type ClipboardPasteInput = { t: "clipboard_paste"; id: string; clipboard_id: string; paste_token: string };
 
 export type ResizeInput = {
   t: "resize";
@@ -83,6 +85,7 @@ export type InputPayload =
   | WheelInput
   | KeyInput
   | ClipboardInput
+  | ClipboardPasteInput
   | ResizeInput
   | CssScalingInput
   | SettingsInput
@@ -154,18 +157,27 @@ function parseObject(obj: Record<string, unknown>): InputPayload | null {
       return { t: "key", e, key: obj.key, code: obj.code };
     }
     case "clipboard": {
+      if (obj.id !== undefined && (typeof obj.id !== "string" || obj.id.length < 1 || obj.id.length > 64)) return null;
       if (
         typeof obj.mime === "string" &&
         obj.mime.indexOf("image/") === 0 &&
         typeof obj.data === "string"
       ) {
-        return { t: "clipboard", mime: obj.mime, data: obj.data };
+        if (obj.text !== undefined) return null;
+        return { t: "clipboard", mime: obj.mime, data: obj.data, ...(obj.id !== undefined ? { id: obj.id as string } : {}) };
       }
       if (typeof obj.text === "string") {
         if (obj.id !== undefined && (typeof obj.id !== "string" || obj.id.length < 1 || obj.id.length > 64)) return null;
         return { t: "clipboard", text: obj.text, ...(obj.id !== undefined ? { id: obj.id as string } : {}) };
       }
       return null;
+    }
+    case "clipboard_paste": {
+      if (Object.keys(obj).some(key => !['t', 'id', 'clipboard_id', 'paste_token'].includes(key))) return null;
+      if (typeof obj.id !== "string" || obj.id.length < 1 || obj.id.length > 64 ||
+          typeof obj.clipboard_id !== "string" || obj.clipboard_id.length < 1 || obj.clipboard_id.length > 64 ||
+          typeof obj.paste_token !== "string" || !/^[0-9a-f]{32}$/i.test(obj.paste_token)) return null;
+      return { t: "clipboard_paste", id: obj.id, clipboard_id: obj.clipboard_id, paste_token: obj.paste_token };
     }
     case "resize": {
       if (!isFiniteNumber(obj.w) || !isFiniteNumber(obj.h)) return null;

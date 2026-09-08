@@ -157,16 +157,26 @@ List/get use UTF-8 JSON inside the existing input / frame envelopes. The consume
 
 | Operation | Direction / kind | JSON payload shape |
 | --- | --- | --- |
-| List request | browser/Worker → agent, `0x02` input | `{"t":"filesList"}` |
-| List response | agent → browser/Worker, `0x01` frame | `{"t":"filesList","files":[{"name","size","mtime"}]}` |
-| Get request | browser/Worker → agent, `0x02` input | `{"t":"filesGet","name":"report.txt"}` |
+| List request | browser/Worker → agent, `0x02` input | `{"t":"filesList","path":"a/b"}` (`path` optional) |
+| List response | agent → browser/Worker, `0x01` frame | `{"t":"filesList","path":"a/b","files":[{"id":"a/b/report.txt","name":"report.txt","type":"file","size":123,"mtime":1788819897275}]}` |
+| Get request | browser/Worker → agent, `0x02` input | `{"t":"filesGet","name":"a/b/report.txt"}` |
 | Get success | agent → browser/Worker, `0x01` frame | `{"t":"filesGet","name","mime","data"}` |
 | Get error | agent → browser/Worker, `0x01` frame | `{"t":"filesGet","name","error":"not_found"\|"too_large"\|"unavailable"}` |
 
-- Shapes use field-name shorthand where values vary. Listing is non-recursive (root only); `mtime` is Unix milliseconds UTC.
-- `filesGet` accepts a basename only: no path separators (`/` or `\`) or `..`. Success `data` is base64.
+- Listing returns one directory level. Omitted/empty request `path` means root; responses echo `path` (`""` at root). Each entry has a root-relative `id`, immediate basename `name`, `type: "dir" | "file"`, byte `size` (0 for directories), and UTC Unix millisecond `mtime`. No synthetic `..` entries; omit reparse points.
+- `filesGet.name` accepts a basename or nested relative ID. Success `data` is base64; responses echo the requested ID. Upload remains a basename into the root.
+- HTTP and RPC paths must be clean `/`-separated relative paths: reject backslashes, empty segments, `.`/`..`, absolute/drive paths, control characters, `<>:"|?*`, trailing dots/spaces, Windows reserved device names, and alternate data streams. The agent must enforce root containment and reject reparse/junction traversal; normalize agent-internal backslashes to `/` in IDs/path echoes.
+- `askAgentFilesList(path?)` correlates replies by echoed path; `askAgentFilesGet(name)` correlates by relative ID. Invalid list replies do not resolve a wait (12-second timeout); missing agents return unavailable. Legacy root replies without `path`/`id`/`type` are accepted as root files. Subfolders require agent 0.5.89+; legacy root list/get works with 0.5.87+.
 - Every whole binary envelope must be ≤ **1 MiB** (`MAX_ENVELOPE_BYTES = 1048576`), including the two-byte header, JSON, and base64 expansion — the same cap as existing file pull. No new transfer protocol or envelope kinds.
 - UI **Download Files** and the `letleeadmin` CLI target the same PC folder via the Worker asking the paired agent. A Session DO inbox, if a consumer uses one, is interim only; the end state is the PC folder.
+
+#### Public HTTP folder browse
+
+`GET /api/files/?session=SESSION&token=TOKEN` serves the vendored Selkies fancyindex. `GET /api/files/a/b/` lists `a/b`; `GET /api/files/a/b/report.txt` downloads that relative ID with `Content-Disposition: attachment`. Directory URLs end in `/`; `/api/files` redirects to `/api/files/`. Add `format=json` to a directory URL for `{sessionId, source:"pc", path, files:[{id,name,type,size,mtime}]}`.
+
+Supply the session via `?session=` or `jolee_session` cookie; supply a session token via `?token=`, `Authorization: Bearer TOKEN`, or `jolee_browser_token` cookie (in that order). Both browser and agent session tokens are accepted. A different explicit session cannot reuse stale cookie credentials. Successful responses set Secure, HttpOnly, SameSite=Lax cookies scoped to `/api/files`; responses are `no-store`. The HTML uses those cookies for folder navigation. No Access/service authentication is required or implemented by this public hop.
+
+Missing credentials return 401, invalid/expired session tokens 403, unsafe paths 400, missing files 404, oversized downloads 413, and unavailable agents/timeouts 503. HTTP writes return 405; uploads keep the existing file envelope path.
 
 ### Leftover (no hop yet)
 

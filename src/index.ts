@@ -1,5 +1,6 @@
 import { getServerByName, routePartykitRequest } from "partyserver";
 import { Session, type Env } from "./session";
+import { handleFilesApi, isFilesApiPath } from "./files";
 import { randomToken } from "./tokens";
 import {
   clampTtlSeconds,
@@ -32,6 +33,8 @@ export default {
     }
 
     const url = new URL(request.url);
+
+    if (isFilesApiPath(url.pathname)) return handleFilesApi(request, env);
 
     if (request.method === "POST" && url.pathname === "/sessions") {
       return withCors(await mint(request, env));

@@ -11,6 +11,7 @@
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Session"] }
   ],
+  "rules": [{ "type": "Text", "globs": ["**/*.html"], "fallthrough": true }],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",

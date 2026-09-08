@@ -64,6 +64,14 @@ export {
 } from "./agent-frames";
 
 export {
+  encodeFilesListRequest,
+  encodeFilesGetRequest,
+  filesListFromFrame,
+  filesGetFromFrame,
+  isSafeFilesPath,
+  type FilesListEntry,
+  type FilesListFrame,
+  type FilesGetFrame,
   parseJsonFrameObject,
   clipboardTextFromFrame,
   cursorFromFrame,

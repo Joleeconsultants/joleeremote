@@ -417,7 +417,8 @@ describe("session hop", () => {
     const result = await askPromise;
     expect(result).toEqual({
       ok: true,
-      files: [{ name: "note.txt", size: 4, mtime: 1_700_000_000_000 }],
+      path: "",
+      files: [{ id: "note.txt", name: "note.txt", type: "file", size: 4, mtime: 1_700_000_000_000 }],
     });
 
     agent.close(1000, "done");
@@ -474,4 +475,124 @@ describe("session hop", () => {
     expect(result).toEqual({ ok: false, error: "agent_unavailable" });
   });
 
+});
+
+describe("public PC files HTTP", () => {
+  function filesUrl(m: Minted, path = "", query = "") {
+    return `https://example.com/api/files/${path}?session=${m.sessionId}&token=${m.browserToken}${query}`;
+  }
+  function reply(agent: WebSocket, body: unknown) {
+    agent.send(encodeEnvelope("frame", JSON.stringify(body)));
+  }
+  async function requestFrame(agent: WebSocket) {
+    const frame = decodeEnvelope(await waitBinary(agent));
+    expect(frame?.kind).toBe("input");
+    return JSON.parse(new TextDecoder().decode(frame!.payload));
+  }
+
+  it("browses root and nested folders with stock shell, cookies, and JSON", async () => {
+    const m = await mint();
+    const agent = await openWs(m.joins.agent);
+    const root = SELF.fetch(filesUrl(m));
+    expect(await requestFrame(agent)).toEqual({ t: "filesList" });
+    reply(agent, { t: "filesList", path: "", files: [{ id: "a & b", name: "a & b", type: "dir", size: 0, mtime: 0 }] });
+    const response = await root;
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("set-cookie")).toContain("HttpOnly");
+    const html = await response.text();
+    expect(html).toContain('id="list"');
+    expect(html).toContain('href="a%20%26%20b/"');
+    expect(html).toContain('href="../"');
+    expect(html).toContain("parentRow.style.display = 'none'");
+    expect(html).toContain('/api/files/</h1>');
+    const cookie = `jolee_session=${m.sessionId}; jolee_browser_token=${m.browserToken}`;
+    const nested = SELF.fetch("https://example.com/api/files/a%20%26%20b/", { headers: { cookie } });
+    expect(await requestFrame(agent)).toEqual({ t: "filesList", path: "a & b" });
+    const file = { id: "a & b/report.txt", name: "report.txt", type: "file", size: 2, mtime: 0 };
+    reply(agent, { t: "filesList", path: "a & b", files: [file] });
+    const nestedHtml = await (await nested).text();
+    expect(nestedHtml).toContain('/api/files/a &amp; b/</h1>');
+    expect(nestedHtml).toContain('href="report.txt"');
+    const json = SELF.fetch(filesUrl(m, "a%20%26%20b/", "&format=json"));
+    expect(await requestFrame(agent)).toEqual({ t: "filesList", path: "a & b" });
+    reply(agent, { t: "filesList", path: "a & b", files: [file] });
+    expect(await (await json).json()).toEqual({ sessionId: m.sessionId, source: "pc", path: "a & b", files: [file] });
+    agent.close();
+  });
+
+  it("correlates simultaneous folders independently, including legacy root replies", async () => {
+    const m = await mint();
+    const agent = await openWs(m.joins.agent);
+    const root = SELF.fetch(filesUrl(m, "", "&format=json"));
+    expect(await requestFrame(agent)).toEqual({ t: "filesList" });
+    const nested = SELF.fetch(filesUrl(m, "a/", "&format=json"));
+    expect(await requestFrame(agent)).toEqual({ t: "filesList", path: "a" });
+    reply(agent, { t: "filesList", path: "a", files: [] });
+    expect(await (await nested).json()).toMatchObject({ path: "a" });
+    reply(agent, { t: "filesList", files: [] });
+    expect(await (await root).json()).toMatchObject({ path: "" });
+    agent.close();
+  });
+
+  it("downloads a nested ID with Bearer auth and attachment disposition", async () => {
+    const m = await mint();
+    const agent = await openWs(m.joins.agent);
+    const download = SELF.fetch(`https://example.com/api/files/a/report.txt?session=${m.sessionId}`, { headers: { authorization: `Bearer ${m.browserToken}` } });
+    expect(await requestFrame(agent)).toEqual({ t: "filesGet", name: "a/report.txt" });
+    reply(agent, { t: "filesGet", name: "a/report.txt", mime: "text/plain", data: btoa("hi") });
+    const response = await download;
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toContain('attachment; filename="report.txt"');
+    expect(await response.text()).toBe("hi");
+    agent.close();
+  });
+
+  it("times out a folder ask when the agent replies for another path", async () => {
+    const m = await mint();
+    const agent = await openWs(m.joins.agent);
+    const listing = SELF.fetch(filesUrl(m, "a/", "&format=json"));
+    expect(await requestFrame(agent)).toEqual({ t: "filesList", path: "a" });
+    reply(agent, { t: "filesList", path: "other", files: [] });
+    const response = await listing;
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "timeout" });
+    agent.close();
+  });
+
+  it("rejects expired credentials before asking the agent", async () => {
+    const m = await mint();
+    const stub = env.Session.getByName(m.sessionId);
+    await runInDurableObject(stub, async (_instance, state) => {
+      state.storage.sql.exec("UPDATE session SET expires_at = ?", Date.now() - 1);
+    });
+    expect((await SELF.fetch(filesUrl(m))).status).toBe(403);
+  });
+
+  it.each([["not_found", 404], ["too_large", 413], ["unavailable", 503]] as const)("maps agent %s", async (error, status) => {
+    const m = await mint();
+    const agent = await openWs(m.joins.agent);
+    const download = SELF.fetch(filesUrl(m, "a/report.txt"));
+    await requestFrame(agent);
+    reply(agent, { t: "filesGet", name: "a/report.txt", error });
+    expect((await download).status).toBe(status);
+    agent.close();
+  });
+
+  it("rejects missing, stale and wrong credentials and handles unpaired sessions", async () => {
+    const m = await mint();
+    expect((await SELF.fetch("https://example.com/api/files/")).status).toBe(401);
+    expect((await SELF.fetch(filesUrl(m).replace(m.browserToken, "wrong"))).status).toBe(403);
+    expect((await SELF.fetch(`https://example.com/api/files/?session=${m.sessionId}`, { headers: { cookie: `jolee_session=old; jolee_browser_token=${m.browserToken}` } })).status).toBe(401);
+    expect((await SELF.fetch(filesUrl(m))).status).toBe(503);
+    expect((await SELF.fetch(filesUrl(m), { method: "POST" })).status).toBe(405);
+    const redirect = await SELF.fetch(filesUrl(m).replace("/files/?", "/files?"), { redirect: "manual" });
+    expect(redirect.status).toBe(308);
+    expect(redirect.headers.get("location")).toContain("/api/files/?");
+  });
+
+  it.each(["a%2f..%2fb", "a//b/", "%5cb", "C%3a/a", "a%00", "CON.txt", "a.%20/", "%ZZ", "/"])("rejects unsafe HTTP path %s", async (path) => {
+    const m = await mint();
+    expect((await SELF.fetch(filesUrl(m, path))).status).toBe(400);
+  });
 });

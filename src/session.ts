@@ -643,6 +643,16 @@ export class Session extends Server<Env> {
     }
   }
 
+  async endOwnedSession(browserToken: string): Promise<204 | 403 | 404> {
+    const row = this.loadRow();
+    if (!row || row.state === "ended") return 404;
+    if (!timingSafeEqual(browserToken, row.browser_token)) return 403;
+    // Check and mark ended in the same turn. A retained, expired owner may still
+    // clean up its session, but agent and other-session tokens cannot end it.
+    await this.teardown();
+    return 204;
+  }
+
   private async teardown(): Promise<void> {
     if (this.tearingDown) return;
     this.tearingDown = true;

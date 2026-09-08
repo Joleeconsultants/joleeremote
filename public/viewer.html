@@ -200,6 +200,7 @@ function setStatus(state,expiresAt=null){
     clipboardPaste.reset();
     setMicrophoneForwarding(false);
     resetRemoteCursor();
+    pointerInput.reset();
     invalidateVideoFrames();
     if(wasPaired){stopAudioPlayback();stopWebcam();}
     finishScreenRequest('rejected','session_unavailable');
@@ -1143,12 +1144,53 @@ function postStats(){
 }
 setInterval(postStats,1000);
 setInterval(sendLatencyProbe,5000);
+// Track only button presses owned by this viewer; never replay them after reconnect.
+function createPointerInput(send, point, paired){
+  let pointer=null, position=null;
+  const held=new Set(), bits=[1,4,2,8,16];
+  function location(event, clamp){
+    const p=point(event);
+    if(!Number.isFinite(p.x)||!Number.isFinite(p.y)) return null;
+    if(!clamp&&(p.x<0||p.x>1||p.y<0||p.y>1)) return null;
+    return {x:Math.max(0,Math.min(1,p.x)),y:Math.max(0,Math.min(1,p.y))};
+  }
+  function emit(e,b){if(paired()&&position)send({t:"pointer",e,...position,b});}
+  function reset(){held.clear();pointer=null;position=null;}
+  function cancel(){for(const b of held)emit("up",b);reset();}
+  return {
+    down(event){
+      if(!paired()||event.isPrimary===false||!Number.isInteger(event.button)||event.button<0||event.button>4||
+          pointer!==null&&pointer!==event.pointerId) return false;
+      const p=location(event,false);if(!p)return false;
+      pointer=event.pointerId;position=p;
+      if(!held.has(event.button)){held.add(event.button);emit("down",event.button);}
+      return true;
+    },
+    move(event){
+      if(event.isPrimary===false||pointer!==null&&pointer!==event.pointerId)return;
+      const p=location(event,pointer!==null);if(!p)return;position=p;
+      if(pointer!==null&&Number.isInteger(event.buttons)){
+        // Pointer events report chord changes through buttons on pointermove.
+        for(let b=0;b<bits.length;b++){
+          const pressed=!!(event.buttons&bits[b]);
+          if(held.has(b)&&!pressed){emit("up",b);held.delete(b);}
+          else if(!held.has(b)&&pressed){held.add(b);emit("down",b);}
+        }
+        if(!held.size)pointer=null;
+      }
+      emit("move",pointer===null?0:event.buttons);
+    },
+    up(event){if(pointer!==event.pointerId)return;position=location(event,true)||position;cancel();},
+    lost(event){if(pointer===event.pointerId)cancel();},
+    cancel,reset,
+  };
+}
+const pointerInput=createPointerInput(sendInput,pointerNorm,()=>sessionPaired);
 canvas.addEventListener("pointermove",(e)=>{
   pointerOver=true;
   moveOverlay(e);
   applyCursorMode();
-  const p=pointerNorm(e);
-  sendInput({t:"pointer",e:"move",x:p.x,y:p.y,b:e.buttons});
+  pointerInput.move(e);
 });
 canvas.addEventListener("touchstart",()=>{
   // Blur keyboard-input-assist on stream touch (Selkies overlayInput behavior).
@@ -1159,19 +1201,21 @@ canvas.addEventListener("touchstart",()=>{
   }
 },{passive:true});
 canvas.addEventListener("pointerdown",(e)=>{
+  if(!pointerInput.down(e))return;
   canvas.focus();
-  canvas.setPointerCapture(e.pointerId);
+  // Capture failure must not abort the matching release handling on window.
+  try{canvas.setPointerCapture(e.pointerId);}catch{}
   pointerOver=true;
   moveOverlay(e);
   applyCursorMode();
   unlockAudioFromGesture();
-  const p=pointerNorm(e);
-  sendInput({t:"pointer",e:"down",x:p.x,y:p.y,b:e.button});
 });
-canvas.addEventListener("pointerup",(e)=>{
-  const p=pointerNorm(e);
-  sendInput({t:"pointer",e:"up",x:p.x,y:p.y,b:e.button});
-});
+window.addEventListener("pointerup",(e)=>pointerInput.up(e));
+canvas.addEventListener("pointercancel",(e)=>pointerInput.lost(e));
+canvas.addEventListener("lostpointercapture",(e)=>pointerInput.lost(e));
+window.addEventListener("blur",()=>pointerInput.cancel());
+window.addEventListener("pagehide",()=>pointerInput.cancel());
+document.addEventListener("visibilitychange",()=>{if(document.hidden)pointerInput.cancel();});
 canvas.addEventListener("pointerenter",(e)=>{
   pointerOver=true;
   moveOverlay(e);

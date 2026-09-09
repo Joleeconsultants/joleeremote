@@ -6,7 +6,7 @@ import { USE_BROWSER_CURSORS_SPEC, resolveSpec } from '../chrome/selkies-dashboa
 const html=readFileSync(new URL('../public/viewer.html',import.meta.url),'utf8');
 function fixture(){
   const c=vm.createContext({Uint8Array,DataView,atob,Number,parseJsonFrameObject:x=>x,
-    canvas:{style:{}},cursorEl:{style:{},src:'fallback'},stage:{getBoundingClientRect:()=>({left:10,top:20})},
+    canvas:{style:{}},cursorEl:{style:{},src:'fallback'},stage:{addEventListener(){},getBoundingClientRect:()=>({left:10,top:20})},
     useBrowserCursors:false,nativeCursor:'default',pointerOver:true,agentCursorVisible:true,cursorHx:1,cursorHy:1,cursorPosition:null,
     DEFAULT_CURSOR_SVG:'fallback',DEFAULT_CURSOR_HX:1,DEFAULT_CURSOR_HY:1});
   vm.runInContext(html.slice(html.indexOf('function applyCursorMode('),html.indexOf('let sessionPaired='))+
@@ -57,9 +57,9 @@ test('drawn cursor remains at the touch location after lift but hides on mouse l
   f.pointerOver=true;f.leaveCursor({pointerType:'mouse'});assert.equal(f.cursorEl.style.display,'none');
 });
 
-test('cursor defaults select native on desktop and drawn on mobile without overriding saved choices',()=>{
+test('cursor defaults select drawn on desktop and mobile without overriding saved choices',()=>{
   for(const mobileClient of [true,false]){
-    assert.equal(resolveSpec(USE_BROWSER_CURSORS_SPEC,null,{mobileClient},()=>null),!mobileClient);
+    assert.equal(resolveSpec(USE_BROWSER_CURSORS_SPEC,null,{mobileClient},()=>null),false);
     for(const value of [true,false])assert.equal(resolveSpec(USE_BROWSER_CURSORS_SPEC,null,{mobileClient},()=>String(value)),value);
   }
   assert.equal(resolveSpec(USE_BROWSER_CURSORS_SPEC,{use_browser_cursors:{locked:true,value:false}},{mobileClient:false},()=> 'true'),false);

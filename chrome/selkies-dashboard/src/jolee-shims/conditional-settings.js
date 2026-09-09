@@ -71,11 +71,11 @@ export const RATE_CONTROL_SPEC = {
   propagate: (mode, _ctx, io) => io.postSetting({ rate_control_mode: mode }),
 };
 
-export const USE_BROWSER_CURSORS_SPEC = {...boolSpec(
+export const USE_BROWSER_CURSORS_SPEC = boolSpec(
   "use_browser_cursors",
-  true,
+  false,
   (value, _ctx, io) => io.postToCore({ type: "setUseBrowserCursors", value }),
-), conditional: ctx => typeof ctx.mobileClient === 'boolean' ? !ctx.mobileClient : undefined};
+);
 export const VIDEO_FULLCOLOR_SPEC = boolSpec(
   "video_fullcolor",
   false,

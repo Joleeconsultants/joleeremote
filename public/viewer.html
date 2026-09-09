@@ -9,7 +9,8 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
 main{padding:0;height:100%;position:relative}
 #stage{position:relative;width:100%;height:100%}
 canvas{display:block;width:100%;height:100%;background:#000;object-fit:contain;touch-action:none}
-canvas.exact-resolution{position:absolute;width:auto;height:auto;left:50%;top:50%;transform:translate(-50%,-50%);object-fit:fill}
+#stage.exact-resolution{overflow:auto;display:flex}
+canvas.exact-resolution{flex:none;width:auto;height:auto;margin:auto;object-fit:fill}
 #remote-cursor{position:absolute;left:0;top:0;pointer-events:none;user-select:none;z-index:2;display:none;max-width:none;border:0}
 #connection-status{position:absolute;top:16px;left:50%;transform:translateX(-50%);max-width:calc(100% - 64px);padding:12px 18px;border:1px solid #75839a;border-radius:8px;background:#222833;color:#e6ebf3;font:16px system-ui;z-index:4;pointer-events:none;text-align:center}
 #connection-status[hidden]{display:none}
@@ -25,9 +26,9 @@ canvas.exact-resolution{position:absolute;width:auto;height:auto;left:50%;top:50
 <main>
 <div id="stage">
 <canvas id="surface" width="640" height="360" tabindex="0"></canvas>
+</div>
 <img id="remote-cursor" alt="" draggable="false" />
 <div id="connection-status" role="status" aria-live="polite">Connecting…</div>
-</div>
 <input id="keyboard-input-assist" type="text" autocomplete="off" enterkeyhint="done" autocapitalize="off" spellcheck="false" aria-hidden="true" />
 </main>
 <script type="module">
@@ -63,7 +64,7 @@ let observedEncoder=null;
 let agentStatsReceivedAt=0;
 const printJobChunks=new Map();
 // Native mode uses local OS cursor types; drawn mode uses the remote bitmap.
-let useBrowserCursors=!(typeof matchMedia==='function'&&matchMedia('(pointer: coarse)').matches), pointerOver=false, agentCursorVisible=true;
+let useBrowserCursors=false, pointerOver=false, agentCursorVisible=true;
 let nativeCursor='default';
 const sessionState=new SessionState(({text,visible,state})=>{
   const notice=document.getElementById('connection-status');
@@ -73,6 +74,8 @@ let cursorHx=DEFAULT_CURSOR_HX, cursorHy=DEFAULT_CURSOR_HY, cursorPosition=null;
 cursorEl.src=DEFAULT_CURSOR_SVG;
 function applyScale(){
   canvas.classList.toggle("exact-resolution", !scaleLocally);
+  stage.classList.toggle("exact-resolution", !scaleLocally);
+  if(scaleLocally){stage.scrollLeft=0;stage.scrollTop=0;}
 }
 function applySmoothing(){
   ctx.imageSmoothingEnabled=!!antiAliasing;

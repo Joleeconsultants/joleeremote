@@ -8,7 +8,7 @@ import { SasControl } from '../public/sas-control.js';
 import { ClipboardPasteGate } from '../public/clipboard-paste.js';
 import { UploadControl } from '../public/upload-control.js';
 function viewerContext(globals) {
-  globals={printJobChunks:new Map(),sessionState:{set(){},frame(){}},...globals};
+  globals={printJobChunks:new Map(),stage:{classList:{toggle(){}},scrollLeft:0,scrollTop:0},sessionState:{set(){},frame(){}},...globals};
   return vm.createContext({ canvas:{dataset:{}},setMicrophoneForwarding:()=>{},resetRemoteCursor:()=>{},pointerInput:{reset(){}},clearTimeout:()=>{},session:'fixture-session', SasControl, structuredClone, sasControl:{consume:()=>false,request:()=>{},publish:()=>{}}, ClipboardPasteGate, clipboardPaste: new ClipboardPasteGate({ send() {}, report() {}, supported: () => false, connection: () => null }), ...globals,
     UploadControl,uploadControl:{bind(){},capability(){},consume(){return false;}},crypto:{subtle:webcrypto.subtle,...globals.crypto} });
 }

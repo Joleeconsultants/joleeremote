@@ -1306,6 +1306,7 @@ function Sidebar() {
         supported_encoders: message.supported_encoders,
         microphone_supported: message.microphone_supported,
         webcam_supported: message.webcam_supported,
+        webcam_capture: message.webcam_capture,
         dpi_scaling_supported: message.dpi_scaling_supported,
         audio_bitrate_supported: message.audio_bitrate_supported });
     };
@@ -3461,11 +3462,12 @@ function Sidebar() {
               <button
                 className={`action-button ${isWebcamActive ? "active" : ""}`}
                 onClick={handleWebcamToggle}
+                data-webcam-state={agentCapabilities.webcam_capture?.state || 'unknown'}
                 title={agentCapabilities.webcam_supported !== true ? 'The PC has not confirmed webcam forwarding support.' : t(
                   isWebcamActive
                     ? "buttons.webcamDisableTitle"
                     : "buttons.webcamEnableTitle"
-                )}
+                ) + '\nPC camera: ' + (agentCapabilities.webcam_capture?.state || 'unknown')}
               >
                 <WebcamIcon />
               </button>

@@ -319,6 +319,14 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   assert.deepEqual(Array.from(sent.at(-1).supported_encoders), ['jpeg']);
   assert.equal(sent.at(-1).microphone_supported, false);
   assert.equal(sent.at(-1).audio_bitrate_supported, null);
+  for(const state of ['off','waiting','forwarding','unavailable']){
+    Object.assign(c.agentStats,{webcam_supported:true,webcam_capture:{supported:true,state}});
+    c.postStats();assert.equal(sent.at(-1).webcam_capture.state,state);
+  }
+  c.agentStats.webcam_capture={supported:true,state:'invented'};c.postStats();assert.equal(sent.at(-1).webcam_capture,null);
+  c.agentStats.webcam_capture={supported:true,state:'waiting'};
+  c.sessionPaired=false;c.postStats();assert.equal(sent.at(-1).webcam_capture,null);assert.equal(sent.at(-1).webcam_supported,null);
+  c.sessionPaired=true;
   Object.assign(c.agentStats,{capture_backend:'dxgi',capture_max_edge:3840,jpeg_quality_effective:40});
   c.postStats();
   assert.equal(sent.at(-1).capture_backend,'dxgi');assert.equal(sent.at(-1).capture_max_edge,3840);
@@ -330,6 +338,7 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   c.agentStatsReceivedAt=now;c.postStats();assert.equal(sent.at(-1).jpeg_quality_effective,1);
   now+=5000;c.postStats();assert.equal(sent.at(-1).capture_backend,null);assert.equal(sent.at(-1).capture_max_edge,null);assert.equal(sent.at(-1).jpeg_quality_effective,null);
   assert.equal(sent.at(-1).screen,null);
+  assert.equal(sent.at(-1).webcam_capture,null);assert.equal(sent.at(-1).webcam_supported,null);
 });
 
 test('exact-resolution pointer mapping uses the centered native image and smoothing reaches CSS', () => {

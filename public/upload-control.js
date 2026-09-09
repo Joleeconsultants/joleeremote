@@ -9,7 +9,7 @@ const messages = {
   limit_reached:'This session has reached its upload limit. Open a new session.',
 };
 export class UploadControl {
-  constructor({send,report,encode,id=()=>crypto.randomUUID(),now=()=>Date.now(),timer=setTimeout,clear=clearTimeout}) {
+  constructor({send,report,encode,id=()=>crypto.randomUUID(),now=()=>Date.now(),timer=(fn,ms)=>setTimeout(fn,ms),clear=handle=>clearTimeout(handle)}) {
     Object.assign(this,{send,report,encode,id,now,timer,clear});
     this.connection=null; this.generation=0; this.pending=null; this.supported=false; this.supportAt=0; this.deadline=null;
   }

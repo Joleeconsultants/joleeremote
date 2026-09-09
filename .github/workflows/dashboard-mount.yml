@@ -5,6 +5,8 @@ on:
       - 'chrome/selkies-dashboard/**'
       - 'public/dashboard/**'
       - 'scripts/check-dashboard-mount.mjs'
+      - 'scripts/check-upload-browser.mjs'
+      - 'public/upload-control.js'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/dashboard-mount.yml'

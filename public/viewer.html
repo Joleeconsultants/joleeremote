@@ -319,7 +319,7 @@ function resetRemoteCursor(){
 }
 function applyCursorFrame(cur){
   agentCursorVisible=cur.visible;
-  if(cur.visible)nativeCursor=cur.css||'default';
+  if(cur.visible&&cur.css)nativeCursor=cur.css;
   if(cur.visible && cur.mime && cur.data){
     cursorEl.src="data:image/png;base64,"+cur.data;
     cursorHx=cur.hx;cursorHy=cur.hy;

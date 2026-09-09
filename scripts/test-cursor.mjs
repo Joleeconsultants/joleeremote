@@ -33,6 +33,8 @@ test('native mode uses local cursor types while drawn mode retains remote shape 
   assert.equal(f.canvas.style.cursor,'text');assert.match(f.cursorEl.src,/^data:image\/png;base64,/);
   assert.equal(f.cursorEl.style.display,'none');
   f.applyCursorFrame(f.cursorFromFrame({t:'cursor',visible:false}));assert.equal(f.canvas.style.cursor,'none');
+  f.applyCursorFrame(f.cursorFromFrame({t:'cursor',visible:true}));assert.equal(f.canvas.style.cursor,'text');
+  f.applyCursorFrame(f.cursorFromFrame({t:'cursor',visible:false}));
   f.useBrowserCursors=false;f.applyCursorMode();assert.equal(f.cursorEl.style.display,'none');
 });
 

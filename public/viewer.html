@@ -11,6 +11,8 @@ main{padding:0;height:100%;position:relative}
 canvas{display:block;width:100%;height:100%;background:#000;object-fit:contain;touch-action:none}
 canvas.exact-resolution{position:absolute;width:auto;height:auto;left:50%;top:50%;transform:translate(-50%,-50%);object-fit:fill}
 #remote-cursor{position:absolute;left:0;top:0;pointer-events:none;user-select:none;z-index:2;display:none;max-width:none;border:0}
+#connection-status{position:absolute;top:16px;left:50%;transform:translateX(-50%);max-width:calc(100% - 64px);padding:12px 18px;border:1px solid #75839a;border-radius:8px;background:#222833;color:#e6ebf3;font:16px system-ui;z-index:4;pointer-events:none;text-align:center}
+#connection-status[hidden]{display:none}
 /* In-viewport opacity trick: iOS will not open OSK for left:-9999px inputs. */
 #keyboard-input-assist{
   position:fixed;left:0;bottom:0;width:1px;height:1px;margin:0;padding:0;
@@ -24,6 +26,7 @@ canvas.exact-resolution{position:absolute;width:auto;height:auto;left:50%;top:50
 <div id="stage">
 <canvas id="surface" width="640" height="360" tabindex="0"></canvas>
 <img id="remote-cursor" alt="" draggable="false" />
+<div id="connection-status" role="status" aria-live="polite">Connecting…</div>
 </div>
 <input id="keyboard-input-assist" type="text" autocomplete="off" enterkeyhint="done" autocapitalize="off" spellcheck="false" aria-hidden="true" />
 </main>
@@ -33,6 +36,7 @@ import PartySocket from "https://esm.sh/partysocket@1.1.6";
 import { ClipboardPasteGate } from './clipboard-paste.js?v=jo-ui-41';
 import { SasControl } from './sas-control.js?v=jo-ui-47';
 import { UploadControl } from './upload-control.js?v=jo-ui-49';
+import { SessionState } from './session-state.js';
 const VERSION=1, KIND_FRAME=1, KIND_INPUT=2, KIND_AUDIO=3;
 const DEFAULT_CURSOR_SVG="data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round" d="M1 1v16.5l4.2-4.3 3.3 8 2.5-1-3.3-7.9H15z"/></svg>');
 const DEFAULT_CURSOR_HX=1, DEFAULT_CURSOR_HY=1;
@@ -61,6 +65,10 @@ const printJobChunks=new Map();
 // Native mode uses local OS cursor types; drawn mode uses the remote bitmap.
 let useBrowserCursors=!(typeof matchMedia==='function'&&matchMedia('(pointer: coarse)').matches), pointerOver=false, agentCursorVisible=true;
 let nativeCursor='default';
+const sessionState=new SessionState(({text,visible,state})=>{
+  const notice=document.getElementById('connection-status');
+  notice.textContent=text;notice.hidden=!visible;notice.dataset.state=state;
+});
 let cursorHx=DEFAULT_CURSOR_HX, cursorHy=DEFAULT_CURSOR_HY, cursorPosition=null;
 cursorEl.src=DEFAULT_CURSOR_SVG;
 function applyScale(){
@@ -194,6 +202,7 @@ function consumeLatencyReply(payload){
   return true;
 }
 function setStatus(state,expiresAt=null){
+  sessionState.set(state);
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
   uploadControl.bind(sessionPaired?socket:null,expiresAt);
@@ -444,6 +453,7 @@ const negotiatedVideo=new NegotiatedVideo(frame=>{
   if(canvas.width!==frame.displayWidth)canvas.width=frame.displayWidth;
   if(canvas.height!==frame.displayHeight)canvas.height=frame.displayHeight;
   applySmoothing();ctx.drawImage(frame,0,0);
+  sessionState.frame();
   observedEncoder='h264enc';frameCount++;
 },()=>{observedEncoder=null;sendInput({t:'settings',settings:{encoder:'jpeg'}});});
 function invalidateVideoFrames(){
@@ -455,6 +465,7 @@ async function paintJpegOrPng(payload,generation=videoGeneration,sequence=++rece
   try{
     if(!videoEnabled||generation!==videoGeneration||sequence<=latestPaintedFrame)return;
     canvas.width=bitmap.width;canvas.height=bitmap.height;applySmoothing();ctx.drawImage(bitmap,0,0);
+    sessionState.frame();
     latestPaintedFrame=sequence;observedEncoder=payload[0]===255&&payload[1]===216?"jpeg":null;frameCount++;
   }finally{bitmap.close();}
 }
@@ -902,6 +913,7 @@ function connect(opts){
     if(ev&&(ev.code===4000||ev.code===4004||ev.code===4010)){
       try{if(socket)socket.maxRetries=0;}catch(e){}
       disconnect();
+      setStatus(ev.code===4010?'expired':ev.code===4004?'unavailable':'ended');
       return;
     }
     setStatus("disconnected");

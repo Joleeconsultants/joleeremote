@@ -1,0 +1,3 @@
+# Patch bytes must match the LF upstream archive on Windows too.
+chrome/patches/selkies-dashboard/*.patch text eol=lf
+chrome/patches/selkies-dashboard/series text eol=lf

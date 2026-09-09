@@ -12,7 +12,7 @@ Add a real hop path, then show the ORIGINAL Selkies dashboard control. Use origi
 
 Leftover list = recommended features not yet hopped, not a junk drawer. CSS cursors is original dashboard UI; the remote cursor overlay is hop core.
 
-Quilt-style series applied by `scripts/sync-selkies-dashboard.sh` after copying upstream `addons/selkies-dashboard`.
+The current series starts with a refreshed integration baseline, then accepts small incremental patches. It is applied by `scripts/sync-selkies-dashboard.sh` after copying upstream `addons/selkies-dashboard`.
 
 The series rewires Selkies chrome onto the hop canvas. Add chrome back as the hop grows. Prefer overlay `chrome/selkies-dashboard/src/jolee-settings.js` for hide-flags so Sidebar diffs stay small.
 
@@ -49,7 +49,7 @@ Image clipboard stays on input JSON / JSON frame. Cursor shape is the same JSON-
 - **Easy undo** — drop only that `.sidebar` gutter block if it bugs; keep blue tokens. Rebuild dashboard. No Sidebar patch to unwind.
 - Full note: [docs/chrome.md](../../../docs/chrome.md#brand-and-sidebar-gutter-overlay).
 
-## Series
+## Historical series (available in Git history)
 
 | patch | why |
 | --- | --- |
@@ -80,3 +80,24 @@ See also `docs/chrome.md`.
 `0032-secure-desktop-feedback.patch`: report validated continuity failures and observed normal-stream return through existing notifications; no layout changes.
 
 `0033-microphone-session-lifecycle.patch`: stop parent capture on lost sessions/capabilities and correlate asynchronous starts. The preserved microphone session module owns intent; no layout changes.
+
+## Reproducibility baseline (2026-09-09)
+
+The previous series omitted patches 0027–0033 and failed at 0014 because an
+unrecorded Files integration changed its context. It also failed at the first
+patch on Windows when autocrlf converted patch context to CRLF.
+
+0001-dashboard-integration.patch consolidates the existing tracked dashboard
+differences from pinned Selkies 56618f4f54a4092c9bc07990f86d9682a33b1dfc.
+It changes no deployed dashboard source or UI. Historical incremental patches
+remain available in Git history; future changes should append small patches to
+series. Git attributes preserve LF patch/series bytes on Windows.
+
+After refreshing a patch, verify the pinned reconstruction before deployment:
+
+```sh
+bash scripts/sync-selkies-dashboard.sh
+git diff --exit-code -- chrome/selkies-dashboard
+```
+
+This verifies reconstruction of the checked-in source, not live functionality.

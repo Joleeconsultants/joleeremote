@@ -1304,8 +1304,16 @@ function Sidebar() {
       if(event.data?.type === 'screenResult') setDisplayPending(false);
       if (event.data?.type !== 'statsUpdate') return;
       const message = event.data;
-      setDisplayCatalog(readDisplayCatalog(message.screen?.catalog));
-      const effective = message.screen?.effective;
+      const catalog = readDisplayCatalog(message.screen?.catalog);
+      setDisplayCatalog(catalog);
+      // Legacy screen.effective can contain startup capture defaults. Only the
+      // selected Windows monitor catalog confirms dimensions for these controls.
+      const effective = selectedDisplay(catalog);
+      if (!effective) {
+        setManualWidth('');
+        setManualHeight('');
+        manualResolutionDirty.current = false;
+      }
       setCurrentResolution(Number.isInteger(effective?.width) && Number.isInteger(effective?.height) &&
         effective.width > 0 && effective.height > 0 && effective.width <= 32768 && effective.height <= 32768
         ? `${effective.width}x${effective.height}` : "");

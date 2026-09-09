@@ -12,6 +12,7 @@ const core = `<!doctype html><title>Inert core fixture</title>
 <button id="camera">Camera status</button><button id="encoders">Encoders</button><button id="lost">Lost</button>
 <button id="securefail">Secure failure</button><button id="sasnext">Next command</button>
 <button id="removed">Monitor removed</button>
+<button id="legacy">Legacy geometry without catalog</button>
 <script>
 window.cursorMode=null;
 window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='setUseBrowserCursors')window.cursorMode=e.data.value;});
@@ -36,6 +37,7 @@ window.addEventListener('message',e=>{
 });
 document.getElementById('encoders').onclick=()=>parent.postMessage({type:'statsUpdate',supported_encoders:['h264enc','jpeg'],active_encoder:'jpeg'},location.origin);
 document.getElementById('lost').onclick=()=>parent.postMessage({type:'status',state:'waiting'},location.origin);
+document.getElementById('legacy').onclick=()=>parent.postMessage({type:'statsUpdate',screen:{effective:{width:1920,height:1080}}},location.origin);
 document.getElementById('camera').onclick=()=>parent.postMessage({type:'statsUpdate',webcam_supported:true,webcam_capture:{supported:true,state:'waiting'}},location.origin);
 document.getElementById('securefail').onclick=()=>{
   parent.postMessage({type:'secureDesktopResult',status:'warning',code:'input_rejected'},location.origin);
@@ -96,6 +98,10 @@ try {
   assert(await page.getByRole('button', { name: 'Set to Best Fit', exact: true }).isDisabled());
   assert(await page.locator('#resolutionPresetSelect').isDisabled());
   assert.equal(await page.locator('#manualWidthInput').inputValue(), '');
+  assert.equal(await page.locator('#manualHeightInput').inputValue(), '');
+  await page.frameLocator('#jolee-core').locator('#legacy').click();
+  await page.waitForTimeout(100);
+  assert.equal(await page.locator('#manualWidthInput').inputValue(), '', 'legacy geometry without a monitor catalog must stay blank');
   assert.equal(await page.locator('#manualHeightInput').inputValue(), '');
   await page.waitForTimeout(100);
   assert.deepEqual(errors, [], 'screen reset must not throw');

@@ -301,6 +301,12 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
     window: { parent: { postMessage: value => sent.push(value) }, location: { origin: 'https://test.invalid' } },
     sessionPaired: true, frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, agentScreen: null, agentStatsReceivedAt: 0, observedEncoder: null, latencyReading: () => null });
   vm.runInContext(html.slice(html.indexOf('function numberOr('), html.indexOf('setInterval(postStats,1000)')), c);
+  c.agentStats={print_forwarding:{supported:true,state:'ready',mode:'pdf_folder',folder:'C:\\Session\\Print',max_bytes:16777216}};
+  c.postStats();assert.equal(c.canvas.dataset.printFolder,'C:\\Session\\Print');
+  assert.equal(sent.at(-1).print_forwarding.folder,'C:\\Session\\Print');
+  c.sessionPaired=false;c.postStats();assert.equal(c.canvas.dataset.printFolder,undefined);
+  c.sessionPaired=true;now=5000;c.postStats();assert.equal(sent.at(-1).print_forwarding,null);
+  now=0;c.agentStats={};c.statsStartedAt=0;
   c.frameCount = 30; c.bytesSinceStats = 125000;
   now = 500; c.postStats();
   assert.equal(c.frameCount, 30);

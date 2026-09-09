@@ -49,7 +49,7 @@ Image clipboard stays on input JSON / JSON frame. Cursor shape is the same JSON-
 - **Easy undo** — drop only that `.sidebar` gutter block if it bugs; keep blue tokens. Rebuild dashboard. No Sidebar patch to unwind.
 - Full note: [docs/chrome.md](../../../docs/chrome.md#brand-and-sidebar-gutter-overlay).
 
-## Series
+## Historical series (available in Git history)
 
 | patch | why |
 | --- | --- |

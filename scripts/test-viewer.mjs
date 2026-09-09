@@ -3,7 +3,7 @@ import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { canSetDpi } from '../chrome/selkies-dashboard/src/jolee-dpi-settings.js';
+import { canSetDpi, initialDpi } from '../chrome/selkies-dashboard/src/jolee-dpi-settings.js';
 import { SasControl } from '../public/sas-control.js';
 import { ClipboardPasteGate } from '../public/clipboard-paste.js';
 function viewerContext(globals) {
@@ -585,6 +585,20 @@ test('reset-to-window preserves DPI storage and posts nothing when unsupported',
   assert.equal(changes.length,0);
   c.agentCapabilities.dpi_scaling_supported=true;c.resetDpi();
   assert.equal(changes[0],'scaling_dpi');assert.equal(changes[1],144);assert.equal(changes[2].scaling_dpi,144);
+});
+
+test('DPI initialization effect executes with only its own lexical dependencies',()=>{
+  const sidebar=readFileSync(new URL('../chrome/selkies-dashboard/src/components/Sidebar.jsx',import.meta.url),'utf8');
+  const start=sidebar.indexOf('  useEffect(() => {',sidebar.indexOf('// Capability may arrive after settings.'));
+  const end=sidebar.indexOf('  /* eslint-enable react-hooks/set-state-in-effect */',start);
+  const values=[],posts=[];
+  const c=viewerContext({initialDpi,useEffect:fn=>fn(),serverSettings:{scaling_dpi:{value:'96',allowed:['96','144']}},
+    agentCapabilities:{},localStorage:{getItem:()=>null},getPrefixedKey:k=>k,deriveDpiFromDpr:()=>144,
+    setSelectedDpi:v=>values.push(v),debouncedPostSetting:v=>posts.push(v)});
+  vm.runInContext(sidebar.slice(start,end),c);
+  assert.equal(values[0],144);assert.equal(posts.length,0);
+  c.agentCapabilities.dpi_scaling_supported=true;vm.runInContext(sidebar.slice(start,end),c);
+  assert.equal(posts[0].scaling_dpi,144);
 });
 
 function imageClipboardViewer(){

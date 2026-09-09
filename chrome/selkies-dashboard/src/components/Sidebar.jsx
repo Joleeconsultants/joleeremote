@@ -1697,7 +1697,8 @@ function Sidebar() {
   // Capability may arrive after settings. Keep this separate so it cannot
   // replay initialization of unrelated controls when the agent reports support.
   useEffect(() => {
-    const plan = initialDpi(serverSettings?.scaling_dpi, getStoredInt("scaling_dpi"),
+    const stored = parseInt(localStorage.getItem(getPrefixedKey("scaling_dpi")), 10);
+    const plan = initialDpi(serverSettings?.scaling_dpi, stored,
       deriveDpiFromDpr(), agentCapabilities.dpi_scaling_supported);
     if (!plan) return;
     setSelectedDpi(plan.value);

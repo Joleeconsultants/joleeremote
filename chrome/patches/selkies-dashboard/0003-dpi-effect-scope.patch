@@ -1,0 +1,14 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index a888602..4abf8b5 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -1697,7 +1697,8 @@ function Sidebar() {
+   // Capability may arrive after settings. Keep this separate so it cannot
+   // replay initialization of unrelated controls when the agent reports support.
+   useEffect(() => {
+-    const plan = initialDpi(serverSettings?.scaling_dpi, getStoredInt("scaling_dpi"),
++    const stored = parseInt(localStorage.getItem(getPrefixedKey("scaling_dpi")), 10);
++    const plan = initialDpi(serverSettings?.scaling_dpi, stored,
+       deriveDpiFromDpr(), agentCapabilities.dpi_scaling_supported);
+     if (!plan) return;
+     setSelectedDpi(plan.value);

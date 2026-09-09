@@ -50,6 +50,9 @@ try {
   assert(await page.locator('#uiScalingSelect').isDisabled());
   console.log('Built dashboard mount, screen panel and reset PASS (no remote session).');
 } finally {
-  await browser?.close();
-  await new Promise(resolve => server.close(resolve));
+  try {
+    await browser?.close();
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
 }

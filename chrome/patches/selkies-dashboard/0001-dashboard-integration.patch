@@ -1,0 +1,1487 @@
+diff --git b/.gitignore a/.gitignore
+index 9f321a1..6a38f1f 100644
+--- b/.gitignore
++++ a/.gitignore
+@@ -6,7 +6,6 @@ yarn-debug.log*
+ yarn-error.log*
+ pnpm-debug.log*
+ lerna-debug.log*
+-package-lock.json
+ node_modules
+ dist
+ dist-ssr
+diff --git b/src/components/DashboardOverlay.jsx a/src/components/DashboardOverlay.jsx
+index e881b22..80e73e9 100644
+--- b/src/components/DashboardOverlay.jsx
++++ a/src/components/DashboardOverlay.jsx
+@@ -5,12 +5,13 @@
+  */
+ 
+ /**
+- * Portal that places the sidebar over the stream.
++ * Portal that places the sidebar over the hop core iframe.
+  * @module
+  */
+ import ReactDOM from 'react-dom';
+ import Sidebar from './Sidebar';
+ import '../styles/Overlay.css';
++import '../jolee-theme.css';
+ 
+ /**
+  * Renders the sidebar into `container` through a portal, or nothing until a
+diff --git b/src/components/PlayerGamepadButton.jsx a/src/components/PlayerGamepadButton.jsx
+index 399ee73..662703e 100644
+--- b/src/components/PlayerGamepadButton.jsx
++++ a/src/components/PlayerGamepadButton.jsx
+@@ -10,7 +10,8 @@
+  */
+ import React from "react";
+ import { getTranslator } from "../translations";
+-import { isMobileClient } from "../../../selkies-web-core/lib/util.js";
++import { isMobileClient } from "../jolee-shims/util.js";
++import { postToCore } from "../jolee-bridge.js";
+ 
+ /** Id of the element the touch gamepad overlay is mounted in. */
+ const TOUCH_GAMEPAD_HOST_DIV_ID = "touch-gamepad-host";
+@@ -82,13 +83,13 @@ function PlayerGamepadButton({ touchOnly = false, isActive, onToggle }) {
+         setOwnActive(newActiveState);
+ 
+         if (newActiveState && !isTouchGamepadSetup) {
+-            window.postMessage({
++            postToCore({
+                 type: "TOUCH_GAMEPAD_SETUP",
+                 payload: { targetDivId: TOUCH_GAMEPAD_HOST_DIV_ID, visible: true },
+             }, window.location.origin);
+             setIsTouchGamepadSetup(true);
+         } else if (isTouchGamepadSetup) {
+-            window.postMessage({
++            postToCore({
+                 type: "TOUCH_GAMEPAD_VISIBILITY",
+                 payload: { visible: newActiveState, targetDivId: TOUCH_GAMEPAD_HOST_DIV_ID },
+             }, window.location.origin);
+diff --git b/src/components/Sidebar.jsx a/src/components/Sidebar.jsx
+index 0621183..6fb05d7 100644
+--- b/src/components/Sidebar.jsx
++++ a/src/components/Sidebar.jsx
+@@ -6,7 +6,7 @@
+ 
+ /**
+  * The dashboard sidebar: every control the reference dashboard offers on top
+- * of selkies-core, talking to the core through `window.postMessage` alone.
++ * of the Jolee Remote hop core, talking to the iframe core through postMessage.
+  *
+  * Renders a draggable toggle handle, the core action buttons (video, audio,
+  * microphone, webcam, gamepad), the soft modifier keys and virtual keyboard
+@@ -50,11 +50,11 @@
+  * @module
+  */
+ import { useState, useEffect, useCallback, useId, useMemo, useRef } from "react";
+-import { displayLabel, decodableEncoders, canDecodeFullColor, getRoutePrefix, getStorageAppName, isMobileClient } from "../../../selkies-web-core/lib/util.js";
+-import { sessionAuthHeaders, withSessionToken } from "../../../selkies-web-core/lib/session-token.js";
++import { displayLabel, decodableEncoders, canDecodeFullColor, getRoutePrefix, getStorageAppName, isMobileClient } from "../jolee-shims/util.js";
++import { sessionAuthHeaders, withSessionToken } from "../jolee-shims/session-token.js";
+ import { resolveSpec, isSettingPinned, HIDPI_SPEC, RATE_CONTROL_SPEC,
+   USE_BROWSER_CURSORS_SPEC, VIDEO_FULLCOLOR_SPEC, VIDEO_STREAMING_MODE_SPEC,
+-  USE_PAINT_OVER_QUALITY_SPEC, USE_CPU_SPEC, FORCE_ALIGNED_RESOLUTION_SPEC } from "../../../selkies-web-core/lib/conditional-settings.js";
++  USE_PAINT_OVER_QUALITY_SPEC, USE_CPU_SPEC, FORCE_ALIGNED_RESOLUTION_SPEC } from "../jolee-shims/conditional-settings.js";
+ import GamepadVisualizer from "./GamepadVisualizer";
+ import PlayerGamepadButton from "./PlayerGamepadButton.jsx";
+ import { getTranslator } from "../translations";
+@@ -68,7 +68,17 @@ import {
+   readInstalledApps,
+   resolveFailedAppCommand,
+   writeInstalledApps,
+-} from "../../../selkies-web-core/lib/app-commands.js";
++} from "../jolee-shims/app-commands.js";
++import { postToCore, debounceSettings, listAudioDevices } from "../jolee-bridge.js";
++import { createClipboardDelivery, clipboardImageBlob } from "../jolee-clipboard-delivery.js";
++import {
++  startParentMicrophone,
++  stopParentMicrophone,
++  setParentMicDeviceId,
++  parentMicrophoneGeneration,
++} from "../jolee-mic-capture.js";
++import { createMicrophoneSession } from "../jolee-mic-session.js";
++import { JOLEE_SERVER_SETTINGS } from "../jolee-settings.js";
+ import * as yaml from "js-yaml";
+ 
+ const urlHash = window.location.hash;
+@@ -686,7 +696,8 @@ function AppsModal({ isOpen, onClose, t, commandsAvailable, commandsKnown,
+             <p>{error}</p>
+             <button
+               onClick={() => setFetchAttempt((n) => n + 1)}
+-              className="app-action-button install"
++              className="resolution-button"
++                            style={{ marginTop: "5px", marginBottom: "5px" }}
+             >
+               {t("appsModal.retryButton", "Retry")}
+             </button>
+@@ -933,7 +944,7 @@ function Sidebar() {
+     document.documentElement.lang = BROWSER_LANG_TAG;
+   }, []);
+   useEffect(() => {
+-    window.postMessage({ type: 'sidebarVisibilityChanged', isOpen: isOpen }, window.location.origin);
++    postToCore({ type: 'sidebarVisibilityChanged', isOpen: isOpen }, window.location.origin);
+   }, [isOpen]);
+   /**
+    * Entering fullscreen (button, Ctrl+Shift+F, or browser UI) folds the
+@@ -969,10 +980,10 @@ function Sidebar() {
+   const [isTouchGamepadActive, setIsTouchGamepadActive] = useState(false);
+   const [isTouchGamepadSetup, setIsTouchGamepadSetup] = useState(false);
+   const [availablePlacements, setAvailablePlacements] = useState(null);
+-  const [serverSettings, setServerSettings] = useState(null);
++  const [serverSettings, setServerSettings] = useState(JOLEE_SERVER_SETTINGS);
+ 
+-  const [uiTitle, setUiTitle] = useState('Selkies');
+-  const [uiShowLogo, setUiShowLogo] = useState(true);
++  const [uiTitle, setUiTitle] = useState('Jolee Remote');
++  const [uiShowLogo, setUiShowLogo] = useState(false);
+ 
+   useEffect(() => {
+     const handleMessage = (event) => {
+@@ -1232,9 +1243,9 @@ function Sidebar() {
+     const isCurrentlyHeld = heldKeys[key];
+     const currentHeldCount = Object.values(heldKeys).filter(Boolean).length;
+     if (!isCurrentlyHeld && currentHeldCount === 0) {
+-      window.postMessage({ type: 'setSynth', value: true }, window.location.origin);
++      postToCore({ type: 'setSynth', value: true }, window.location.origin);
+     } else if (isCurrentlyHeld && currentHeldCount === 1) {
+-      window.postMessage({ type: 'setSynth', value: false }, window.location.origin);
++      postToCore({ type: 'setSynth', value: false }, window.location.origin);
+     }
+     const nextHeldState = {
+       ...heldKeys,
+@@ -1276,6 +1287,24 @@ function Sidebar() {
+   const [encoder, setEncoder] = useState(
+     localStorage.getItem(getPrefixedKey("encoder")) || DEFAULT_ENCODER
+   );
++  const [agentCapabilities, setAgentCapabilities] = useState({});
++  const [sasState, setSasState] = useState({ available: false, pending: false });
++  useEffect(() => {
++    const receive = (event) => {
++      const core = document.getElementById('jolee-core');
++      if (event.origin !== window.location.origin || event.source !== core?.contentWindow || event.data?.type !== 'statsUpdate') return;
++      const message = event.data;
++      setAgentCapabilities({ active_encoder: message.active_encoder,
++        jpeg_quality_effective: message.jpeg_quality_effective,
++        supported_encoders: message.supported_encoders,
++        microphone_supported: message.microphone_supported,
++        webcam_supported: message.webcam_supported,
++        dpi_scaling_supported: message.dpi_scaling_supported,
++        audio_bitrate_supported: message.audio_bitrate_supported });
++    };
++    window.addEventListener('message', receive);
++    return () => window.removeEventListener('message', receive);
++  }, []);
+   const [webcamEncoderChoice, setWebcamEncoderChoice] = useState(
+     localStorage.getItem(getPrefixedKey("webcam_encoder"))
+   );
+@@ -1367,19 +1396,28 @@ function Sidebar() {
+     const saved = localStorage.getItem(getPrefixedKey("antiAliasingEnabled"));
+     return saved !== null ? saved === "true" : true;
+   });
++  useEffect(() => {
++    postToCore({ type: "setScaleLocally", value: scaleLocally });
++    postToCore({ type: "setAntiAliasing", value: antiAliasing });
++  }, [scaleLocally, antiAliasing]);
+   const [enableBinaryClipboard, setEnableBinaryClipboard] = useState(() => {
+     const saved = localStorage.getItem(getPrefixedKey("enable_binary_clipboard"));
+     return saved !== null ? saved === 'true' : DEFAULT_ENABLE_BINARY_CLIPBOARD;
+   });
++  const binaryClipboardEnabledRef = useRef(enableBinaryClipboard);
++  binaryClipboardEnabledRef.current = enableBinaryClipboard;
++  const clipboardDeliveryRef = useRef(null);
+   const [presetValue, setPresetValue] = useState("");
+   const [clientFps, setClientFps] = useState(0);
+-  const [audioLevel, setAudioLevel] = useState(0);
++  const [audioLevel, setAudioLevel] = useState(null);
++  const [audioPlaybackStatus, setAudioPlaybackStatus] = useState('unavailable');
++  const [audioCaptureDescription, setAudioCaptureDescription] = useState('PC capture: unknown');
+   const audioMeterRef = useRef(null);
+   const [bandwidthMbps, setBandwidthMbps] = useState(0);
+-  const [latencyMs, setLatencyMs] = useState(0);
+-  const [cpuPercent, setCpuPercent] = useState(0);
++  const [latencyMs, setLatencyMs] = useState(null);
++  const [cpuPercent, setCpuPercent] = useState(null);
+   const [gpuPercent, setGpuPercent] = useState(0);
+-  const [sysMemPercent, setSysMemPercent] = useState(0);
++  const [sysMemPercent, setSysMemPercent] = useState(null);
+   const [gpuMemPercent, setGpuMemPercent] = useState(0);
+   const [sysMemUsed, setSysMemUsed] = useState(null);
+   const [sysMemTotal, setSysMemTotal] = useState(null);
+@@ -1427,7 +1465,32 @@ function Sidebar() {
+   });
+   const [notifications, setNotifications] = useState([]);
+   const notificationTimeouts = useRef({});
++  const [microphoneReady, setMicrophoneReady] = useState(false);
++  const microphoneSession = useMemo(() => createMicrophoneSession({
++    start: startParentMicrophone, stop: stopParentMicrophone, select: setParentMicDeviceId,
++    changed: (active, ready) => { setIsMicrophoneActive(active); setMicrophoneReady(ready); },
++    forward: (enabled) => postToCore({ type: "pipelineControl", pipeline: "microphone", enabled }, window.location.origin),
++  }), []);
++  useEffect(() => {
++    const core = document.getElementById('jolee-core');
++    const reset = () => microphoneSession.reset();
++    const receive = (event) => {
++      if (event.origin !== window.location.origin || event.source !== core?.contentWindow) return;
++      if (event.data?.type === 'status') microphoneSession.paired(event.data.state === 'paired');
++      if (event.data?.type === 'statsUpdate') microphoneSession.support(event.data.microphone_supported);
++    };
++    window.addEventListener('message', receive);
++    window.addEventListener('pagehide', reset);
++    core?.addEventListener('load', reset);
++    return () => {
++      window.removeEventListener('message', receive);
++      window.removeEventListener('pagehide', reset);
++      core?.removeEventListener('load', reset);
++      reset();
++    };
++  }, [microphoneSession]);
+   const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
++  const [filesIframeSrc, setFilesIframeSrc] = useState("");
+   const [isAppsModalOpen, setIsAppsModalOpen] = useState(false);
+   const [keyboardButtonPosition, setKeyboardButtonPosition] = useState({ bottom: 20, right: 20 });
+   const dragInfo = useRef({
+@@ -1474,8 +1537,8 @@ function Sidebar() {
+ 
+   /** One debounced poster for the component's lifetime, so a burst of slider moves coalesces into a single post. */
+   const debouncedPostSetting = useMemo(
+-    () => debounce((setting) => {
+-      window.postMessage(
++    () => debounceSettings((setting) => {
++      postToCore(
+         { type: "settings", settings: setting },
+         window.location.origin
+       );
+@@ -1483,10 +1546,12 @@ function Sidebar() {
+     []
+   );
+ 
++  useEffect(() => () => debouncedPostSetting.cancel(), [debouncedPostSetting]);
++
+   /** The two push channels a spec can propagate through; each spec decides which. */
+   const conditionalIo = {
+     postSetting: (obj) => debouncedPostSetting(obj),
+-    postToCore: (obj) => window.postMessage(obj, window.location.origin),
++    postToCore: (obj) => postToCore(obj, window.location.origin),
+   };
+   /**
+    * Uniform write path for conditional settings: optimistic setState, an
+@@ -1522,6 +1587,7 @@ function Sidebar() {
+   /* eslint-disable react-hooks/set-state-in-effect */
+   useEffect(() => {
+     if (!serverSettings) return;
++    const captureSettings = {};
+     const getStoredInt = (key) => parseInt(localStorage.getItem(getPrefixedKey(key)), 10);
+     const getStoredBool = (key, fallback = false) => {
+       const stored = localStorage.getItem(getPrefixedKey(key));
+@@ -1534,6 +1600,7 @@ function Sidebar() {
+       const final = allowed.includes(stored) ? stored
+         : (allowed.includes(s_encoder.value) || allowed.length === 0) ? s_encoder.value : allowed[0];
+       setEncoder(final);
++      captureSettings.encoder = final;
+       setDynamicEncoderOptions(allowed);
+     }
+     const s_framerate = serverSettings.framerate;
+@@ -1543,6 +1610,7 @@ function Sidebar() {
+         ? Math.max(s_framerate.min, Math.min(s_framerate.max, stored))
+         : s_framerate.default;
+       setFramerate(final);
++      captureSettings.framerate = final;
+     }
+     const s_video_bitrate = serverSettings.video_bitrate;
+     if (s_video_bitrate) {
+@@ -1580,7 +1648,9 @@ function Sidebar() {
+         ? Math.max(s_jpeg_quality.min, Math.min(s_jpeg_quality.max, stored))
+         : s_jpeg_quality.default;
+       setJpegQuality(final);
++      captureSettings.jpeg_quality = final;
+     }
++    postToCore({ type: "settings", settings: captureSettings });
+     const s_paint_over_jpeg_quality = serverSettings.paint_over_jpeg_quality;
+     if (s_paint_over_jpeg_quality) {
+       const stored = getStoredInt("paint_over_jpeg_quality");
+@@ -1718,6 +1788,7 @@ function Sidebar() {
+ 
+   /** UI scaling pick: persisted, so it pins across reloads and stops the startup derived-default post. */
+   const handleDpiScalingChange = (event) => {
++    if (agentCapabilities.dpi_scaling_supported !== true) return;
+     const newDpi = parseInt(event.target.value, 10);
+     setSelectedDpi(newDpi);
+     localStorage.setItem(getPrefixedKey("scaling_dpi"), newDpi.toString());
+@@ -1839,7 +1910,17 @@ function Sidebar() {
+   };
+ 
+   const toggleAppsModal = () => setIsAppsModalOpen(!isAppsModalOpen);
+-  const toggleFilesModal = () => setIsFilesModalOpen(!isFilesModalOpen);
++  const toggleFilesModal = () => {
++    setIsFilesModalOpen((wasOpen) => {
++      if (!wasOpen) {
++        // Recompute absolute session+token URL on every open (avoid stale/empty src).
++        setFilesIframeSrc(
++          withSessionToken(new URL("/api/files/", window.location.href).href),
++        );
++      }
++      return !wasOpen;
++    });
++  };
+   /**
+    * Pops the on-screen keyboard by focusing the core's `#keyboard-input-assist`
+    * input; the next touch on the stream overlay blurs it again.
+@@ -1876,7 +1957,7 @@ function Sidebar() {
+   }, []);
+ 
+   /**
+-   * Lists the audio devices for the audio section, taking a momentary
++   * Lists the audio devices for the audio section, optionally taking a momentary
+    * microphone permission so labels are readable. Output routing goes through
+    * whatever the active core plays on: the WebRTC core's `<video>` element
+    * (`HTMLMediaElement.setSinkId`) or the WebSocket core's AudioContext
+@@ -1891,9 +1972,9 @@ function Sidebar() {
+     setAudioDeviceError(null);
+     setAudioInputDevices([]);
+     setAudioOutputDevices([]);
+-    const supportsSinkId = isWebrtc
+-      ? "setSinkId" in HTMLMediaElement.prototype
+-      : typeof AudioContext !== "undefined" && "setSinkId" in AudioContext.prototype;
++    // Jolee plays audio chunks with HTMLMediaElement in either dashboard mode.
++    const supportsSinkId = typeof HTMLMediaElement !== "undefined"
++      && typeof HTMLMediaElement.prototype.setSinkId === "function";
+     setIsOutputSelectionSupported(supportsSinkId);
+     console.log(
+       "Dashboard: Output device selection supported:",
+@@ -1901,15 +1982,9 @@ function Sidebar() {
+     );
+     try {
+       console.log(
+-        "Dashboard: Requesting temporary microphone permission for device listing..."
++        "Dashboard: Listing devices; microphone permission is optional for labels..."
+       );
+-      const tempStream = await navigator.mediaDevices.getUserMedia({
+-        audio: true,
+-      });
+-      tempStream.getTracks().forEach((track) => track.stop());
+-      console.log("Dashboard: Temporary permission granted/available.");
+-      console.log("Dashboard: Enumerating media devices...");
+-      const devices = await navigator.mediaDevices.enumerateDevices();
++      const devices = await listAudioDevices(navigator.mediaDevices);
+       console.log("Dashboard: Devices found:", devices);
+       const inputs = [];
+       const outputs = [];
+@@ -2069,6 +2144,7 @@ function Sidebar() {
+   const handleFramerateChange = (event) => {
+     const selectedFramerate = parseInt(event.target.value, 10);
+     setFramerate(selectedFramerate);
++    localStorage.setItem(getPrefixedKey("framerate"), String(selectedFramerate));
+     debouncedPostSetting({ framerate: selectedFramerate });
+   };
+   /** Video bitrate slider: its value is an index into `videoBitrateOptions`. */
+@@ -2087,6 +2163,7 @@ function Sidebar() {
+   const handleJpegQualityChange = (event) => {
+     const selectedQuality = parseInt(event.target.value, 10);
+     setJpegQuality(selectedQuality);
++    localStorage.setItem(getPrefixedKey("jpeg_quality"), String(selectedQuality));
+     debouncedPostSetting({ jpeg_quality: selectedQuality });
+   };
+   const handlePaintOverJpegQualityChange = (event) => {
+@@ -2126,18 +2203,19 @@ function Sidebar() {
+   const handleRateControlChange = (event) => {
+     writeConditional(RATE_CONTROL_SPEC, event.target.value, setRateControlMode, { persist: true });
+   };
+-  const handleAudioInputChange = (event) => {
++  const handleAudioInputChange = async (event) => {
+     const deviceId = event.target.value;
+     setSelectedInputDeviceId(deviceId);
+-    window.postMessage(
++    setParentMicDeviceId(deviceId);
++    postToCore(
+       { type: "audioDeviceSelected", context: "input", deviceId: deviceId },
+       window.location.origin
+     );
++    await microphoneSession.device(deviceId);
+   };
+   const handleAudioOutputChange = (event) => {
+     const deviceId = event.target.value;
+-    setSelectedOutputDeviceId(deviceId);
+-    window.postMessage(
++    postToCore(
+       { type: "audioDeviceSelected", context: "output", deviceId: deviceId },
+       window.location.origin
+     );
+@@ -2157,7 +2235,7 @@ function Sidebar() {
+         setManualHeight(evenHeight.toString());
+         localStorage.setItem(getPrefixedKey("manual_width"), evenWidth.toString());
+         localStorage.setItem(getPrefixedKey("manual_height"), evenHeight.toString());
+-        window.postMessage(
++        postToCore(
+           { type: "setManualResolution", width: evenWidth, height: evenHeight },
+           window.location.origin
+         );
+@@ -2186,7 +2264,8 @@ function Sidebar() {
+   const handleScaleLocallyToggle = () => {
+     const newState = !scaleLocally;
+     setScaleLocally(newState);
+-    window.postMessage(
++    localStorage.setItem(getPrefixedKey("scaleLocallyManual"), String(newState));
++    postToCore(
+       { type: "setScaleLocally", value: newState },
+       window.location.origin
+     );
+@@ -2245,7 +2324,8 @@ function Sidebar() {
+   const handleAntiAliasingToggle = () => {
+     const newState = !antiAliasing;
+     setAntiAliasing(newState);
+-    window.postMessage(
++    localStorage.setItem(getPrefixedKey("antiAliasingEnabled"), String(newState));
++    postToCore(
+       { type: "setAntiAliasing", value: newState },
+       window.location.origin
+     );
+@@ -2262,6 +2342,8 @@ function Sidebar() {
+   };
+   const handleEnableBinaryClipboardToggle = () => {
+     const newState = !enableBinaryClipboard;
++    binaryClipboardEnabledRef.current = newState;
++    if (!newState) clipboardDeliveryRef.current?.clearImages();
+     setEnableBinaryClipboard(newState);
+     debouncedPostSetting({ enable_binary_clipboard: newState });
+   };
+@@ -2279,7 +2361,7 @@ function Sidebar() {
+     setPresetValue("");
+     localStorage.setItem(getPrefixedKey("manual_width"), evenWidth.toString());
+     localStorage.setItem(getPrefixedKey("manual_height"), evenHeight.toString());
+-    window.postMessage(
++    postToCore(
+       { type: "setManualResolution", width: evenWidth, height: evenHeight },
+       window.location.origin
+     );
+@@ -2291,43 +2373,44 @@ function Sidebar() {
+     setPresetValue("");
+     localStorage.removeItem(getPrefixedKey("manual_width"));
+     localStorage.removeItem(getPrefixedKey("manual_height"));
+-    window.postMessage(
++    postToCore(
+       { type: "resetResolutionToWindow" },
+       window.location.origin
+     );
+     resetHidpiToDerivedDefault();
+     resetDpiToDerivedDefault();
+   };
+-  const handleVideoToggle = () =>
+-    window.postMessage(
+-      { type: "pipelineControl", pipeline: "video", enabled: !isVideoActive },
+-      window.location.origin
+-    );
+-  const handleAudioToggle = () =>
+-    window.postMessage(
+-      { type: "pipelineControl", pipeline: "audio", enabled: !isAudioActive },
++  const handleVideoToggle = () => {
++    const enabled = !isVideoActive;
++    setIsVideoActive(enabled);
++    postToCore(
++      { type: "pipelineControl", pipeline: "video", enabled },
+       window.location.origin
+     );
+-  const handleMicrophoneToggle = () =>
+-    window.postMessage(
+-      {
+-        type: "pipelineControl",
+-        pipeline: "microphone",
+-        enabled: !isMicrophoneActive,
+-      },
++  };
++  const handleAudioToggle = () => {
++    const enabled = !isAudioActive;
++    setIsAudioActive(enabled);
++    postToCore(
++      { type: "pipelineControl", pipeline: "audio", enabled },
+       window.location.origin
+     );
+-  const handleWebcamToggle = () =>
+-    window.postMessage(
++  };
++  const handleMicrophoneToggle = () => microphoneSession.toggle(selectedInputDeviceId);
++  const handleWebcamToggle = () => {
++    const enabled = !isWebcamActive;
++    setIsWebcamActive(enabled);
++    postToCore(
+       {
+         type: "pipelineControl",
+         pipeline: "webcam",
+-        enabled: !isWebcamActive,
++        enabled,
+       },
+       window.location.origin
+     );
++  };
+   const handleGamepadToggle = () =>
+-    window.postMessage(
++    postToCore(
+       { type: "gamepadControl", enabled: !isGamepadEnabled },
+       window.location.origin
+     );
+@@ -2343,14 +2426,16 @@ function Sidebar() {
+   };
+   const handleGamingModeRequest = () => {
+     if (document.fullscreenElement) exitFullscreen();
+-    else window.postMessage({ type: "requestGamingMode" }, window.location.origin);
++    else postToCore({ type: "requestGamingMode" }, window.location.origin);
+   };
+   const handleBrowserFullscreen = () => {
+     if (document.fullscreenElement) exitFullscreen();
+-    else window.postMessage({ type: "requestFullscreen" }, window.location.origin);
++    else postToCore({ type: "requestFullscreen" }, window.location.origin);
+   };
+-  const handleClipboardChange = (event) =>
++  const handleClipboardChange = (event) => {
++    clipboardDeliveryRef.current?.clear();
+     setDashboardClipboardContent(event.target.value);
++  };
+   const clipboardImageInputRef = useRef(null);
+   /**
+    * Hands a picked image to the core's `clipboardImageUpdate` path (a File
+@@ -2361,12 +2446,13 @@ function Sidebar() {
+   const handleClipboardImageUpload = (event) => {
+     const file = event.target.files && event.target.files[0];
+     if (file && file.type.startsWith("image/")) {
+-      window.postMessage(
++      clipboardDeliveryRef.current?.clear();
++      postToCore(
+         { type: "clipboardImageUpdate", imageBlob: file },
+         window.location.origin
+       );
+     } else if (file) {
+-      window.postMessage(
++      postToCore(
+         {
+           type: "fileUpload",
+           payload: {
+@@ -2387,7 +2473,7 @@ function Sidebar() {
+   /** Pushes the edited clipboard text to the server on blur, never a truncated preview. */
+   const handleClipboardBlur = (event) => {
+     if (dashboardClipboardTruncated) return;
+-    window.postMessage(
++    postToCore(
+       { type: "clipboardUpdateFromUI", text: event.target.value },
+       window.location.origin
+     );
+@@ -2431,7 +2517,7 @@ function Sidebar() {
+       let response = await doSwitch();
+       if (response.status === 401) {
+         const entered = (typeof window !== "undefined" && window.prompt)
+-          ? window.prompt("Switching the stream mode requires the Selkies master token:")
++          ? window.prompt("Switching the stream mode requires the master token:")
+           : null;
+         if (entered && entered.trim()) {
+           try { sessionStorage.setItem(MASTER_TOKEN_KEY, entered.trim()); } catch { /* sessionStorage unavailable */ }
+@@ -2445,7 +2531,7 @@ function Sidebar() {
+       }
+       await response.json();
+       setStreamMode(newMode);
+-      window.postMessage(
++      postToCore(
+         { type: "mode", mode: newMode },
+         window.location.origin
+       );
+@@ -2466,7 +2552,7 @@ function Sidebar() {
+     setIsTouchGamepadActive(newActiveState);
+ 
+     if (newActiveState && !isTouchGamepadSetup) {
+-      window.postMessage(
++      postToCore(
+         {
+           type: "TOUCH_GAMEPAD_SETUP",
+           payload: { targetDivId: TOUCH_GAMEPAD_HOST_DIV_ID, visible: true },
+@@ -2480,7 +2566,7 @@ function Sidebar() {
+         "visible: true"
+       );
+     } else if (isTouchGamepadSetup) {
+-      window.postMessage(
++      postToCore(
+         {
+           type: "TOUCH_GAMEPAD_VISIBILITY",
+           payload: {
+@@ -2503,7 +2589,7 @@ function Sidebar() {
+     setIsTrackpadModeActive(newActiveState);
+     const message = newActiveState ? "touchinput:trackpad" : "touchinput:touch";
+     console.log(`Dashboard: Toggling trackpad mode. Sending: ${message}`);
+-    window.postMessage({ type: message }, window.location.origin);
++    postToCore({ type: message }, window.location.origin);
+   }, [isTrackpadModeActive]);
+ 
+   /** Tooltip text for a stats gauge. */
+@@ -2512,6 +2598,7 @@ function Sidebar() {
+       const memNA = t("sections.stats.tooltipMemoryNA");
+       switch (itemKey) {
+         case "cpu":
++          if (cpuPercent === null) return `${t("sections.stats.cpuLabel")}: ${memNA}`;
+           return t("sections.stats.tooltipCpu", {
+             value: cpuPercent.toFixed(1),
+           });
+@@ -2539,11 +2626,15 @@ function Sidebar() {
+         }
+         case "fps":
+           return t("sections.stats.tooltipFps", { value: clientFps });
+-        case "audio":
+-          return t("sections.stats.tooltipAudioLevel", { value: audioLevel });
++        case "audio": {
++          const playback = audioLevel === null ? `Audio: ${audioPlaybackStatus}`
++            : t("sections.stats.tooltipAudioLevel", { value: audioLevel === 0 && audioPlaybackStatus === 'playing' ? '<1' : audioLevel });
++          return `${playback}; ${audioCaptureDescription}`;
++        }
+         case "bandwidth":
+           return t("sections.stats.tooltipBandwidth", { value: bandwidthMbps.toFixed(2) }, `Bandwidth: ${bandwidthMbps.toFixed(2)} Mbps`);
+         case "latency":
++          if (latencyMs === null) return `${t("sections.stats.latencyLabel", "Latency")}: ${memNA}`;
+           return t("sections.stats.tooltipLatency", { value: latencyMs.toFixed(1) }, `Latency: ${latencyMs.toFixed(1)} ms`);
+         default:
+           return "";
+@@ -2560,6 +2651,8 @@ function Sidebar() {
+       gpuMemTotal,
+       clientFps,
+       audioLevel,
++      audioPlaybackStatus,
++      audioCaptureDescription,
+       bandwidthMbps,
+       latencyMs,
+     ]
+@@ -2608,11 +2701,11 @@ function Sidebar() {
+       const cs = window.system_stats,
+         su = cs?.mem_used ?? null,
+         st = cs?.mem_total ?? null;
+-      setCpuPercent(cs?.cpu_percent ?? 0);
++      setCpuPercent(Number.isFinite(cs?.cpu_percent) ? cs.cpu_percent : null);
+       setSysMemUsed(su);
+       setSysMemTotal(st);
+       setSysMemPercent(
+-        su !== null && st !== null && st > 0 ? (su / st) * 100 : 0
++        Number.isFinite(su) && Number.isFinite(st) && st > 0 ? (su / st) * 100 : null
+       );
+       const cgs = window.gpu_stats,
+         gp = cgs?.gpu_percent ?? cgs?.utilization_gpu ?? 0;
+@@ -2629,33 +2722,259 @@ function Sidebar() {
+       setGpuMemPercent(
+         gu !== null && gt !== null && gt > 0 ? (gu / gt) * 100 : 0
+       );
+-      setClientFps(window.fps ?? 0);
++      setClientFps(Math.round((window.fps ?? 0) * 10) / 10);
+       // x141 is the websockets worklet's own scale (RMS x141, a full-scale sine
+       // reads 100), applied to the WebRTC analyser's raw RMS so both match.
+       const coreLevel = window.currentAudioLevel;
+       const level = typeof coreLevel === "number"
+         ? coreLevel
+-        : (readStreamAudioLevel(audioMeterRef) ?? 0) * 141;
+-      setAudioLevel(Math.min(100, Math.round(level)));
++        : coreLevel === null ? null : (() => { const measured = readStreamAudioLevel(audioMeterRef); return measured == null ? null : measured * 141; })();
++      setAudioLevel(level === null ? null : Math.min(100, Math.round(level)));
++      setAudioPlaybackStatus(window.audioPlaybackState || 'unavailable');
++      const receivedAge = performance.now() - window.audioCaptureReceivedAt;
++      const capture = receivedAge >= 0 && receivedAge < 3500 ? window.audioCaptureStatus : null;
++      const format = capture?.sample_rate_hz ? ` (${capture.sample_rate_hz} Hz, ${capture.channels} ch, PCM16)` : '';
++      setAudioCaptureDescription(`PC capture: ${capture?.state || 'unknown'}${format}`);
+       const netStats = window.network_stats;
+       setBandwidthMbps(netStats?.bandwidth_mbps ?? 0);
+-      setLatencyMs(netStats?.latency_ms ?? 0);
++      setLatencyMs(Number.isFinite(netStats?.latency_ms) ? netStats.latency_ms : null);
+     };
+     const intervalId = setInterval(readStats, STATS_READ_INTERVAL_MS);
+     return () => clearInterval(intervalId);
+   }, [isOpen]);
+ 
++  // The original core defers browser-blocked clipboard writes until a gesture.
++  // Keep the same panel and report actual browser outcomes in existing notices.
++  useEffect(() => {
++    const frame = document.getElementById('jolee-core');
++    const delivery = createClipboardDelivery({
++      enabled: content => typeof content === 'string' || binaryClipboardEnabledRef.current,
++      write: content => typeof content === 'string' ? navigator.clipboard.writeText(content)
++        : navigator.clipboard.write([new ClipboardItem({ 'image/png': content })]),
++      report: outcome => {
++        const id = 'clipboard-local-result';
++        const message = outcome === 'applied' ? 'PC clipboard copied to this device.'
++          : outcome === 'gesture_required' ? 'PC clipboard received. Tap the remote screen to allow copying to this device.'
++          : 'This browser could not copy the PC clipboard to this device.';
++        setNotifications(prev => [...prev.filter(n => n.id !== id), {
++          id, fileName: 'Clipboard', status: outcome === 'applied' ? 'notice' : 'warn',
++          message, timestamp: Date.now(), fadingOut: false,
++        }].slice(-MAX_NOTIFICATIONS));
++        scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++      },
++    });
++    clipboardDeliveryRef.current = delivery;
++    const receive = event => {
++      if (event.origin !== window.location.origin || event.source !== frame?.contentWindow) return;
++      const message = event.data;
++      if (message?.type === 'status' && message.state !== 'paired') delivery.clear();
++      if (message?.type === 'clipboardContentUpdate') {
++        delivery.clear();
++        if (typeof message.text === 'string' && message.text.length <= 16384 && !message.text.includes('\0') && !message.truncated)
++          delivery.receive(message.text);
++        return;
++      }
++      if (message?.type !== 'clipboardImageUpdate' || !binaryClipboardEnabledRef.current) return;
++      try { delivery.receive(clipboardImageBlob(message)); } catch { delivery.clear(); }
++    };
++    const gesture = event => {
++      if (!event.isTrusted || !['surface', 'keyboard-input-assist'].includes(event.target?.id)) return;
++      delivery.flush();
++    };
++    let coreDocument;
++    const bind = () => {
++      delivery.clear();
++      coreDocument?.removeEventListener('pointerdown', gesture, true);
++      coreDocument?.removeEventListener('keydown', gesture, true);
++      try { coreDocument = frame?.contentDocument; } catch { coreDocument = null; }
++      coreDocument?.addEventListener('pointerdown', gesture, true);
++      coreDocument?.addEventListener('keydown', gesture, true);
++    };
++    bind();
++    frame?.addEventListener('load', bind);
++    window.addEventListener('message', receive);
++    return () => {
++      delivery.clear();
++      clipboardDeliveryRef.current = null;
++      frame?.removeEventListener('load', bind);
++      coreDocument?.removeEventListener('pointerdown', gesture, true);
++      coreDocument?.removeEventListener('keydown', gesture, true);
++      window.removeEventListener('message', receive);
++    };
++  }, [scheduleNotificationRemoval]);
++
++  // The core owns ephemeral request correlation; the existing button and
++  // notification list only display its validated capability/outcome.
++  useEffect(() => {
++    const frame = document.getElementById('jolee-core');
++    const refresh = () => {
++      setSasState({ available: false, pending: false });
++      postToCore({ type: 'getSasState' }, window.location.origin);
++    };
++    const receive = event => {
++      if (event.origin !== window.location.origin || event.source !== frame?.contentWindow) return;
++      const message = event.data;
++      if (message?.type === 'status' && message.state !== 'paired') setSasState({ available: false, pending: false });
++      if (message?.type === 'sasState' && typeof message.available === 'boolean' && typeof message.pending === 'boolean')
++        setSasState({ available: message.available && !message.pending, pending: message.pending });
++      if (message?.type === 'secureDesktopResult') {
++        const texts = {
++          warning: {
++            input_rejected: 'The PC did not accept secure-screen input.',
++            input_partial: 'The PC accepted only part of the secure-screen input. Check the remote screen before trying again.',
++            input_unknown: 'Secure-screen input outcome is unknown. Check the remote screen before trying again.',
++          },
++          returned: { normal_frame_received: 'The normal desktop stream has resumed.' },
++          failed: {
++            prepare_failed: 'The secure-screen helper could not be prepared.',
++            helper_lost: 'The secure-screen helper stopped unexpectedly. Return to the normal desktop was not verified.',
++            deadline_reached: 'Secure-screen observation timed out. Return to the normal desktop was not verified.',
++            session_changed: 'The PC session changed. Return to the normal desktop was not verified.',
++            capture_unavailable: 'The secure-screen display is unavailable. Return to the normal desktop was not verified.',
++            return_unobserved: 'Return to the normal desktop was not verified.',
++            cancelled: 'Secure-screen observation stopped. Return to the normal desktop was not verified.',
++          },
++        };
++        if (typeof message.status !== 'string' || typeof message.code !== 'string' || !Object.hasOwn(texts, message.status) || !Object.hasOwn(texts[message.status], message.code)) return;
++        const id = 'secure-desktop-result';
++        setNotifications(prev => [...prev.filter(n => n.id !== id), {
++          id, fileName: 'Remote screen', status: message.status === 'returned' ? 'notice' : 'warn',
++          message: texts[message.status][message.code], timestamp: Date.now(), fadingOut: false,
++        }].slice(-MAX_NOTIFICATIONS));
++        scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++        return;
++      }
++      if (message?.type !== 'sasResult' || !['invoked', 'rejected', 'uncertain'].includes(message.status)) return;
++      const id = 'sas-result';
++      const text = message.status === 'invoked' ? 'Ctrl+Alt+Delete requested.'
++        : message.status === 'rejected' ? 'Ctrl+Alt+Delete was not sent.'
++        : 'Ctrl+Alt+Delete outcome is unknown. Check the remote screen before trying again.';
++      setNotifications(prev => [...prev.filter(n => n.id !== id), {
++        id, fileName: 'Ctrl+Alt+Delete', status: message.status === 'invoked' ? 'notice' : 'warn',
++        message: text, timestamp: Date.now(), fadingOut: false,
++      }].slice(-MAX_NOTIFICATIONS));
++      scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++    };
++    window.addEventListener('message', receive);
++    frame?.addEventListener('load', refresh);
++    refresh();
++    return () => { window.removeEventListener('message', receive); frame?.removeEventListener('load', refresh); };
++  }, [scheduleNotificationRemoval]);
++
+   /** The core message listener; the module docblock lists the message types handled. */
+   useEffect(() => {
+     const handleWindowMessage = (event) => {
+       if (event.origin !== window.location.origin) return;
+       const message = event.data;
+       if (typeof message === "object" && message !== null) {
+-        if (message.type === "pipelineStatusUpdate") {
++        if (message.type === 'fullscreenError' || (message.type === 'pipelineStatusUpdate' && message.audio !== undefined && message.error)) {
++          if (event.source !== document.getElementById('jolee-core')?.contentWindow) return;
++          const id = message.type === 'fullscreenError' ? 'fullscreen-error' : 'audio-output-error';
++          const text = message.type === 'fullscreenError' ? message.message : message.error;
++          if (typeof text !== 'string' || !text) return;
++          setNotifications(prev => [...prev.filter(n => n.id !== id), {
++            id, fileName: message.type === 'fullscreenError' ? 'Fullscreen' : 'Audio',
++            status: 'warn', message: text, timestamp: Date.now(), fadingOut: false,
++          }].slice(-MAX_NOTIFICATIONS));
++          scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++        } else if (message.type === 'clipboardPasteResult') {
++          if (event.source !== document.getElementById('jolee-core')?.contentWindow ||
++              !['injected', 'rejected', 'uncertain'].includes(message.status)) return;
++          const reasons = {
++            unsupported: 'Wait for the clipboard update, then press Paste again.',
++            modified_shortcut: 'Wait for the clipboard update before using this modified Paste shortcut.',
++            clipboard_unconfirmed: 'The PC did not confirm the clipboard update. Paste was cancelled.',
++            superseded: 'Clipboard content changed. Paste was cancelled.',
++            conflicting_input: 'Another input cancelled the pending Paste.',
++            target_unavailable: 'The target changed or is unavailable. Paste was cancelled.',
++            modifiers_active: 'Release the shortcut keys before trying Paste again.',
++            session_unavailable: 'The session is unavailable. Paste was cancelled.',
++          };
++          const id = 'clipboard-paste-result';
++          setNotifications(prev => [...prev.filter(n => n.id !== id), {
++            id, fileName: 'Clipboard', status: message.status === 'injected' ? 'notice' : 'warn',
++            message: message.status === 'injected' ? 'Paste shortcut sent.' : message.status === 'uncertain'
++              ? 'Paste was not confirmed. Check the target before trying again.'
++              : reasons[message.reason] || 'Paste was cancelled. Check the clipboard and try again.',
++            timestamp: Date.now(), fadingOut: false,
++          }].slice(-MAX_NOTIFICATIONS));
++          scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++        } else if ((message.type === "clipboardResult" || message.type === "clipboardReadError")) {
++          if (event.source !== document.getElementById('jolee-core')?.contentWindow) return;
++          if (message.type === 'clipboardResult' && !['applied', 'rejected'].includes(message.status)) return;
++          const reasons = {
++            invalid_text: 'Clipboard text is too large or contains unsupported characters.',
++            invalid_image: 'The clipboard image could not be decoded.',
++            image_too_large: 'The clipboard image exceeds the supported size or dimensions.',
++            clipboard_unavailable: 'The PC could not update its clipboard.',
++            session_unavailable: 'The desktop session is unavailable.',
++            unsupported: 'This clipboard operation or image format is not supported.',
++            confirmation_timeout: 'The PC did not confirm the clipboard update.',
++          };
++          const readError = message.type === 'clipboardReadError';
++          const id = readError ? 'clipboard-read-result' : 'clipboard-write-result';
++          setNotifications(prev => [...prev.filter(n => n.id !== id), {
++            id, fileName: 'Clipboard', status: message.status === 'applied' ? 'notice' : 'warn',
++            message: message.status === 'applied' ? 'PC clipboard updated.' : (readError ? 'PC clipboard transfer failed. ' : '') + (reasons[message.reason] || 'The PC did not update its clipboard.'),
++            timestamp: Date.now(), fadingOut: false,
++          }].slice(-MAX_NOTIFICATIONS));
++          scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++        } else if (message.type === "screenResult") {
++          if (event.source !== document.getElementById('jolee-core')?.contentWindow) return;
++          if (!['applied', 'rejected'].includes(message.status)) return;
++          const reasons = {
++            application_disabled: 'Changing the desktop resolution is not enabled on this PC yet.',
++            unsupported_mode: 'This display does not support the requested resolution.',
++            invalid_request: 'The requested resolution is invalid.',
++            session_unavailable: 'The desktop session is unavailable.',
++            confirmation_timeout: 'The PC did not confirm the resolution request.',
++            display_changed: 'The display changed before the request completed.',
++            busy: 'Another display request is in progress.',
++            apply_failed: 'The PC could not apply the resolution.',
++            verify_failed: 'The PC could not verify the resulting resolution.',
++            restore_failed: 'The PC could not restore the previous resolution.',
++          };
++          const size = message.effective;
++          if (message.status === 'applied' && (!Number.isInteger(size?.width) || !Number.isInteger(size?.height) || size.width < 1 || size.height < 1)) return;
++          const text = message.status === 'applied'
++            ? `Desktop resolution confirmed: ${size.width} × ${size.height}.`
++            : reasons[message.reason] || 'The PC did not apply the requested resolution.';
++          const id = 'screen-resolution-result';
++          setNotifications(prev => [...prev.filter(n => n.id !== id), {
++            id, fileName: 'Screen Settings', status: message.status === 'applied' ? 'notice' : 'warn',
++            message: text, timestamp: Date.now(), fadingOut: false,
++          }].slice(-MAX_NOTIFICATIONS));
++          scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++        } else if (message.type === "pipelineStatusUpdate") {
+           if (message.video !== undefined) setIsVideoActive(message.video);
+           if (message.audio !== undefined) setIsAudioActive(message.audio);
+-          if (message.microphone !== undefined)
+-            setIsMicrophoneActive(message.microphone);
++          // Microphone UI is owned by parent capture; ignore core ON snaps.
++          // Explicit failure posts from jolee-mic-capture include error + microphone:false.
++          if (message.microphone === false &&
++              (event.source === document.getElementById('jolee-core')?.contentWindow ||
++               (event.source === window && message.microphoneGeneration === parentMicrophoneGeneration()))) {
++            microphoneSession.stop();
++            if (typeof message.error === "string" && message.error) {
++              const id = "microphone-start-error";
++              const text = `${t("notifications.errorPrefix")} ${message.error}`;
++              setNotifications((prev) => {
++                const filtered = prev.filter((n) => n.id !== id);
++                return [
++                  ...filtered,
++                  {
++                    id,
++                    fileName: "Microphone",
++                    status: "error",
++                    progress: 100,
++                    message: text,
++                    timestamp: Date.now(),
++                    fadingOut: false,
++                  },
++                ].slice(-MAX_NOTIFICATIONS);
++              });
++              scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++            }
++          }
+           if (message.webcam !== undefined)
+             setIsWebcamActive(message.webcam);
+         } else if (message.type === "effectiveCursorState" && typeof message.value === "boolean") {
+@@ -2678,8 +2997,7 @@ function Sidebar() {
+         } else if (message.type === "sidebarButtonStatusUpdate") {
+           if (message.video !== undefined) setIsVideoActive(message.video);
+           if (message.audio !== undefined) setIsAudioActive(message.audio);
+-          if (message.microphone !== undefined)
+-            setIsMicrophoneActive(message.microphone);
++          // Microphone UI owned by parent capture; ignore core snaps.
+           if (message.webcam !== undefined)
+             setIsWebcamActive(message.webcam);
+           if (message.gamepad !== undefined)
+@@ -2690,7 +3008,8 @@ function Sidebar() {
+             setDashboardClipboardTruncated(message.truncated === true);
+           }
+         } else if (message.type === "audioDeviceSelected") {
+-          if (message.deviceId) {
++          if (event.source !== document.getElementById('jolee-core')?.contentWindow) return;
++          if (typeof message.deviceId === 'string') {
+             if (message.context === "input")
+               setSelectedInputDeviceId(message.deviceId);
+             else if (message.context === "output")
+@@ -2899,7 +3218,7 @@ function Sidebar() {
+     gaugeCircumference
+   );
+   const audioLevelOffset = calculateGaugeOffset(
+-    audioLevel,
++    audioLevel ?? 0,
+     gaugeRadius,
+     gaugeCircumference
+   );
+@@ -2932,7 +3251,12 @@ function Sidebar() {
+   );
+ 
+   /** One encoder knob serves both transports; CBR/CRF applies to every H.264 encoder on both. */
+-  const activeEncoder = encoder;
++  const activeEncoder = agentCapabilities.active_encoder || '';
++  const effectiveJpegQuality = activeEncoder === 'jpeg' && Number.isInteger(agentCapabilities.jpeg_quality_effective)
++    && agentCapabilities.jpeg_quality_effective >= 1 && agentCapabilities.jpeg_quality_effective <= 100
++    ? agentCapabilities.jpeg_quality_effective : null;
++  const confirmedEncoderOptions = agentCapabilities.supported_encoders?.length
++    ? agentCapabilities.supported_encoders : dynamicEncoderOptions;
+   const H264_ENCODERS = ["h264enc", "h264enc-striped", "nvh264enc"];
+   const showFPS = [
+     "jpeg",
+@@ -2941,7 +3265,7 @@ function Sidebar() {
+   ].includes(encoder);
+   const showCRF = H264_ENCODERS.includes(activeEncoder);
+   const showH264Options = H264_ENCODERS.includes(activeEncoder);
+-  const showJpegOptions = encoder === 'jpeg';
++  const showJpegOptions = activeEncoder === 'jpeg';
+   const showPaintOverQualityToggle = showH264Options || showJpegOptions;
+   /**
+    * The mode the encoder is actually using, which picks the quality slider:
+@@ -3030,21 +3354,9 @@ function Sidebar() {
+       <div className={sidebarClasses}>
+           <div className="sidebar-header">
+             {uiShowLogo && (
+-              <a
+-                href="https://github.com/selkies-project/selkies"
+-                target="_blank"
+-                rel="noopener noreferrer"
+-              >
+-                <SelkiesLogo width={30} height={30} t={t} />
+-              </a>
++              <SelkiesLogo width={30} height={30} t={t} />
+             )}
+-            <a
+-              href="https://github.com/selkies-project/selkies"
+-              target="_blank"
+-              rel="noopener noreferrer"
+-            >
+-              <h2>{uiTitle}</h2>
+-            </a>
++            <h2>{uiTitle}</h2>
+             <div className="header-controls">
+             <div
+               className={`theme-toggle ${theme}`}
+@@ -3119,7 +3431,8 @@ function Sidebar() {
+               <button
+                 className={`action-button ${isMicrophoneActive ? "active" : ""}`}
+                 onClick={handleMicrophoneToggle}
+-                title={t(
++                disabled={!isMicrophoneActive && !microphoneReady}
++                title={!microphoneReady ? 'Microphone forwarding requires a connected PC with confirmed support.' : t(
+                   isMicrophoneActive
+                     ? "buttons.microphoneDisableTitle"
+                     : "buttons.microphoneEnableTitle"
+@@ -3132,7 +3445,8 @@ function Sidebar() {
+               <button
+                 className={`action-button ${isWebcamActive ? "active" : ""}`}
+                 onClick={handleWebcamToggle}
+-                title={t(
++                disabled={!isWebcamActive && agentCapabilities.webcam_supported !== true}
++                title={agentCapabilities.webcam_supported !== true ? 'The PC has not confirmed webcam forwarding support.' : t(
+                   isWebcamActive
+                     ? "buttons.webcamDisableTitle"
+                     : "buttons.webcamEnableTitle"
+@@ -3265,11 +3579,12 @@ function Sidebar() {
+                     </label>
+                     <select
+                       id="encoderSelect"
+-                      value={encoder}
++                      value={activeEncoder}
+                       onChange={handleEncoderChange}
+-                      disabled={!serverSettings || dynamicEncoderOptions.length <= 1}
++                      disabled={!serverSettings || confirmedEncoderOptions.length <= 1}
+                     >
+-                      {dynamicEncoderOptions.map((enc) => (
++                      {!activeEncoder && <option value="" disabled>Awaiting encoder confirmation</option>}
++                      {confirmedEncoderOptions.map((enc) => (
+                         <option key={enc} value={enc}>
+                           {displayLabel(enc)}
+                         </option>
+@@ -3361,6 +3676,9 @@ function Sidebar() {
+                           {t("sections.video.jpegQualityLabel", {
+                             jpegQuality: jpeg_quality,
+                           })}
++                          {effectiveJpegQuality !== null && effectiveJpegQuality !== jpeg_quality && (
++                            <> ({t('sections.video.jpegQualityEffective', { quality: effectiveJpegQuality })})</>
++                          )}
+                         </label>
+                         <input
+                           type="range"
+@@ -3645,9 +3963,10 @@ function Sidebar() {
+                         </label>
+                         <select
+                           id="uiScalingSelect"
++                          title={agentCapabilities.dpi_scaling_supported === false ? 'Remote UI scaling is not supported by this PC yet.' : agentCapabilities.dpi_scaling_supported !== true ? 'The PC has not confirmed remote UI scaling support.' : undefined}
+                           value={selectedDpi}
+                           onChange={handleDpiScalingChange}
+-                          disabled={!serverSettings || serverSettings.scaling_dpi?.allowed?.length <= 1
++                          disabled={agentCapabilities.dpi_scaling_supported !== true || !serverSettings || serverSettings.scaling_dpi?.allowed?.length <= 1
+                             || serverSettings.scaling_dpi?.overridden === true}
+                         >
+                           {(serverSettings?.scaling_dpi?.allowed || []).map((dpiValue) => {
+@@ -3793,9 +4112,10 @@ function Sidebar() {
+                       </label>
+                       <select
+                         id="audioInputSelect"
++                        title={!microphoneReady ? 'Microphone forwarding requires a connected PC with confirmed support.' : undefined}
+                         value={selectedInputDeviceId}
+                         onChange={handleAudioInputChange}
+-                        disabled={isLoadingAudioDevices || !!audioDeviceError}
++                        disabled={!microphoneReady || isLoadingAudioDevices || !!audioDeviceError}
+                         className="audio-device-select"
+                       >
+                         {audioInputDevices.map((d) => (
+@@ -3828,7 +4148,7 @@ function Sidebar() {
+                     {(renderableSettings.audio_bitrate ?? true) && (
+                       <div className="dev-setting-item">
+                         <label htmlFor="audioBitrateSlider">
+-                          {t("sections.audio.bitrateLabel", {
++                          {agentCapabilities.audio_bitrate_supported === false ? 'Audio bitrate: fixed by PC' : t("sections.audio.bitrateLabel", {
+                             bitrate: audioBitrate/ 1000,
+                           })}
+                         </label>
+@@ -3840,7 +4160,7 @@ function Sidebar() {
+                           step={1}
+                           value={Math.max(0, audioBitrateChoices.indexOf(audioBitrate))}
+                           onChange={(e) => handleAudioBitrateChange(audioBitrateChoices[parseInt(e.target.value, 10)])}
+-                          disabled={!serverSettings || (serverSettings.audio_bitrate?.allowed?.length ?? 0) <= 1}
++                          disabled={agentCapabilities.audio_bitrate_supported === false || !serverSettings || (serverSettings.audio_bitrate?.allowed?.length ?? 0) <= 1}
+                         />
+                       </div>
+                     )}
+@@ -3914,9 +4234,9 @@ function Sidebar() {
+                             fill="var(--sidebar-text)"
+                             fontWeight="bold"
+                           >
+-                            {Math.round(
++                            {cpuPercent === null ? "—" : `${Math.round(
+                               Math.max(0, Math.min(100, cpuPercent || 0))
+-                            )}%
++                            )}%`}
+                           </text>
+                         </svg>
+                         <div className="gauge-label">
+@@ -3963,10 +4283,9 @@ function Sidebar() {
+                             fill="var(--sidebar-text)"
+                             fontWeight="bold"
+                           >
+-                            {Math.round(
++                            {sysMemPercent === null ? "—" : `${Math.round(
+                               Math.max(0, Math.min(100, sysMemPercent || 0))
+-                            )}
+-                            %
++                            )}%`}
+                           </text>
+                         </svg>
+                         <div className="gauge-label">
+@@ -4163,7 +4482,7 @@ function Sidebar() {
+                             fill="var(--sidebar-text)"
+                             fontWeight="bold"
+                           >
+-                            {audioLevel}
++                            {audioLevel ?? '—'}
+                           </text>
+                         </svg>
+                         <div className="gauge-label">
+@@ -4257,7 +4576,7 @@ function Sidebar() {
+                             fill="var(--sidebar-text)"
+                             fontWeight="bold"
+                           >
+-                            {Math.round(latencyMs)}
++                            {latencyMs === null ? "—" : Math.round(latencyMs)}
+                           </text>
+                         </svg>
+                         <div className="gauge-label">
+@@ -4436,7 +4755,7 @@ function Sidebar() {
+               </div>
+             )}
+ 
+-            {(renderableSettings.sharing ?? true) && (renderableSettings.enableSharing ?? true) && (
++            {renderableSettings.sharing && renderableSettings.enableSharing && (
+               <div className="sidebar-section">
+                 <div
+                   className="sidebar-section-header"
+@@ -4495,7 +4814,7 @@ function Sidebar() {
+               </div>
+             )}
+ 
+-            {(renderableSettings.gamepads ?? true) && (
++            {renderableSettings.gamepads && (
+               <div className="sidebar-section">
+                 <div
+                   className="sidebar-section-header"
+@@ -4611,53 +4930,18 @@ function Sidebar() {
+                 </div>
+                 {sectionsOpen.shortcuts && (
+                   <div className="sidebar-section-content" id="shortcuts-content">
+-                    {[
+-                      { combo: "Ctrl + Shift + F", label: t("sections.shortcuts.fullscreen", "Toggle fullscreen") },
+-                      { combo: "Ctrl + Shift + X", label: t("sections.shortcuts.gamingMode", "Toggle gaming mode") },
+-                      { combo: "Ctrl + Shift + M", label: t("sections.shortcuts.openMenu", "Open or close the dashboard") },
+-                      { combo: "Ctrl + Shift + G", label: t("sections.shortcuts.toggleGamepad", "Toggle the virtual gamepad") },
+-                      { combo: "Ctrl + Shift + Left Click", label: t("sections.shortcuts.pointerLock", "Lock the pointer to the stream") },
+-                    ].map((sc) => (
+-                      <div
+-                        key={sc.combo}
+-                        className="shortcut-item"
+-                        style={{
+-                          display: "flex",
+-                          flexDirection: "column",
+-                          alignItems: "center",
+-                          gap: "2px",
+-                          padding: "6px 0",
+-                          textAlign: "center",
+-                        }}
+-                      >
+-                        <kbd
+-                          style={{
+-                            fontFamily: "monospace",
+-                            whiteSpace: "normal",
+-                            overflowWrap: "anywhere",
+-                            maxWidth: "100%",
+-                            textAlign: "center",
+-                            padding: "2px 6px",
+-                            borderRadius: "4px",
+-                            border: "1px solid var(--item-border)",
+-                          }}
+-                        >
+-                          {sc.combo}
+-                        </kbd>
+-                        <span>{sc.label}</span>
+-                      </div>
+-                    ))}
+-                    <div style={{ marginTop: "8px", textAlign: "center" }}>
+-                      <a
+-                        className="cite-link"
+-                        href="https://docs.selkies.io/citation/"
+-                        target="_blank"
+-                        rel="noopener noreferrer"
+-                      >
+-                        {t("sections.shortcuts.citeNotice", "Cite our paper academically")}
+-                        {" ↗"}
+-                      </a>
+-                    </div>
++                    <button
++                      className="resolution-button"
++                      onClick={() => postToCore(
++                        { type: "command", command: "ctrl-alt-delete" },
++                        window.location.origin
++                      )}
++                      disabled={!sasState.available || sasState.pending}
++                      title={sasState.pending ? 'Waiting for the PC response' : sasState.available
++                        ? 'Send Ctrl+Alt+Del to the remote PC' : 'Ctrl+Alt+Delete is unavailable for this session'}
++                    >
++                      Ctrl + Alt + Del
++                    </button>
+                   </div>
+                 )}
+               </div>
+@@ -4746,10 +5030,10 @@ function Sidebar() {
+                   )}
+                 </>
+               )}
+-              {n.status === "warn" && (
++              {(n.status === "warn" || n.status === "notice") && (
+                 <>
+                   {" "}
+-                  <span className="notification-status-text warn-text">
++                  <span className={`notification-status-text ${n.status === 'warn' ? 'warn-text' : ''}`}>
+                     {n.message ? n.message : t("notifications.warningPrefix")}
+                   </span>{" "}
+                 </>
+@@ -4770,7 +5054,7 @@ function Sidebar() {
+               &times;
+             </button>
+           </div>
+-          <iframe src={withSessionToken("./api/files/")} title={t("filesModal.iframeTitle")} />
++          <iframe src={filesIframeSrc} title={t("filesModal.iframeTitle")} />
+         </div>
+       )}
+       {isAppsModalOpen && (
+diff --git b/src/main.jsx a/src/main.jsx
+index 53c37f2..0728140 100644
+--- b/src/main.jsx
++++ a/src/main.jsx
+@@ -5,94 +5,29 @@
+  */
+ 
+ /**
+- * Entry point of the dashboard bundle.
+- *
+- * Probes `/api/status` for the server's streaming mode and dual-mode flag,
+- * publishes them on `window.__SELKIES_STREAMING_MODE__` and
+- * `window.__SELKIES_DUAL_MODE__`, then loads selkies-core with
+- * `window.__SELKIES_DEFER_INITIALIZATION` set and starts it through
+- * `window.selkiesCoreInitialize()` so the core comes up in the detected mode.
+- * The `#shared` and `#player2` to `#player4` hashes render no dashboard and
+- * mount only the floating touch-gamepad toggle: always for the player slots,
+- * and once touch is detected for the shared viewer. The touch gamepad is
+- * bundled straight from the universal-touch-gamepad addon, so a fresh
+- * checkout builds without a vendored copy.
++ * Dashboard entry: overlay chrome on the hop core iframe. Does not load
++ * selkies-core or any Selkies streaming client.
+  * @module
+  */
+-import React from 'react';
+-import ReactDOM from 'react-dom/client';
+-import App from './App.jsx';
+-import PlayerGamepadButton from './components/PlayerGamepadButton.jsx';
+-import './index.css';
+-import { getRoutePrefix } from '../../selkies-web-core/lib/util.js';
+-import "../../universal-touch-gamepad/universalTouchGamepad.js";
++import React from "react";
++import ReactDOM from "react-dom/client";
++import App from "./App.jsx";
++import { postJoleeServerSettings } from "./jolee-settings.js";
++import "./index.css";
+ 
+-/**
+- * Publishes the server's streaming mode and dual-mode flag on `window` before
+- * selkies-core is imported.
+- *
+- * The dual-mode flag lets the dashboard show the WebSocket/WebRTC toggle
+- * before `serverSettings` arrive over the stream, so a WebRTC session that
+- * never connects still leaves a visible way back to WebSockets. A failed
+- * probe is logged and leaves both globals unset.
+- * @returns {Promise<void>}
+- */
+-async function detectInitialMode() {
+-  try {
+-    const resp = await fetch(`${getRoutePrefix()}/api/status`, {
+-      credentials: 'same-origin',
+-      signal: AbortSignal.timeout(2000),
+-    });
+-    if (!resp.ok) 
+-      throw new Error(`Failed to fetch initial mode, status: ${resp.status}`);
+-    const data = await resp.json();
+-    if (data && data.current_mode) {
+-      console.log(`Received initial streaming mode: ${data.current_mode}`);
+-      window.__SELKIES_STREAMING_MODE__ = data.current_mode;
+-    }
+-    if (data && typeof data.enable_dual_mode !== 'undefined') {
+-      window.__SELKIES_DUAL_MODE__ = !!data.enable_dual_mode;
+-    }
+-  } catch (err) {
+-    console.warn(`Error detecting initial mode: ${err}`);
+-  }
+-}
++const dashboardRootElement = document.createElement("div");
++dashboardRootElement.id = "dashboard-root";
++dashboardRootElement.classList.add("allow-native-input");
++document.body.appendChild(dashboardRootElement);
+ 
+-const currentHash = window.location.hash;
+-const noDashboardModes = ['#shared', '#player2', '#player3', '#player4'];
+-const playerClientModes = ['#player2', '#player3', '#player4'];
+-
+-(async () => {
+-  await detectInitialMode();
+-  window.__SELKIES_DEFER_INITIALIZATION = true;
+-  await import('./selkies-core.js');
+-  window.selkiesCoreInitialize();
+-  if (!noDashboardModes.includes(currentHash)) {
+-    const dashboardRootElement = document.createElement('div');
+-    dashboardRootElement.id = 'dashboard-root';
+-    // Keystrokes on dashboard controls drive the UI, not the game: the input
+-    // core skips events whose target sits under an allow-native-input ancestor.
+-    dashboardRootElement.classList.add('allow-native-input');
+-    document.body.appendChild(dashboardRootElement);
+-    const appMountPoint = document.getElementById('root');
+-    if (appMountPoint) {
+-      ReactDOM.createRoot(appMountPoint).render(
+-        <React.StrictMode>
+-          <App dashboardRoot={dashboardRootElement} />
+-        </React.StrictMode>,
+-      );
+-    } else {
+-      console.error("CRITICAL: Dashboard mount point #root not found. Primary dashboard will not render.");
+-    }
+-  } else {
+-    console.log(`Dashboard UI rendering skipped for mode: ${currentHash}; mounting the touch gamepad toggle.`);
+-    const playerUIRootElement = document.createElement('div');
+-    playerUIRootElement.id = 'player-ui-root';
+-    document.body.appendChild(playerUIRootElement);
+-    ReactDOM.createRoot(playerUIRootElement).render(
+-      <React.StrictMode>
+-        <PlayerGamepadButton touchOnly={!playerClientModes.includes(currentHash)} />
+-      </React.StrictMode>,
+-    );
+-  }
+-})();
++const appMountPoint = document.getElementById("root");
++if (appMountPoint) {
++  ReactDOM.createRoot(appMountPoint).render(
++    <React.StrictMode>
++      <App dashboardRoot={dashboardRootElement} />
++    </React.StrictMode>,
++  );
++  requestAnimationFrame(function () { postJoleeServerSettings(); setTimeout(postJoleeServerSettings, 0); setTimeout(postJoleeServerSettings, 50); });
++} else {
++  console.error("Dashboard mount point #root not found.");
++}
+diff --git b/src/styles/Overlay.css a/src/styles/Overlay.css
+index a82500f..f20cc30 100644
+--- b/src/styles/Overlay.css
++++ a/src/styles/Overlay.css
+@@ -19,16 +19,16 @@
+        toggle, an error row) are lighter again. Accent as text is therefore a
+        separate, lighter tint of the same hue — the fill colour is too dark
+        against those surfaces at label sizes. */
+-    --accent: #ec4899;
+-    --accent-strong: #f472b6;
+-    --accent-text: #f9a8d4;
+-    --accent-text-strong: #fbc0de;
+-    --accent-soft: rgba(236, 72, 153, 0.14);
+-    --accent-border: rgba(236, 72, 153, 0.45);
+-    --violet: #c3b1f7;
+-    --violet-strong: #cdc0fa;
+-    --wordmark-from: #f4a6cf;
+-    --wordmark-to: #c3b1f7;
++    --accent: #0098e8;
++    --accent-strong: #12aaed;
++    --accent-text: #7dd3fc;
++    --accent-text-strong: #bae6fd;
++    --accent-soft: rgba(0, 152, 232, 0.16);
++    --accent-border: rgba(0, 152, 232, 0.5);
++    --violet: #38bdf8;
++    --violet-strong: #7dd3fc;
++    --wordmark-from: #5ec8f5;
++    --wordmark-to: #0689cf;
+     --bg: #12161d;
+     --surface: #181d26;
+     --surface-alt: #1f2530;
+@@ -58,7 +58,7 @@
+     --input-border: var(--border-strong);
+     /* A filled button carries near-black text, so its pink is lighter again
+        than the accent that only has to sit on a dark surface. */
+-    --button-bg: #f795ca;
++    --button-bg: #38bdf8;
+     --button-text: #12161d;
+     --button-hover-bg: var(--accent-text);
+     --link-color: var(--violet);
+@@ -92,28 +92,28 @@
+     /* Gamepad visualizer */
+     --gamepad-shell-fill: #2a313d;
+     --gamepad-shell-stroke: #3d4653;
+-    --gamepad-pad-fill: #b0568c;
+-    --gamepad-pad-stroke: #d883b4;
+-    --gamepad-pad-pressed-fill: #ff97cd;
+-    --gamepad-stick-base-fill: #6d4a60;
+-    --gamepad-stick-top-fill: #8f81d3;
+-    --gamepad-stick-top-stroke: #ada0f5;
++    --gamepad-pad-fill: #0284c7;
++    --gamepad-pad-stroke: #38bdf8;
++    --gamepad-pad-pressed-fill: #7dd3fc;
++    --gamepad-stick-base-fill: #0c4a6e;
++    --gamepad-stick-top-fill: #0ea5e9;
++    --gamepad-stick-top-stroke: #7dd3fc;
+ }
+ 
+ /* Light Theme */
+ .theme-light {
+     /* On a light surface the accent has to go the other way to carry text, so
+        --accent-text is darker than the fill rather than lighter. */
+-    --accent: #a82a69;
+-    --accent-strong: #8f2359;
++    --accent: #0284c7;
++    --accent-strong: #0369a1;
+     --accent-text: var(--accent);
+     --accent-text-strong: var(--accent-strong);
+-    --accent-soft: rgba(168, 42, 105, 0.1);
+-    --accent-border: rgba(168, 42, 105, 0.4);
+-    --violet: #5b4ba3;
+-    --violet-strong: #4a3c87;
+-    --wordmark-from: #b93a82;
+-    --wordmark-to: #7b52b0;
++    --accent-soft: rgba(2, 132, 199, 0.12);
++    --accent-border: rgba(2, 132, 199, 0.4);
++    --violet: #0369a1;
++    --violet-strong: #075985;
++    --wordmark-from: #0ea5e9;
++    --wordmark-to: #0369a1;
+     --bg: #f4f5f8;
+     --surface: #ffffff;
+     --surface-alt: #f6f7f9;
+@@ -166,12 +166,12 @@
+ 
+     --gamepad-shell-fill: #c6cad3;
+     --gamepad-shell-stroke: #9aa1ad;
+-    --gamepad-pad-fill: #c95796;
+-    --gamepad-pad-stroke: #a42c73;
+-    --gamepad-pad-pressed-fill: #a3136f;
+-    --gamepad-stick-base-fill: #dcafc4;
+-    --gamepad-stick-top-fill: #8071c8;
+-    --gamepad-stick-top-stroke: #5e4da1;
++    --gamepad-pad-fill: #0284c7;
++    --gamepad-pad-stroke: #0369a1;
++    --gamepad-pad-pressed-fill: #075985;
++    --gamepad-stick-base-fill: #bae6fd;
++    --gamepad-stick-top-fill: #0ea5e9;
++    --gamepad-stick-top-stroke: #0369a1
+ }
+ 
+ /* --- Sidebar General Styles --- */
+diff --git b/src/translations.js a/src/translations.js
+index 61e2ece..af720ee 100644
+--- b/src/translations.js
++++ a/src/translations.js
+@@ -65,6 +65,7 @@ const en = {
+             streamingModeLabel: "Turbo",
+             useCpuLabel: "CPU Encoding",
+             jpegQualityLabel: "Base Quality: {jpegQuality}",
++            jpegQualityEffective: "PC used {quality}",
+             paintOverJpegQualityLabel: "Paintover Quality: {paintOverJpegQuality}",
+             paintoverCrfLabel: "Paint-Overs CRF ({crf}):",
+             paintoverBurstLabel: "Paint-Over Burst Frames ({frames}):",
+@@ -141,8 +142,8 @@ const en = {
+         clipboard: {
+             uploadImage: "Upload Image",
+             title: "Clipboard",
+-            label: "Server Clipboard:",
+-            placeholder: "Clipboard content from server...",
++            label: "PC Clipboard:",
++            placeholder: "Clipboard content from the PC...",
+             binaryModeLabel: "Image Support",
+             binaryModeDetails: "Allows copying and pasting images to and from the remote session.",
+         },

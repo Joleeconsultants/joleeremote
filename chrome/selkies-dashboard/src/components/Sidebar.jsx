@@ -4014,7 +4014,6 @@ function Sidebar() {
                         ))}
                       </select>
                     </div>
-                    {!displayCatalog && <p role="status">The PC has not supplied its Windows display modes. Resolution controls are unavailable.</p>}
                     {displayCatalog && !remoteDisplay && <p role="status">The selected monitor is disconnected. Select an available monitor.</p>}
                     {displayPending && <p role="status">Waiting for the PC to confirm the display change…</p>}
                     <div className="resolution-manual-inputs">

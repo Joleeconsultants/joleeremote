@@ -8,7 +8,7 @@ import { SasControl } from '../public/sas-control.js';
 import { ClipboardPasteGate } from '../public/clipboard-paste.js';
 import { UploadControl } from '../public/upload-control.js';
 function viewerContext(globals) {
-  globals={printJobChunks:new Map(),...globals};
+  globals={printJobChunks:new Map(),sessionState:{set(){},frame(){}},...globals};
   return vm.createContext({ canvas:{dataset:{}},setMicrophoneForwarding:()=>{},resetRemoteCursor:()=>{},pointerInput:{reset(){}},clearTimeout:()=>{},session:'fixture-session', SasControl, structuredClone, sasControl:{consume:()=>false,request:()=>{},publish:()=>{}}, ClipboardPasteGate, clipboardPaste: new ClipboardPasteGate({ send() {}, report() {}, supported: () => false, connection: () => null }), ...globals,
     UploadControl,uploadControl:{bind(){},capability(){},consume(){return false;}},crypto:{subtle:webcrypto.subtle,...globals.crypto} });
 }
@@ -647,7 +647,7 @@ test('replaced sockets cannot change status, deliver data or close the current s
   assert.equal(states.length,count);assert.equal(states.at(-1),'paired');
   assert.equal(c.socket,current);assert.equal(current.closed,undefined);assert.equal(current.maxRetries,3);
   current.fire('close',{code:4000});assert.equal(current.closed,true);assert.equal(c.socket,null);
-  assert.equal(states.at(-1),'disconnected');
+  assert.equal(states.at(-1),'ended');
 });
 
 test('audio start finishing after stop cannot revive state or overwrite the stopped status',async()=>{

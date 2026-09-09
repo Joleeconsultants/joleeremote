@@ -6,9 +6,10 @@ import { test } from 'node:test';
 import { canSetDpi, initialDpi } from '../chrome/selkies-dashboard/src/jolee-dpi-settings.js';
 import { SasControl } from '../public/sas-control.js';
 import { ClipboardPasteGate } from '../public/clipboard-paste.js';
+import { UploadControl } from '../public/upload-control.js';
 function viewerContext(globals) {
   return vm.createContext({ canvas:{dataset:{}},setMicrophoneForwarding:()=>{},resetRemoteCursor:()=>{},pointerInput:{reset(){}},clearTimeout:()=>{},session:'fixture-session', SasControl, structuredClone, sasControl:{consume:()=>false,request:()=>{},publish:()=>{}}, ClipboardPasteGate, clipboardPaste: new ClipboardPasteGate({ send() {}, report() {}, supported: () => false, connection: () => null }), ...globals,
-    crypto:{subtle:webcrypto.subtle,...globals.crypto} });
+    UploadControl,uploadControl:{bind(){},capability(){},consume(){return false;}},crypto:{subtle:webcrypto.subtle,...globals.crypto} });
 }
 import { createClipboardDelivery, clipboardImageBlob } from '../chrome/selkies-dashboard/src/jolee-clipboard-delivery.js';
 

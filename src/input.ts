@@ -70,6 +70,7 @@ export type MicInput = { t: "mic"; mime: string; data: string };
 export type WebcamInput = { t: "webcam"; mime: string; data: string };
 export type FileInput = {
   t: "file";
+  id?: string;
   name: string;
   mime: string;
   data: string;
@@ -228,11 +229,13 @@ function parseObject(obj: Record<string, unknown>): InputPayload | null {
       return { t: "webcam", mime: obj.mime, data: obj.data };
     }
     case "file": {
+      if (obj.id !== undefined && (typeof obj.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(obj.id))) return null;
       if (typeof obj.name !== "string" || typeof obj.data !== "string") {
         return null;
       }
       return {
         t: "file",
+        ...(obj.id === undefined ? {} : { id: obj.id as string }),
         name: obj.name,
         mime:
           typeof obj.mime === "string" ? obj.mime : "application/octet-stream",

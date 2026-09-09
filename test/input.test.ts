@@ -10,6 +10,11 @@ function utf8(s: string): Uint8Array {
 }
 
 describe("parseInputPayload / parseInputJson", () => {
+  it('preserves optional upload correlation without downgrading invalid ids',()=>{
+    const file={t:'file',name:'a.txt',mime:'text/plain',data:'YQ==',id:'upload-1'};
+    expect(parseInputJson(JSON.stringify(file))).toEqual(file);
+    for(const id of [null,3,'','x'.repeat(65),'bad space'])expect(parseInputJson(JSON.stringify({...file,id}))).toBeNull();
+  });
   it("preserves image write ids through the reusable agent parser", () => {
     const image = { t: 'clipboard', mime: 'image/png', data: 'AAAA', id: 'image-1' };
     expect(parseInputJson(JSON.stringify(image))).toEqual(image);

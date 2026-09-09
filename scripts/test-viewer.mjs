@@ -520,7 +520,7 @@ test('late JPEG decodes cannot overwrite newer frames or repaint disabled/reconn
 
 test('webcam capture requires confirmed support and a late permission grant cannot restart a stopped camera',async()=>{
   let resolveCamera,calls=0,stopped=0;const status=[];
-  const c=viewerContext({agentStats:{},webcamGen:0,webcamStarting:false,webcamStream:null,webcamTimer:null,
+  const c=viewerContext({agentStats:{},sessionPaired:true,agentStatsReceivedAt:0,performance:{now:()=>0},sendInput:()=>{},webcamGen:0,webcamStarting:false,webcamStream:null,webcamTimer:null,
     navigator:{mediaDevices:{getUserMedia:()=>{calls++;return new Promise(resolve=>resolveCamera=resolve);}}},
     clearInterval:()=>{},postPipelineStatus:(...args)=>status.push(args)});
   vm.runInContext(html.slice(html.indexOf('function stopWebcam('),html.indexOf('function downloadFile(')),c);
@@ -528,6 +528,35 @@ test('webcam capture requires confirmed support and a late permission grant cann
   c.agentStats.webcam_supported=true;const pending=c.setWebcamEnabled(true);await c.setWebcamEnabled(true);assert.equal(calls,1);
   c.stopWebcam();resolveCamera({getTracks:()=>[{stop:()=>stopped++}]});await pending;
   assert.equal(stopped,1);assert.equal(c.webcamStream,null);assert.equal(c.webcamStarting,false);assert.ok(status.every(x=>x[1]===false));
+});
+
+test('webcam normalizes portrait frames, bounds encoding, and retires on expired support',async()=>{
+  let now=0,tick,stopped=0;const sent=[],draws=[],blobs=[];
+  const video={readyState:2,videoWidth:1080,videoHeight:1920,play:async()=>{}};
+  const canvas={getContext:()=>({fillRect(){},drawImage:(...args)=>draws.push(args)}),toBlob:callback=>blobs.push(callback)};
+  const c=viewerContext({sessionPaired:true,agentStats:{webcam_supported:true},agentStatsReceivedAt:0,
+    performance:{now:()=>now},webcamGen:0,webcamStarting:false,webcamStream:null,webcamTimer:null,
+    navigator:{mediaDevices:{getUserMedia:async()=>({getTracks:()=>[{stop:()=>stopped++}]})}},
+    document:{createElement:name=>name==='video'?video:canvas},
+    setInterval:callback=>{tick=callback;return 1;},clearInterval(){},postPipelineStatus(){},
+    bytesToBase64:()=> 'frame',sendInput:message=>sent.push(message)});
+  vm.runInContext(html.slice(html.indexOf('function stopWebcam('),html.indexOf('function downloadFile(')),c);
+  await c.setWebcamEnabled(true);
+  assert.equal(canvas.width,640);assert.equal(canvas.height,480);
+  assert.deepEqual(draws[0].slice(1),[185,0,270,480]);
+  tick();assert.equal(blobs.length,1,'only one encode may be in flight');
+  await blobs.shift()({size:262145,arrayBuffer:()=>{throw Error('oversize must not be read');}});
+  tick();await blobs.shift()({size:32,arrayBuffer:async()=>new ArrayBuffer(32)});
+  assert.equal(sent.filter(x=>x.t==='webcam').length,1);
+  now=499;tick();assert.equal(blobs.length,0);
+  now=500;tick();assert.equal(blobs.length,1);
+  c.stopWebcam();await blobs.shift()({size:32,arrayBuffer:async()=>new ArrayBuffer(32)});
+  assert.equal(sent.filter(x=>x.t==='webcam').length,1,'OFF drops pending frames');
+  assert.equal(sent.at(-1).enabled,false);assert.equal(stopped,1);
+  await c.setWebcamEnabled(true);
+  now=5001;await blobs.shift()({size:32,arrayBuffer:async()=>new ArrayBuffer(32)});
+  assert.equal(stopped,2);assert.equal(sent.at(-1).enabled,false);
+  assert.equal(sent.filter(x=>x.t==='webcam').length,1,'stale support cannot forward');
 });
 
 test('replaced sockets cannot change status, deliver data or close the current session',()=>{

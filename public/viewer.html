@@ -682,15 +682,19 @@ function stopWebcam(error){
   webcamTimer=null;
   if(webcamStream) webcamStream.getTracks().forEach((track)=>track.stop());
   webcamStream=null;
+  sendInput({t:"pipeline",pipeline:"webcam",enabled:false});
   postPipelineStatus("webcam",false,error);
+}
+function webcamReady(){
+  return sessionPaired && agentStats.webcam_supported===true && performance.now()-agentStatsReceivedAt<5000;
 }
 async function setWebcamEnabled(enabled){
   if(!enabled){stopWebcam();return;}
-  if(agentStats.webcam_supported!==true){stopWebcam('The PC has not confirmed webcam forwarding support.');return;}
+  if(!webcamReady()){stopWebcam('The PC has not confirmed webcam forwarding support.');return;}
   if(webcamStream||webcamStarting) return;
   const gen=++webcamGen;webcamStarting=true;
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({video:true});
+    const stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:2,max:2}}});
     if(gen!==webcamGen){stream.getTracks().forEach(track=>track.stop());return;}
     webcamStream=stream;
     const video=document.createElement("video");
@@ -698,17 +702,34 @@ async function setWebcamEnabled(enabled){
     await video.play();
     if(gen!==webcamGen)return;
     const still=document.createElement("canvas"), stillCtx=still.getContext("2d");
+    still.width=640;still.height=480;
+    let encoding=false,lastSent=-Infinity;
     const capture=()=>{
       if(gen!==webcamGen||!webcamStream||video.readyState<2) return;
-      still.width=video.videoWidth||640; still.height=video.videoHeight||480;
-      stillCtx.drawImage(video,0,0,still.width,still.height);
+      if(!webcamReady()){stopWebcam('Webcam forwarding support expired.');return;}
+      if(encoding||performance.now()-lastSent<500)return;
+      const width=video.videoWidth,height=video.videoHeight;
+      if(!width||!height)return;
+      // Drawing the video bakes browser orientation into the pixels. Preserve
+      // portrait/wide content within the native camera's fixed 640x480 format.
+      const scale=Math.min(640/width,480/height);
+      stillCtx.fillStyle='black';stillCtx.fillRect(0,0,640,480);
+      stillCtx.drawImage(video,(640-width*scale)/2,(480-height*scale)/2,width*scale,height*scale);
+      encoding=true;
       still.toBlob(async(blob)=>{
-        if(!blob||gen!==webcamGen||!webcamStream) return;
-        const data=bytesToBase64(new Uint8Array(await blob.arrayBuffer()));
-        if(gen!==webcamGen||!webcamStream)return;
-        sendInput({t:"webcam",mime:"image/jpeg",data});
+        try{
+          if(!blob||blob.size>256*1024||gen!==webcamGen||!webcamStream)return;
+          const data=bytesToBase64(new Uint8Array(await blob.arrayBuffer()));
+          if(gen!==webcamGen||!webcamStream)return;
+          if(!webcamReady()){stopWebcam('Webcam forwarding support expired.');return;}
+          lastSent=performance.now();
+          sendInput({t:"webcam",mime:"image/jpeg",data});
+        }catch(e){if(gen===webcamGen)stopWebcam(e&&e.name);}
+        finally{encoding=false;}
       },"image/jpeg",0.8);
     };
+    if(!webcamReady()){stopWebcam('Webcam forwarding support expired.');return;}
+    sendInput({t:"pipeline",pipeline:"webcam",enabled:true});
     webcamStarting=false;capture(); webcamTimer=setInterval(capture,500);
     postPipelineStatus("webcam",true);
   }catch(e){if(gen===webcamGen)stopWebcam(e&&e.name);}
@@ -1283,7 +1304,7 @@ window.addEventListener("message",(event)=>{
       if(msg.pipeline==="audio") setAudioEnabled(!!msg.enabled);
       if(msg.pipeline==="microphone") setMicrophoneForwarding(!!msg.enabled);
       if(msg.pipeline==="webcam") setWebcamEnabled(!!msg.enabled);
-      if(typeof msg.pipeline==="string") sendInput({t:"pipeline",pipeline:msg.pipeline,enabled:!!msg.enabled});
+      if(typeof msg.pipeline==="string"&&msg.pipeline!=="webcam") sendInput({t:"pipeline",pipeline:msg.pipeline,enabled:!!msg.enabled});
       break;
     case "audioDeviceSelected":
       if(typeof msg.context==="string"){

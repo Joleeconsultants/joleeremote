@@ -10,10 +10,17 @@ const css = await readFile(new URL('../public/dashboard/dashboard.css', import.m
 const core = `<!doctype html><title>Inert core fixture</title>
 <button id="current">Current</button><button id="custom">Custom</button><button id="unknown">Unknown</button>
 <button id="camera">Camera status</button>
+<button id="securefail">Secure failure</button><button id="sasnext">Next command</button>
 <script>
 const sizes={current:{width:1920,height:1200},custom:{width:3440,height:1440},unknown:null};
 for(const id of Object.keys(sizes))document.getElementById(id).onclick=()=>parent.postMessage({type:'statsUpdate',screen:{effective:sizes[id]},microphone_supported:false,webcam_supported:false},location.origin);
 document.getElementById('camera').onclick=()=>parent.postMessage({type:'statsUpdate',webcam_supported:true,webcam_capture:{supported:true,state:'waiting'}},location.origin);
+document.getElementById('securefail').onclick=()=>{
+  parent.postMessage({type:'secureDesktopResult',status:'warning',code:'input_rejected'},location.origin);
+  parent.postMessage({type:'secureDesktopResult',status:'failed',code:'helper_lost'},location.origin);
+  parent.postMessage({type:'sasState',available:false,pending:false},location.origin);
+};
+document.getElementById('sasnext').onclick=()=>parent.postMessage({type:'sasState',available:false,pending:true},location.origin);
 </script>`;
 const shell = '<!doctype html><html><head><link rel="stylesheet" href="/dashboard.css"></head>'
   + '<body><div id="root"></div><iframe id="jolee-core" src="/core" style="position:fixed;right:0;bottom:0;width:80px;height:100px;z-index:9999"></iframe>'
@@ -78,6 +85,18 @@ try {
   assert.match(await page.locator('[data-webcam-state="waiting"]').getAttribute('title'),/PC camera: waiting/);
   await page.frameLocator('#jolee-core').locator('#unknown').click();
   await page.locator('[data-webcam-state="unknown"]').waitFor();
+  await page.getByText('Shortcuts',{exact:true}).click();
+  await page.frameLocator('#jolee-core').locator('#securefail').click();
+  const shortcut=page.getByRole('button',{name:'Ctrl + Alt + Del',exact:true});
+  await page.waitForFunction(()=>document.querySelector('#shortcuts-content button').title.includes('stopped unexpectedly'));
+  assert(await shortcut.isDisabled());
+  await page.waitForTimeout(11000);
+  const failure=page.locator('.notification-item').filter({hasText:'The secure-screen helper stopped unexpectedly.'});
+  assert.equal(await failure.count(),1,'failure must survive the previous warning timer');
+  assert.match(await shortcut.getAttribute('title'),/Return to the normal desktop was not verified/);
+  await page.frameLocator('#jolee-core').locator('#sasnext').click();
+  await page.waitForFunction(()=>document.querySelector('#shortcuts-content button').title==='Waiting for the PC response');
+  assert.equal(await failure.count(),0,'new command clears previous failure');
   assert.deepEqual(errors,[]);
   console.log('Built dashboard mount/reset, effective presets, preserved draft and mobile media notices PASS (no remote session).');
 } finally {

@@ -1,0 +1,69 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index 55146e6..554d186 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -1292,6 +1292,7 @@ function Sidebar() {
+   const [agentCapabilities, setAgentCapabilities] = useState({});
+   const [currentResolution, setCurrentResolution] = useState("");
+   const [sasState, setSasState] = useState({ available: false, pending: false });
++  const [sasFailure, setSasFailure] = useState(null);
+   useEffect(() => {
+     const receive = (event) => {
+       const core = document.getElementById('jolee-core');
+@@ -2824,6 +2825,8 @@ function Sidebar() {
+   useEffect(() => {
+     const frame = document.getElementById('jolee-core');
+     const refresh = () => {
++      setSasFailure(null);
++      removeNotification('secure-desktop-result');
+       setSasState({ available: false, pending: false });
+       postToCore({ type: 'getSasState' }, window.location.origin);
+     };
+@@ -2831,8 +2834,10 @@ function Sidebar() {
+       if (event.origin !== window.location.origin || event.source !== frame?.contentWindow) return;
+       const message = event.data;
+       if (message?.type === 'status' && message.state !== 'paired') setSasState({ available: false, pending: false });
+-      if (message?.type === 'sasState' && typeof message.available === 'boolean' && typeof message.pending === 'boolean')
++      if (message?.type === 'sasState' && typeof message.available === 'boolean' && typeof message.pending === 'boolean') {
++        if (message.pending) { setSasFailure(null); removeNotification('secure-desktop-result'); }
+         setSasState({ available: message.available && !message.pending, pending: message.pending });
++      }
+       if (message?.type === 'secureDesktopResult') {
+         const texts = {
+           warning: {
+@@ -2853,11 +2858,14 @@ function Sidebar() {
+         };
+         if (typeof message.status !== 'string' || typeof message.code !== 'string' || !Object.hasOwn(texts, message.status) || !Object.hasOwn(texts[message.status], message.code)) return;
+         const id = 'secure-desktop-result';
++        if (message.status === 'failed') setSasFailure(texts.failed[message.code]);
++        if (message.status === 'returned') setSasFailure(null);
++        removeNotification(id); // Cancel an earlier warning's expiry before replacing it.
+         setNotifications(prev => [...prev.filter(n => n.id !== id), {
+           id, fileName: 'Remote screen', status: message.status === 'returned' ? 'notice' : 'warn',
+           message: texts[message.status][message.code], timestamp: Date.now(), fadingOut: false,
+         }].slice(-MAX_NOTIFICATIONS));
+-        scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++        if (message.status !== 'failed') scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
+         return;
+       }
+       if (message?.type !== 'sasResult' || !['invoked', 'rejected', 'uncertain'].includes(message.status)) return;
+@@ -2875,7 +2883,7 @@ function Sidebar() {
+     frame?.addEventListener('load', refresh);
+     refresh();
+     return () => { window.removeEventListener('message', receive); frame?.removeEventListener('load', refresh); };
+-  }, [scheduleNotificationRemoval]);
++  }, [scheduleNotificationRemoval, removeNotification]);
+ 
+   /** The core message listener; the module docblock lists the message types handled. */
+   useEffect(() => {
+@@ -4954,8 +4962,8 @@ function Sidebar() {
+                         window.location.origin
+                       )}
+                       disabled={!sasState.available || sasState.pending}
+-                      title={sasState.pending ? 'Waiting for the PC response' : sasState.available
+-                        ? 'Send Ctrl+Alt+Del to the remote PC' : 'Ctrl+Alt+Delete is unavailable for this session'}
++                      title={sasFailure || (sasState.pending ? 'Waiting for the PC response' : sasState.available
++                        ? 'Send Ctrl+Alt+Del to the remote PC' : 'Ctrl+Alt+Delete is unavailable for this session')}
+                     >
+                       Ctrl + Alt + Del
+                     </button>

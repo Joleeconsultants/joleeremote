@@ -113,3 +113,5 @@ Capability arrival initializes only DPI; debounce-time rechecking drops newly
 unsupported/locked DPI without dropping other coalesced controls. Reset keeps
 stored DPI untouched when unsupported. These checks do not implement native DPI
 or establish live scaling acceptance. Local canvas scaling remains separate.
+
+`0009-resolution-fields-encoder-filter.patch`: synchronize idle manual size fields with confirmed PC geometry, preserve unfinished edits, and populate the encoder control from fresh PC/browser capabilities. Loading/unavailable states disable the existing control; disconnect clears capabilities.

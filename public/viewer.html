@@ -38,6 +38,7 @@ import { ClipboardPasteGate } from './clipboard-paste.js?v=jo-ui-41';
 import { SasControl } from './sas-control.js?v=jo-ui-47';
 import { UploadControl } from './upload-control.js?v=jo-ui-49';
 import { SessionState } from './session-state.js';
+import { readDisplayCatalog } from './display-catalog.js';
 const VERSION=1, KIND_FRAME=1, KIND_INPUT=2, KIND_AUDIO=3;
 const DEFAULT_CURSOR_SVG="data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round" d="M1 1v16.5l4.2-4.3 3.3 8 2.5-1-3.3-7.9H15z"/></svg>');
 const DEFAULT_CURSOR_HX=1, DEFAULT_CURSOR_HY=1;
@@ -175,6 +176,33 @@ function requestScreenSize(width,height,mode){
 function requestWindowSize(){
   const dpr=screenUseCssScaling?1:(devicePixelRatio||1);
   requestScreenSize(Math.round(innerWidth*dpr),Math.round(innerHeight*dpr),'auto');
+}
+function requestCatalogDisplay(message){
+  if(pendingScreenRequest)return;
+  const id=crypto.randomUUID();
+  pendingScreenRequest={id,timer:setTimeout(()=>finishScreenRequest('rejected','confirmation_timeout'),15000)};
+  if(!sessionPaired){finishScreenRequest('rejected','session_unavailable');return;}
+  const catalog=performance.now()-agentStatsReceivedAt<5000?readDisplayCatalog(agentScreen?.catalog):null;
+  if(!catalog||message.catalog_revision!==catalog.revision){finishScreenRequest('rejected','catalog_changed');return;}
+  const display=catalog.displays.find(item=>item.id===message.display_id);
+  if(!display){finishScreenRequest('rejected','catalog_changed');return;}
+  const base={display_id:display.id,catalog_revision:catalog.revision,request_id:id};
+  let payload;
+  if(message.type==='selectRemoteDisplay')payload={t:'display_select',...base};
+  else {
+    if(display.id!==catalog.selected_display_id||!display.can_resize){finishScreenRequest('rejected','unsupported_mode');return;}
+    if(message.type==='setBestFit'){
+      if(!display.modes.some(mode=>mode.selectable)){finishScreenRequest('rejected','unsupported_mode');return;}
+      const dpr=screenUseCssScaling?1:(devicePixelRatio||1);
+      payload={t:'resize',...base,mode:'best_fit',w:Math.max(1,Math.min(32768,Math.round(innerWidth*dpr))),h:Math.max(1,Math.min(32768,Math.round(innerHeight*dpr)))};
+    }else{
+      const mode=display.modes.find(item=>item.id===message.mode_id&&item.selectable);
+      if(!mode){finishScreenRequest('rejected','unsupported_mode');return;}
+      payload={t:'resize',...base,mode:'manual',mode_id:mode.id,w:mode.width,h:mode.height};
+    }
+  }
+  screenAutoEnabled=false;scheduleScreenResize();
+  sendInput(payload);
 }
 function scheduleScreenResize(){
   if(screenResizeTimer!==null)clearTimeout(screenResizeTimer);
@@ -1389,6 +1417,11 @@ window.addEventListener("message",(event)=>{
       if(msg.context==="output"){
         selectAudioOutput(typeof msg.deviceId==="string"?msg.deviceId:"");
       }
+      break;
+    case "selectRemoteDisplay":
+    case "setDisplayMode":
+    case "setBestFit":
+      requestCatalogDisplay(msg);
       break;
     case "setManualResolution":
       screenAutoEnabled=false;

@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run && node --test scripts/test-viewer.mjs scripts/test-video.mjs scripts/test-sas.mjs scripts/test-microphone.mjs scripts/test-mic-pcm.mjs scripts/test-mic-session.mjs scripts/test-dpi-settings.mjs scripts/test-cursor.mjs scripts/test-session-state.mjs scripts/test-pointer.mjs scripts/test-secure-desktop.mjs scripts/test-upload.mjs",
+    "test": "vitest run && node --test scripts/test-viewer.mjs scripts/test-video.mjs scripts/test-sas.mjs scripts/test-microphone.mjs scripts/test-mic-pcm.mjs scripts/test-mic-session.mjs scripts/test-dpi-settings.mjs scripts/test-cursor.mjs scripts/test-session-state.mjs scripts/test-display-catalog.mjs scripts/test-pointer.mjs scripts/test-secure-desktop.mjs scripts/test-upload.mjs",
     "dev": "wrangler dev",
     "check:dashboard": "node scripts/check-dashboard-mount.mjs && node scripts/check-upload-browser.mjs && node scripts/check-mic-pcm-browser.mjs && node scripts/check-screen-scroll.mjs",
     "build:dashboard": "npm --prefix chrome/selkies-dashboard run build",

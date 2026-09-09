@@ -1154,7 +1154,10 @@ function postStats(){
   const micFresh=sessionPaired&&performance.now()-agentStatsReceivedAt<5000;
   stats.microphone_supported=micFresh&&typeof agentStats.microphone_supported==='boolean'?agentStats.microphone_supported:null;
   stats.microphone_formats=micFresh&&Array.isArray(agentStats.microphone_formats)?agentStats.microphone_formats.filter(x=>typeof x==='string').slice(0,8):[];
-  stats.webcam_supported=typeof agentStats.webcam_supported==='boolean'?agentStats.webcam_supported:null;
+  stats.webcam_supported=micFresh&&typeof agentStats.webcam_supported==='boolean'?agentStats.webcam_supported:null;
+  const cameraCapture=micFresh?agentStats.webcam_capture:null;
+  stats.webcam_capture=cameraCapture&&typeof cameraCapture.supported==='boolean'&&['off','waiting','forwarding','unavailable'].includes(cameraCapture.state)
+    ? {supported:cameraCapture.supported,state:cameraCapture.state}:null;
   stats.dpi_scaling_supported=typeof agentStats.dpi_scaling_supported==='boolean'?agentStats.dpi_scaling_supported:null;
   stats.audio_bitrate_supported=typeof agentStats.audio_bitrate_supported==='boolean'?agentStats.audio_bitrate_supported:null;
   stats.capture_backend=['gdi','gdi-bootstrap','dxgi','paused'].includes(agentStats.capture_backend)?agentStats.capture_backend:null;

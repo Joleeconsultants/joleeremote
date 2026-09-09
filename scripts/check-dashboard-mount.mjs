@@ -9,9 +9,11 @@ const bundle = await readFile(new URL('../public/dashboard/dashboard.js', import
 const css = await readFile(new URL('../public/dashboard/dashboard.css', import.meta.url));
 const core = `<!doctype html><title>Inert core fixture</title>
 <button id="current">Current</button><button id="custom">Custom</button><button id="unknown">Unknown</button>
+<button id="camera">Camera status</button>
 <script>
 const sizes={current:{width:1920,height:1200},custom:{width:3440,height:1440},unknown:null};
 for(const id of Object.keys(sizes))document.getElementById(id).onclick=()=>parent.postMessage({type:'statsUpdate',screen:{effective:sizes[id]},microphone_supported:false,webcam_supported:false},location.origin);
+document.getElementById('camera').onclick=()=>parent.postMessage({type:'statsUpdate',webcam_supported:true,webcam_capture:{supported:true,state:'waiting'}},location.origin);
 </script>`;
 const shell = '<!doctype html><html><head><link rel="stylesheet" href="/dashboard.css"></head>'
   + '<body><div id="root"></div><iframe id="jolee-core" src="/core" style="position:fixed;right:0;bottom:0;width:80px;height:100px;z-index:9999"></iframe>'
@@ -71,6 +73,11 @@ try {
   assert.match(await page.locator('.notification-item').filter({hasText:'Microphone'}).last().innerText(),/cannot send it to Windows yet/);
   await page.getByTitle('The PC has not confirmed webcam forwarding support.',{exact:true}).click();
   assert.match(await page.locator('.notification-item').filter({hasText:'Camera'}).last().innerText(),/cannot send it to Windows yet/);
+  await page.frameLocator('#jolee-core').locator('#camera').click();
+  await page.locator('[data-webcam-state="waiting"]').waitFor();
+  assert.match(await page.locator('[data-webcam-state="waiting"]').getAttribute('title'),/PC camera: waiting/);
+  await page.frameLocator('#jolee-core').locator('#unknown').click();
+  await page.locator('[data-webcam-state="unknown"]').waitFor();
   assert.deepEqual(errors,[]);
   console.log('Built dashboard mount/reset, effective presets, preserved draft and mobile media notices PASS (no remote session).');
 } finally {

@@ -398,9 +398,11 @@ test('local display preferences replay on iframe load without replaying actions'
     postToCore({ type: 'setScaleLocally', value: false });
     postToCore({ type: 'setAntiAliasing', value: false });
     postToCore({ type: 'setAntiAliasing', value: true });
+    postToCore({ type: 'setUseBrowserCursors', value: false });
+    postToCore({ type: 'setUseBrowserCursors', value: true });
     postToCore({ type: 'command', command: 'ctrl-alt-delete' });
     sent.length = 0; listeners.load();
-    assert.deepEqual(sent, [{ type: 'setScaleLocally', value: false }, { type: 'setAntiAliasing', value: true }]);
+    assert.deepEqual(sent, [{ type: 'setScaleLocally', value: false }, { type: 'setAntiAliasing', value: true }, { type: 'setUseBrowserCursors', value: true }]);
   } finally { delete globalThis.document; delete globalThis.window; }
 });
 

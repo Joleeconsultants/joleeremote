@@ -13,7 +13,7 @@
  * @param {string} [targetOrigin]
  */
 const settingsByFrame = new WeakMap();
-const localPreferences = new Set(["setScaleLocally", "setAntiAliasing"]);
+const localPreferences = new Set(["setScaleLocally", "setAntiAliasing", "setUseBrowserCursors"]);
 
 /** Enumerate playback devices even when microphone access is unavailable. */
 export async function listAudioDevices(mediaDevices) {

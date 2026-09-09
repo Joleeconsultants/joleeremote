@@ -1382,6 +1382,7 @@ function Sidebar() {
    * rate-control default.
    */
   const conditionalCtx = {
+    mobileClient: isMobile,
     manualActive: !!readStored("manual_width") || serverSettings?.manual_resolution?.value === true,
     streamMode,
     activeEncoder: readStored("encoder") || encoder,
@@ -1418,6 +1419,9 @@ function Sidebar() {
     FORCE_ALIGNED_RESOLUTION_SPEC, serverSettings, conditionalCtx, [serverSettings]);
   const [use_browser_cursors, setUseBrowserCursors] = useConditionalSetting(
     USE_BROWSER_CURSORS_SPEC, serverSettings, conditionalCtx, [serverSettings]);
+  useEffect(() => {
+    postToCore({ type: "setUseBrowserCursors", value: use_browser_cursors });
+  }, [use_browser_cursors]);
   /**
    * The cursor value the core reports as in effect (multi-monitor forces
    * browser cursors on), `null` until reported; displayed over the stored
@@ -2363,14 +2367,14 @@ function Sidebar() {
     );
   };
   /**
-   * Browser cursors toggle. The core owns persistence: the new preference is
-   * propagated and the core reports the effective value back. The next value
+   * Browser cursors toggle. Save the user's explicit choice and propagate it;
+   * the core reports the effective value back. The next value
    * derives from the displayed one: while multi-monitor forces the toggle on
    * the base preference may be off, and negating the base would silently
    * persist the forced value over the user's real choice.
    */
   const handleUseBrowserCursorsToggle = () => {
-    writeConditional(USE_BROWSER_CURSORS_SPEC, !(effectiveCursor ?? use_browser_cursors), setUseBrowserCursors, { persist: false });
+    writeConditional(USE_BROWSER_CURSORS_SPEC, !(effectiveCursor ?? use_browser_cursors), setUseBrowserCursors, { persist: true });
   };
   const handleEnableBinaryClipboardToggle = () => {
     const newState = !enableBinaryClipboard;
@@ -4004,8 +4008,8 @@ function Sidebar() {
                           className={`toggle-button-sidebar ${(effectiveCursor !== null ? effectiveCursor : use_browser_cursors) ? "active" : ""}`}
                           onClick={handleUseBrowserCursorsToggle}
                           aria-pressed={effectiveCursor !== null ? effectiveCursor : use_browser_cursors}
-                          title={t(use_browser_cursors ? "sections.screen.useNativeCursorStylesDisableTitle" : "sections.screen.useNativeCursorStylesEnableTitle",
-                                  use_browser_cursors ? "Use canvas cursor rendering (Paint to canvas)" : "Use CSS cursor rendering (Replace system cursors)")}
+                          title={t(use_browser_cursors ? "sections.screen.drawnCursorEnableTitle" : "sections.screen.localNativeCursorEnableTitle",
+                                  use_browser_cursors ? "Draw the remote cursor over the screen" : "Use this device's native pointer appearance")}
                         >
                           <span className="toggle-button-sidebar-knob"></span>
                         </button>

@@ -58,8 +58,9 @@ let agentScreen=null;
 let observedEncoder=null;
 let agentStatsReceivedAt=0;
 const printJobChunks=new Map();
-// Both original cursor modes render the same remote shape and hotspot.
-let useBrowserCursors=false, pointerOver=false, agentCursorVisible=true;
+// Native mode uses local OS cursor types; drawn mode uses the remote bitmap.
+let useBrowserCursors=!(typeof matchMedia==='function'&&matchMedia('(pointer: coarse)').matches), pointerOver=false, agentCursorVisible=true;
+let nativeCursor='default';
 let cursorHx=DEFAULT_CURSOR_HX, cursorHy=DEFAULT_CURSOR_HY, cursorPosition=null;
 cursorEl.src=DEFAULT_CURSOR_SVG;
 function applyScale(){
@@ -71,7 +72,7 @@ function applySmoothing(){
   canvas.style.imageRendering=antiAliasing?"auto":"pixelated";
 }
 function applyCursorMode(){
-  canvas.style.cursor=useBrowserCursors && agentCursorVisible?`url("${cursorEl.src}") ${cursorHx} ${cursorHy}, default`:"none";
+  canvas.style.cursor=useBrowserCursors && agentCursorVisible?nativeCursor:"none";
   const show=!useBrowserCursors && pointerOver && agentCursorVisible;
   cursorEl.style.display=show?"block":"none";
 }
@@ -306,15 +307,19 @@ function cursorFromFrame(payload){
     const width=view.getUint32(16),height=view.getUint32(20);
     if(width<1||height<1||width>128||height>128||!Number.isSafeInteger(obj.hx)||!Number.isSafeInteger(obj.hy)||
         obj.hx<0||obj.hy<0||obj.hx>=width||obj.hy>=height) return null;
-    return {visible:true,mime:obj.mime,data:obj.data,hx:obj.hx,hy:obj.hy};
+    // Never apply arbitrary remote CSS or URLs. Older agents have no semantic
+    // type: retain a genuine local arrow instead of substituting a remote PNG.
+    const types=['default','text','pointer','wait','progress','crosshair','move','not-allowed','help','ew-resize','ns-resize','nesw-resize','nwse-resize'];
+    return {visible:true,mime:obj.mime,data:obj.data,hx:obj.hx,hy:obj.hy,css:types.includes(obj.css)?obj.css:'default'};
   }catch{return null;}
 }
 function resetRemoteCursor(){
-  agentCursorVisible=true;cursorHx=DEFAULT_CURSOR_HX;cursorHy=DEFAULT_CURSOR_HY;
+  agentCursorVisible=true;pointerOver=false;nativeCursor='default';cursorHx=DEFAULT_CURSOR_HX;cursorHy=DEFAULT_CURSOR_HY;
   cursorEl.src=DEFAULT_CURSOR_SVG;cursorPosition=null;applyCursorMode();
 }
 function applyCursorFrame(cur){
   agentCursorVisible=cur.visible;
+  if(cur.visible)nativeCursor=cur.css||'default';
   if(cur.visible && cur.mime && cur.data){
     cursorEl.src="data:image/png;base64,"+cur.data;
     cursorHx=cur.hx;cursorHy=cur.hy;
@@ -322,6 +327,12 @@ function applyCursorFrame(cur){
   }
   applyCursorMode();
 }
+function leaveCursor(e){
+  // Touch has no hover: keep the last indicated point after the finger lifts.
+  pointerOver=e.pointerType==='touch'&&pointerOver&&cursorPosition!==null;
+  applyCursorMode();
+}
+function hideDrawnCursor(){pointerOver=false;applyCursorMode();}
 function contentBox(){
   const r=canvas.getBoundingClientRect();
   if(!scaleLocally) return {left:r.left,top:r.top,width:r.width,height:r.height};
@@ -1274,20 +1285,17 @@ canvas.addEventListener("pointerdown",(e)=>{
   unlockAudioFromGesture();
 });
 window.addEventListener("pointerup",(e)=>pointerInput.up(e));
-canvas.addEventListener("pointercancel",(e)=>pointerInput.lost(e));
+canvas.addEventListener("pointercancel",(e)=>{pointerInput.lost(e);hideDrawnCursor();});
 canvas.addEventListener("lostpointercapture",(e)=>pointerInput.lost(e));
-window.addEventListener("blur",()=>pointerInput.cancel());
-window.addEventListener("pagehide",()=>pointerInput.cancel());
-document.addEventListener("visibilitychange",()=>{if(document.hidden)pointerInput.cancel();});
+window.addEventListener("blur",()=>{pointerInput.cancel();hideDrawnCursor();});
+window.addEventListener("pagehide",()=>{pointerInput.cancel();hideDrawnCursor();});
+document.addEventListener("visibilitychange",()=>{if(document.hidden){pointerInput.cancel();hideDrawnCursor();}});
 canvas.addEventListener("pointerenter",(e)=>{
   pointerOver=true;
   moveOverlay(e);
   applyCursorMode();
 });
-canvas.addEventListener("pointerleave",()=>{
-  pointerOver=false;
-  applyCursorMode();
-});
+canvas.addEventListener("pointerleave",leaveCursor);
 canvas.addEventListener("wheel",(e)=>{
   e.preventDefault();
   const p=pointerNorm(e);
@@ -1337,6 +1345,7 @@ window.addEventListener("message",(event)=>{
     case "setUseBrowserCursors":
       useBrowserCursors=!!msg.value;
       applyCursorMode();
+      if(window.parent!==window)window.parent.postMessage({type:'effectiveCursorState',value:useBrowserCursors},window.location.origin);
       break;
     case "micChunk":
       if(sessionPaired && microphoneForwarding && agentStats.microphone_supported===true && performance.now()-agentStatsReceivedAt<5000 && typeof msg.mime==="string" && typeof msg.data==="string" && msg.data){

@@ -12,6 +12,8 @@ const core = `<!doctype html><title>Inert core fixture</title>
 <button id="camera">Camera status</button><button id="encoders">Encoders</button><button id="lost">Lost</button>
 <button id="securefail">Secure failure</button><button id="sasnext">Next command</button>
 <script>
+window.cursorMode=null;
+window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='setUseBrowserCursors')window.cursorMode=e.data.value;});
 const sizes={current:{width:1920,height:1200},custom:{width:3440,height:1440},unknown:null};
 for(const id of Object.keys(sizes))document.getElementById(id).onclick=()=>parent.postMessage({type:'statsUpdate',screen:{effective:sizes[id]},microphone_supported:false,webcam_supported:false},location.origin);
 document.getElementById('encoders').onclick=()=>parent.postMessage({type:'statsUpdate',supported_encoders:['h264enc','jpeg'],active_encoder:'jpeg'},location.origin);
@@ -71,6 +73,8 @@ try {
   await page.getByText('Screen Settings', { exact: true }).click();
   await page.locator('#uiScalingSelect').waitFor({ state: 'visible' });
   assert(await page.locator('#uiScalingSelect').isDisabled(), 'unknown DPI capability stays disabled');
+  assert.equal(await page.locator('#useBrowserCursorsToggle').getAttribute('aria-pressed'),'true','desktop starts with native cursors');
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===true);
   await page.getByRole('button', { name: 'Reset to Window', exact: true }).click();
   await page.waitForTimeout(600);
   assert.deepEqual(errors, [], 'screen reset must not throw');
@@ -116,6 +120,28 @@ try {
   await page.frameLocator('#jolee-core').locator('#sasnext').click();
   await page.waitForFunction(()=>document.querySelector('#shortcuts-content button').title==='Waiting for the PC response');
   assert.equal(await failure.count(),0,'new command clears previous failure');
+  assert.deepEqual(errors,[]);
+  // Explicit choices survive reload; touch clients get a drawn default until
+  // they choose otherwise. Only a preference is replayed into the core.
+  await page.locator('#useBrowserCursorsToggle').click();
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===false);
+  await page.reload();
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===false);
+  const mobileContext=await browser.newContext({hasTouch:true,isMobile:true,viewport:{width:390,height:844}});
+  try {
+    await mobileContext.route('**/*',route=>route.request().url().startsWith(`${origin}/`)?route.continue():route.abort());
+    const mobile=await mobileContext.newPage();mobile.setDefaultTimeout(10000);
+    mobile.on('pageerror',error=>errors.push(error.message));
+    await mobile.goto(origin);
+    await mobile.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===false);
+    await mobile.locator('.toggle-handle').click();
+    await mobile.getByText('Screen Settings',{exact:true}).click();
+    assert.equal(await mobile.locator('#useBrowserCursorsToggle').getAttribute('aria-pressed'),'false');
+    await mobile.locator('#useBrowserCursorsToggle').click();
+    await mobile.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===true);
+    await mobile.reload();
+    await mobile.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===true);
+  } finally {await mobileContext.close();}
   assert.deepEqual(errors,[]);
   console.log('Built dashboard mount/reset, effective presets, preserved draft and mobile media notices PASS (no remote session).');
 } finally {

@@ -9,11 +9,13 @@ const bundle = await readFile(new URL('../public/dashboard/dashboard.js', import
 const css = await readFile(new URL('../public/dashboard/dashboard.css', import.meta.url));
 const core = `<!doctype html><title>Inert core fixture</title>
 <button id="current">Current</button><button id="custom">Custom</button><button id="unknown">Unknown</button>
-<button id="camera">Camera status</button>
+<button id="camera">Camera status</button><button id="encoders">Encoders</button><button id="lost">Lost</button>
 <button id="securefail">Secure failure</button><button id="sasnext">Next command</button>
 <script>
 const sizes={current:{width:1920,height:1200},custom:{width:3440,height:1440},unknown:null};
 for(const id of Object.keys(sizes))document.getElementById(id).onclick=()=>parent.postMessage({type:'statsUpdate',screen:{effective:sizes[id]},microphone_supported:false,webcam_supported:false},location.origin);
+document.getElementById('encoders').onclick=()=>parent.postMessage({type:'statsUpdate',supported_encoders:['h264enc','jpeg'],active_encoder:'jpeg'},location.origin);
+document.getElementById('lost').onclick=()=>parent.postMessage({type:'status',state:'waiting'},location.origin);
 document.getElementById('camera').onclick=()=>parent.postMessage({type:'statsUpdate',webcam_supported:true,webcam_capture:{supported:true,state:'waiting'}},location.origin);
 document.getElementById('securefail').onclick=()=>{
   parent.postMessage({type:'secureDesktopResult',status:'warning',code:'input_rejected'},location.origin);
@@ -43,6 +45,7 @@ try {
   const context = await browser.newContext();
   await context.route('**/*', route => route.request().url().startsWith(`${origin}/`)
     ? route.continue() : route.abort());
+  await context.addInitScript(() => { window.VideoDecoder = undefined; });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -56,6 +59,15 @@ try {
   assert.deepEqual(errors, [], 'dashboard startup must not throw');
   assert(await page.locator('#dashboard-root button').count() >= 5, 'original controls must mount');
   await page.locator('.toggle-handle').click();
+  await page.getByText('Video Settings', { exact: true }).click();
+  assert(await page.locator('#encoderSelect').isDisabled());
+  assert.deepEqual(await page.locator('#encoderSelect option').evaluateAll(options=>options.map(o=>o.value)), ['']);
+  await page.frameLocator('#jolee-core').locator('#encoders').click();
+  await page.waitForFunction(()=>document.querySelector('#encoderSelect').value==='jpeg');
+  assert.deepEqual(await page.locator('#encoderSelect option').evaluateAll(options=>options.map(o=>o.value)), ['jpeg']);
+  await page.frameLocator('#jolee-core').locator('#lost').click();
+  await page.waitForFunction(()=>document.querySelector('#encoderSelect').value==='');
+  assert.deepEqual(await page.locator('#encoderSelect option').evaluateAll(options=>options.map(o=>o.value)), ['']);
   await page.getByText('Screen Settings', { exact: true }).click();
   await page.locator('#uiScalingSelect').waitFor({ state: 'visible' });
   assert(await page.locator('#uiScalingSelect').isDisabled(), 'unknown DPI capability stays disabled');
@@ -65,6 +77,9 @@ try {
   assert(await page.locator('#uiScalingSelect').isDisabled());
   // Reported PC geometry, including a non-preset ultrawide mode, must be visible
   // without sending a resolution change or overwriting a manual draft.
+  await page.frameLocator('#jolee-core').locator('#custom').click();
+  await page.waitForFunction(()=>document.querySelector('#manualWidthInput').value==='3440');
+  assert.equal(await page.locator('#manualHeightInput').inputValue(),'1440');
   await page.locator('#manualWidthInput').fill('1555');
   await page.frameLocator('#jolee-core').locator('#current').click();
   await page.waitForFunction(()=>document.querySelector('#resolutionPresetSelect').value==='1920x1200');
@@ -74,6 +89,10 @@ try {
   await page.waitForFunction(()=>document.querySelector('#resolutionPresetSelect').value==='3440x1440');
   await page.frameLocator('#jolee-core').locator('#unknown').click();
   await page.waitForFunction(()=>document.querySelector('#resolutionPresetSelect').value==='');
+  await page.getByRole('button', { name: 'Reset to Window', exact: true }).click();
+  await page.frameLocator('#jolee-core').locator('#current').click();
+  await page.waitForFunction(()=>document.querySelector('#manualWidthInput').value==='1920');
+  assert.equal(await page.locator('#manualHeightInput').inputValue(),'1200');
   // Touch users need an actual notice: a hover-only disabled title cannot help.
   await page.setViewportSize({width:390,height:844});
   await page.getByTitle('Microphone forwarding requires a connected PC with confirmed support.',{exact:true}).first().click();

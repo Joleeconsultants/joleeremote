@@ -3,6 +3,7 @@ import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { canSetDpi } from '../chrome/selkies-dashboard/src/jolee-dpi-settings.js';
 import { SasControl } from '../public/sas-control.js';
 import { ClipboardPasteGate } from '../public/clipboard-paste.js';
 function viewerContext(globals) {
@@ -562,13 +563,28 @@ test('audio start finishing after stop cannot revive state or overwrite the stop
 test('DPI selection requires confirmed endpoint support before persisting or sending a change',()=>{
   const sidebar=readFileSync(new URL('../chrome/selkies-dashboard/src/components/Sidebar.jsx',import.meta.url),'utf8');
   const changes=[];
-  const c=viewerContext({agentCapabilities:{},setSelectedDpi:v=>changes.push(v),
+  const c=viewerContext({canSetDpi,serverSettings:{scaling_dpi:{allowed:['96','144']}},agentCapabilities:{},setSelectedDpi:v=>changes.push(v),
     localStorage:{setItem:(...args)=>changes.push(args)},getPrefixedKey:k=>k,debouncedPostSetting:v=>changes.push(v)});
   vm.runInContext(sidebar.slice(sidebar.indexOf('const handleDpiScalingChange ='),sidebar.indexOf('const DRAG_THRESHOLD ='))+'\nglobalThis.changeDpi=handleDpiScalingChange;',c);
   for(const support of [undefined,null,false]){c.agentCapabilities.dpi_scaling_supported=support;c.changeDpi({target:{value:'144'}});}
   assert.equal(changes.length,0);
   c.agentCapabilities.dpi_scaling_supported=true;c.changeDpi({target:{value:'144'}});
   assert.equal(changes[0],144);assert.equal(changes[2].scaling_dpi,144);
+});
+
+test('reset-to-window preserves DPI storage and posts nothing when unsupported',()=>{
+  const sidebar=readFileSync(new URL('../chrome/selkies-dashboard/src/components/Sidebar.jsx',import.meta.url),'utf8');
+  const changes=[];
+  const c=viewerContext({canSetDpi,serverSettings:{scaling_dpi:{allowed:['96','144']}},agentCapabilities:{},
+    deriveDpiFromDpr:()=>144,setSelectedDpi:v=>changes.push(v),
+    localStorage:{removeItem:key=>changes.push(key)},getPrefixedKey:k=>k,debouncedPostSetting:v=>changes.push(v)});
+  const start=sidebar.indexOf('const resetDpiToDerivedDefault =');
+  const end=sidebar.indexOf('\n  };',start)+6;
+  vm.runInContext(sidebar.slice(start,end)+'\nglobalThis.resetDpi=resetDpiToDerivedDefault;',c);
+  c.resetDpi();c.agentCapabilities.dpi_scaling_supported=false;c.resetDpi();
+  assert.equal(changes.length,0);
+  c.agentCapabilities.dpi_scaling_supported=true;c.resetDpi();
+  assert.equal(changes[0],'scaling_dpi');assert.equal(changes[1],144);assert.equal(changes[2].scaling_dpi,144);
 });
 
 function imageClipboardViewer(){

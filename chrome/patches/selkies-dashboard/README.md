@@ -101,3 +101,15 @@ git diff --exit-code -- chrome/selkies-dashboard
 ```
 
 This verifies reconstruction of the checked-in source, not live functionality.
+## DPI delivery capability
+
+Patch 0002 preserves the original UI and derived/default selection behavior from
+the pinned Sidebar, while requiring confirmed native DPI support for startup,
+reset and explicit writes. Unlike the original backend, the current Windows
+agent does not implement DPI changes. A disabled dropdown must not leave hidden
+startup/reset writes active. Locked settings also retain their server value.
+
+Capability arrival initializes only DPI; debounce-time rechecking drops newly
+unsupported/locked DPI without dropping other coalesced controls. Reset keeps
+stored DPI untouched when unsupported. These checks do not implement native DPI
+or establish live scaling acceptance. Local canvas scaling remains separate.

@@ -1,0 +1,29 @@
+name: Built dashboard mount
+on:
+  pull_request:
+    paths:
+      - 'chrome/selkies-dashboard/**'
+      - 'public/dashboard/**'
+      - 'scripts/check-dashboard-mount.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/dashboard-mount.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mount:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm ci --prefix chrome/selkies-dashboard
+      - run: npm run build:dashboard
+      - run: git diff --exit-code -- public/dashboard
+      - run: npx playwright install --with-deps --only-shell chromium
+      - run: npm run check:dashboard

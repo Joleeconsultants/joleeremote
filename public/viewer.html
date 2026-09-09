@@ -386,7 +386,9 @@ class NegotiatedVideo {
       },error:()=>this.fail(serial)});
       this.decoder.ondequeue=()=>{if(serial===this.serial)this.drain();};
       this.decoder.configure(options);this.ready=true;
-      clearTimeout(this.timer);this.timer=null;
+      // Decoder support is not proof of a working stream. Bound the wait for
+      // the first access unit too, including an encoder that emits config only.
+      clearTimeout(this.timer);this.timer=setTimeout(()=>this.fail(serial),5000);
       this.drain();
     }).catch(()=>this.fail(serial));
   }
@@ -407,7 +409,7 @@ class NegotiatedVideo {
       const type=annexBChunkType(payload);
       if(!type||(!this.keySeen&&type!=='key')){this.fail();return;}
       try{
-        if(this.inFlight++===0){const serial=this.serial;this.timer=setTimeout(()=>this.fail(serial),5000);}
+        if(this.inFlight++===0){const serial=this.serial;clearTimeout(this.timer);this.timer=setTimeout(()=>this.fail(serial),5000);}
         this.decoder.decode(new EncodedVideoChunk({type,timestamp:++this.timestamp*1000,data:payload}));
         this.keySeen=true;
       }catch{this.fail();return;}

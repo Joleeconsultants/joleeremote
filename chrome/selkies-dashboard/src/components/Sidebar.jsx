@@ -78,6 +78,7 @@ import {
   parentMicrophoneGeneration,
 } from "../jolee-mic-capture.js";
 import { createMicrophoneSession } from "../jolee-mic-session.js";
+import { canSetDpi, initialDpi, filterDpiSetting } from "../jolee-dpi-settings.js";
 import { JOLEE_SERVER_SETTINGS } from "../jolee-settings.js";
 import * as yaml from "js-yaml";
 
@@ -1534,10 +1535,14 @@ function Sidebar() {
   const audioBitrateChoices = (serverSettings?.audio_bitrate?.allowed?.map((v) => parseInt(v, 10))) || audioBitrateOptions;
 
   const DEBOUNCE_DELAY = 500;
+  const dpiPolicyRef = useRef({});
+  dpiPolicyRef.current = { setting: serverSettings?.scaling_dpi, supported: agentCapabilities.dpi_scaling_supported };
 
   /** One debounced poster for the component's lifetime, so a burst of slider moves coalesces into a single post. */
   const debouncedPostSetting = useMemo(
     () => debounceSettings((setting) => {
+      setting = filterDpiSetting(setting, dpiPolicyRef.current.setting, dpiPolicyRef.current.supported);
+      if (Object.keys(setting).length === 0) return;
       postToCore(
         { type: "settings", settings: setting },
         window.location.origin
@@ -1675,22 +1680,6 @@ function Sidebar() {
         : s_video_paintover_burst.default;
       setVideoPaintoverBurstFrames(final);
     }
-    const s_scaling_dpi = serverSettings.scaling_dpi;
-    if (s_scaling_dpi) {
-      const stored = getStoredInt("scaling_dpi");
-      const storedAllowed = s_scaling_dpi.allowed.includes(String(stored));
-      const serverVal = parseInt(s_scaling_dpi.value, 10);
-      const derived = deriveDpiFromDpr();
-      const willPostDerived = !storedAllowed && !s_scaling_dpi.overridden
-        && derived !== serverVal;
-      const final = s_scaling_dpi.overridden ? serverVal
-        : storedAllowed ? stored
-        : derived;
-      setSelectedDpi(final);
-      if (willPostDerived) {
-        debouncedPostSetting({ scaling_dpi: derived });
-      }
-    }
     const s_enable_binary_clipboard = serverSettings.enable_binary_clipboard;
     if (s_enable_binary_clipboard) {
       const final = s_enable_binary_clipboard.locked ? s_enable_binary_clipboard.value : getStoredBool("enable_binary_clipboard", s_enable_binary_clipboard.value);
@@ -1705,6 +1694,15 @@ function Sidebar() {
         setUiShowLogo(s_ui_show_logo.value);
     }
   }, [serverSettings, debouncedPostSetting, offeredEncoders]);
+  // Capability may arrive after settings. Keep this separate so it cannot
+  // replay initialization of unrelated controls when the agent reports support.
+  useEffect(() => {
+    const plan = initialDpi(serverSettings?.scaling_dpi, getStoredInt("scaling_dpi"),
+      deriveDpiFromDpr(), agentCapabilities.dpi_scaling_supported);
+    if (!plan) return;
+    setSelectedDpi(plan.value);
+    if (plan.post !== null) debouncedPostSetting({ scaling_dpi: plan.post });
+  }, [serverSettings?.scaling_dpi, agentCapabilities.dpi_scaling_supported, debouncedPostSetting]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   /**
@@ -1788,8 +1786,8 @@ function Sidebar() {
 
   /** UI scaling pick: persisted, so it pins across reloads and stops the startup derived-default post. */
   const handleDpiScalingChange = (event) => {
-    if (agentCapabilities.dpi_scaling_supported !== true) return;
     const newDpi = parseInt(event.target.value, 10);
+    if (!canSetDpi(serverSettings?.scaling_dpi, agentCapabilities.dpi_scaling_supported, newDpi)) return;
     setSelectedDpi(newDpi);
     localStorage.setItem(getPrefixedKey("scaling_dpi"), newDpi.toString());
     debouncedPostSetting({ scaling_dpi: newDpi });
@@ -2294,9 +2292,9 @@ function Sidebar() {
    */
   const resetDpiToDerivedDefault = () => {
     const s = serverSettings?.scaling_dpi;
-    if (s?.locked || s?.overridden) return;
-    localStorage.removeItem(getPrefixedKey("scaling_dpi"));
     const derived = deriveDpiFromDpr();
+    if (!canSetDpi(s, agentCapabilities.dpi_scaling_supported, derived)) return;
+    localStorage.removeItem(getPrefixedKey("scaling_dpi"));
     setSelectedDpi(derived);
     debouncedPostSetting({ scaling_dpi: derived });
   };

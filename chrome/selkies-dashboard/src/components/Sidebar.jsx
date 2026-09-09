@@ -75,8 +75,9 @@ import {
   startParentMicrophone,
   stopParentMicrophone,
   setParentMicDeviceId,
+  setParentMicFormats,
   parentMicrophoneGeneration,
-} from "../jolee-mic-capture.js";
+} from "../jolee-mic-pcm-capture.js";
 import { createMicrophoneSession } from "../jolee-mic-session.js";
 import { canSetDpi, initialDpi, filterDpiSetting } from "../jolee-dpi-settings.js";
 import { JOLEE_SERVER_SETTINGS } from "../jolee-settings.js";
@@ -1482,7 +1483,10 @@ function Sidebar() {
     const receive = (event) => {
       if (event.origin !== window.location.origin || event.source !== core?.contentWindow) return;
       if (event.data?.type === 'status') microphoneSession.paired(event.data.state === 'paired');
-      if (event.data?.type === 'statsUpdate') microphoneSession.support(event.data.microphone_supported);
+      if (event.data?.type === 'statsUpdate') {
+        const pcm = setParentMicFormats(event.data.microphone_formats);
+        microphoneSession.support(event.data.microphone_supported === true && pcm);
+      }
     };
     window.addEventListener('message', receive);
     window.addEventListener('pagehide', reset);

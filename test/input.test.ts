@@ -10,6 +10,13 @@ function utf8(s: string): Uint8Array {
 }
 
 describe("parseInputPayload / parseInputJson", () => {
+  it('preserves negotiated PCM metadata and rejects malformed or oversized blocks',()=>{
+    const mic={t:'mic',mime:'audio/pcm;format=s16le;rate=24000;channels=1',sample_rate:24000,channels:1,sequence:0,data:'A'.repeat(3200)};
+    expect(parseInputJson(JSON.stringify(mic))).toEqual(mic);
+    for(const change of [{sample_rate:48000},{channels:2},{sequence:-1},{sequence:0.5},{sequence:null},{data:'A'.repeat(3204)},{data:'?'.repeat(3200)}]) {
+      expect(parseInputJson(JSON.stringify({...mic,...change}))).toBeNull();
+    }
+  });
   it('preserves optional upload correlation without downgrading invalid ids',()=>{
     const file={t:'file',name:'a.txt',mime:'text/plain',data:'YQ==',id:'upload-1'};
     expect(parseInputJson(JSON.stringify(file))).toEqual(file);

@@ -66,7 +66,7 @@ export type PipelineInput = {
   enabled: boolean;
 };
 
-export type MicInput = { t: "mic"; mime: string; data: string };
+export type MicInput = { t: "mic"; mime: string; data: string; sample_rate?: number; channels?: number; sequence?: number };
 export type WebcamInput = { t: "webcam"; mime: string; data: string };
 export type FileInput = {
   t: "file";
@@ -219,6 +219,11 @@ function parseObject(obj: Record<string, unknown>): InputPayload | null {
     case "mic": {
       if (typeof obj.mime !== "string" || typeof obj.data !== "string") {
         return null;
+      }
+      if (obj.mime === 'audio/pcm;format=s16le;rate=24000;channels=1') {
+        if (obj.sample_rate !== 24000 || obj.channels !== 1 || typeof obj.sequence !== 'number'
+          || !Number.isSafeInteger(obj.sequence) || obj.sequence < 0 || !/^[A-Za-z0-9+/]{3200}$/.test(obj.data)) return null;
+        return { t: 'mic', mime: obj.mime, data: obj.data, sample_rate: 24000, channels: 1, sequence: obj.sequence };
       }
       return { t: "mic", mime: obj.mime, data: obj.data };
     }

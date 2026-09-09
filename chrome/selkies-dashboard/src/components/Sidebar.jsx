@@ -3059,7 +3059,8 @@ function Sidebar() {
               : null;
           const codeMsg = codeKey ? t(codeKey, { detail: errMsg }) : null;
           const localizedMsg = codeMsg && codeMsg !== codeKey ? codeMsg : errMsg;
-          const id = fileName;
+          const id = typeof message.payload.requestId === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(message.payload.requestId)
+            ? `upload:${message.payload.requestId}` : fileName;
           setNotifications((prev) => {
             const exIdx = prev.findIndex((n) => n.id === id);
             if (exIdx === -1) {

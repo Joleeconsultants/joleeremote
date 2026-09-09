@@ -32,6 +32,7 @@ canvas.exact-resolution{position:absolute;width:auto;height:auto;left:50%;top:50
 import PartySocket from "https://esm.sh/partysocket@1.1.6";
 import { ClipboardPasteGate } from './clipboard-paste.js?v=jo-ui-41';
 import { SasControl } from './sas-control.js?v=jo-ui-47';
+import { UploadControl } from './upload-control.js?v=jo-ui-49';
 const VERSION=1, KIND_FRAME=1, KIND_INPUT=2, KIND_AUDIO=3;
 const DEFAULT_CURSOR_SVG="data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round" d="M1 1v16.5l4.2-4.3 3.3 8 2.5-1-3.3-7.9H15z"/></svg>');
 const DEFAULT_CURSOR_HX=1, DEFAULT_CURSOR_HY=1;
@@ -194,6 +195,7 @@ function consumeLatencyReply(payload){
 function setStatus(state,expiresAt=null){
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
+  uploadControl.bind(sessionPaired?socket:null,expiresAt);
   sasControl.bind(sessionPaired?socket:null,session,expiresAt===null?null:Number.isSafeInteger(expiresAt)?expiresAt:0);
   if(!sessionPaired){
     delete canvas.dataset.clipboardReceipt;
@@ -863,6 +865,7 @@ function connect(opts){
     bytesSinceStats+=env.payload.length+2;
     if(env.kind==="audio"){playAudioChunk(env.payload);return;}
     if(env.kind!=="frame") return;
+    if(uploadControl.consume(parseJsonFrameObject(env.payload),currentSocket))return;
     if(sasControl.consume(parseJsonFrameObject(env.payload),currentSocket))return;
     if(consumeLatencyReply(env.payload))return;
     if(clipboardPaste.consume(parseJsonFrameObject(env.payload)))return;
@@ -1074,13 +1077,7 @@ async function clipboardImageUpdateFromUI(blob){
   }
 }
 async function sendFile(blob){
-  if(!(blob instanceof Blob)) return;
-  try{
-    const data=bytesToBase64(new Uint8Array(await blob.arrayBuffer()));
-    const encoded=encodeInput({t:"file",name:typeof blob.name==="string"?blob.name:"upload",mime:blob.type||"application/octet-stream",data});
-    if(encoded.length>MAX_ENVELOPE_BYTES||!socket||socket.readyState!==1) return;
-    socket.send(encoded);
-  }catch(e){}
+  if(blob instanceof Blob)await uploadControl.upload(blob);
 }
 function numberOr(value,fallback=0){return typeof value==="number"&&isFinite(value)?value:fallback;}
 function audioCaptureReading(value,receiptAge){
@@ -1096,6 +1093,7 @@ function audioCaptureReading(value,receiptAge){
   return {state:currentAge<=1500?'streaming':'waiting',sample_rate_hz:rate,channels,sample_format:format,last_chunk_age_ms:currentAge,reason:null};
 }
 function acceptAgentStats(stats){
+  uploadControl.capability(stats.file_upload_result_supported);
   if(stats.webcam_supported===false&&(webcamStream||webcamStarting))stopWebcam('Webcam forwarding is not supported by this PC.');
   if(Object.prototype.hasOwnProperty.call(stats,'screen')){agentScreen=stats.screen;consumeScreenAck(stats.screen);}
   // Terminal screen acknowledgements are not a new CPU/memory sample.
@@ -1346,6 +1344,11 @@ window.addEventListener("message",(event)=>{
     default:
       break;
   }
+});
+const uploadControl=new UploadControl({
+  encode:encodeInput,
+  send:(frame,connection)=>{if(!sessionPaired||socket!==connection||connection.readyState!==1)throw new Error('Disconnected');connection.send(frame);},
+  report:payload=>{if(window.parent!==window)window.parent.postMessage({type:'fileUpload',payload},window.location.origin);},
 });
 applyScale();
 applySmoothing();

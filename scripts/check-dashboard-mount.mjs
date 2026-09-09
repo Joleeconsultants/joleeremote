@@ -95,6 +95,8 @@ try {
   await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===false);
   assert(await page.getByRole('button', { name: 'Set to Best Fit', exact: true }).isDisabled());
   assert(await page.locator('#resolutionPresetSelect').isDisabled());
+  assert.equal(await page.locator('#manualWidthInput').inputValue(), '');
+  assert.equal(await page.locator('#manualHeightInput').inputValue(), '');
   await page.waitForTimeout(100);
   assert.deepEqual(errors, [], 'screen reset must not throw');
   assert(await page.locator('#uiScalingSelect').isDisabled());

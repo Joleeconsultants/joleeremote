@@ -1294,6 +1294,9 @@ function Sidebar() {
       if (event.data?.type === 'status' && event.data.state !== 'paired') {
         setAgentCapabilities({});
         setCurrentResolution('');
+        setManualWidth('');
+        setManualHeight('');
+        manualResolutionDirty.current = false;
         setDisplayCatalog(null);
         setDisplayPending(false);
         return;
@@ -1355,8 +1358,8 @@ function Sidebar() {
   const [selectedDpi, setSelectedDpi] = useState(
     parseInt(localStorage.getItem(getPrefixedKey("scaling_dpi")), 10) || deriveDpiFromDpr()
   );
-  const [manual_width, setManualWidth] = useState(localStorage.getItem(getPrefixedKey("manual_width")) || "");
-  const [manual_height, setManualHeight] = useState(localStorage.getItem(getPrefixedKey("manual_height")) || "");
+  const [manual_width, setManualWidth] = useState("");
+  const [manual_height, setManualHeight] = useState("");
   const [scaleLocally, setScaleLocally] = useState(() => {
     const saved = localStorage.getItem(getPrefixedKey("scaleLocallyManual"));
     return saved !== null ? saved === "true" : DEFAULT_SCALE_LOCALLY;
@@ -4014,7 +4017,6 @@ function Sidebar() {
                         ))}
                       </select>
                     </div>
-                    {!displayCatalog && <p role="status">The PC has not supplied its Windows display modes. Resolution controls are unavailable.</p>}
                     {displayCatalog && !remoteDisplay && <p role="status">The selected monitor is disconnected. Select an available monitor.</p>}
                     {displayPending && <p role="status">Waiting for the PC to confirm the display change…</p>}
                     <div className="resolution-manual-inputs">
@@ -4028,7 +4030,6 @@ function Sidebar() {
                           id="manualWidthInput"
                           min="1"
                           step="2"
-                          placeholder={t("sections.screen.widthPlaceholder")}
                           value={manual_width}
                           onChange={handleManualWidthChange}
                         />
@@ -4043,7 +4044,6 @@ function Sidebar() {
                           id="manualHeightInput"
                           min="1"
                           step="2"
-                          placeholder={t("sections.screen.heightPlaceholder")}
                           value={manual_height}
                           onChange={handleManualHeightChange}
                         />

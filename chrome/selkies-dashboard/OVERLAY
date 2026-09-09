@@ -12,6 +12,7 @@ vite.config.js
 index.html
 src/jolee-bridge.js
 src/jolee-mic-capture.js
+src/jolee-mic-pcm-capture.js
 src/jolee-mic-session.js
 src/jolee-dpi-settings.js
 src/jolee-clipboard-delivery.js

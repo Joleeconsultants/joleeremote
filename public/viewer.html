@@ -1151,7 +1151,9 @@ function postStats(){
   stats.audio_capture=audioCaptureReading(agentStats.audio_capture,now-agentStatsReceivedAt);
   stats.active_encoder=observedEncoder||(['jpeg','h264enc'].includes(agentStats.active_encoder)?agentStats.active_encoder:null);
   stats.supported_encoders=Array.isArray(agentStats.supported_encoders)?agentStats.supported_encoders.filter(value=>['jpeg','h264enc'].includes(value)):null;
-  stats.microphone_supported=typeof agentStats.microphone_supported==='boolean'?agentStats.microphone_supported:null;
+  const micFresh=sessionPaired&&performance.now()-agentStatsReceivedAt<5000;
+  stats.microphone_supported=micFresh&&typeof agentStats.microphone_supported==='boolean'?agentStats.microphone_supported:null;
+  stats.microphone_formats=micFresh&&Array.isArray(agentStats.microphone_formats)?agentStats.microphone_formats.filter(x=>typeof x==='string').slice(0,8):[];
   stats.webcam_supported=typeof agentStats.webcam_supported==='boolean'?agentStats.webcam_supported:null;
   stats.dpi_scaling_supported=typeof agentStats.dpi_scaling_supported==='boolean'?agentStats.dpi_scaling_supported:null;
   stats.audio_bitrate_supported=typeof agentStats.audio_bitrate_supported==='boolean'?agentStats.audio_bitrate_supported:null;
@@ -1296,7 +1298,11 @@ window.addEventListener("message",(event)=>{
       break;
     case "micChunk":
       if(sessionPaired && microphoneForwarding && agentStats.microphone_supported===true && performance.now()-agentStatsReceivedAt<5000 && typeof msg.mime==="string" && typeof msg.data==="string" && msg.data){
-        sendInput({t:"mic",mime:msg.mime,data:msg.data});
+        if(msg.mime==='audio/pcm;format=s16le;rate=24000;channels=1' && agentStats.microphone_formats?.includes(msg.mime)
+          && msg.sample_rate===24000 && msg.channels===1 && Number.isSafeInteger(msg.sequence) && msg.sequence>=0
+          && /^[A-Za-z0-9+/]{3200}$/.test(msg.data) && socket?.bufferedAmount<65536){
+          sendInput({t:"mic",mime:msg.mime,data:msg.data,sample_rate:24000,channels:1,sequence:msg.sequence});
+        }
       }
       break;
     case "pipelineControl":

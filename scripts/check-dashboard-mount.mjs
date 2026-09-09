@@ -11,11 +11,29 @@ const core = `<!doctype html><title>Inert core fixture</title>
 <button id="current">Current</button><button id="custom">Custom</button><button id="unknown">Unknown</button>
 <button id="camera">Camera status</button><button id="encoders">Encoders</button><button id="lost">Lost</button>
 <button id="securefail">Secure failure</button><button id="sasnext">Next command</button>
+<button id="removed">Monitor removed</button>
 <script>
 window.cursorMode=null;
 window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='setUseBrowserCursors')window.cursorMode=e.data.value;});
 const sizes={current:{width:1920,height:1200},custom:{width:3440,height:1440},unknown:null};
-for(const id of Object.keys(sizes))document.getElementById(id).onclick=()=>parent.postMessage({type:'statsUpdate',screen:{effective:sizes[id]},microphone_supported:false,webcam_supported:false},location.origin);
+const opaque=n=>String(n).padStart(32,'0');
+function publish(id){
+  const size=sizes[id];
+  const modes=[{id:opaque(2),width:1920,height:1200,refresh_hz:60,selectable:true,reason:null},
+    {id:opaque(3),width:3440,height:1440,refresh_hz:60,selectable:true,reason:null},
+    {id:opaque(4),width:7680,height:4320,refresh_hz:60,selectable:false,reason:'capture_limit'}];
+  const display={id:opaque(1),label:'Test monitor',primary:true,x:0,y:0,width:size?.width||1920,height:size?.height||1200,current_mode_id:opaque(id==='custom'?3:2),modes,can_resize:true,reason:null};
+  parent.postMessage({type:'statsUpdate',screen:{effective:size,catalog:size?{revision:opaque(9),selected_display_id:id==='removed'?null:opaque(1),displays:[display]}:null},microphone_supported:false,webcam_supported:false},location.origin);
+}
+sizes.removed=sizes.current;
+for(const id of Object.keys(sizes))document.getElementById(id).onclick=()=>publish(id);
+window.displayRequests=[];
+window.addEventListener('message',e=>{
+  if(e.origin!==location.origin || !['setBestFit','setDisplayMode','selectRemoteDisplay'].includes(e.data?.type))return;
+  window.displayRequests.push(e.data);
+  parent.postMessage({type:'screenResult',status:'applied',effective:sizes.current},location.origin);
+  publish('current');
+});
 document.getElementById('encoders').onclick=()=>parent.postMessage({type:'statsUpdate',supported_encoders:['h264enc','jpeg'],active_encoder:'jpeg'},location.origin);
 document.getElementById('lost').onclick=()=>parent.postMessage({type:'status',state:'waiting'},location.origin);
 document.getElementById('camera').onclick=()=>parent.postMessage({type:'statsUpdate',webcam_supported:true,webcam_capture:{supported:true,state:'waiting'}},location.origin);
@@ -75,8 +93,9 @@ try {
   assert(await page.locator('#uiScalingSelect').isDisabled(), 'unknown DPI capability stays disabled');
   assert.equal(await page.locator('#useBrowserCursorsToggle').getAttribute('aria-pressed'),'false','desktop starts with drawn cursors');
   await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===false);
-  await page.getByRole('button', { name: 'Reset to Window', exact: true }).click();
-  await page.waitForTimeout(600);
+  assert(await page.getByRole('button', { name: 'Set to Best Fit', exact: true }).isDisabled());
+  assert(await page.locator('#resolutionPresetSelect').isDisabled());
+  await page.waitForTimeout(100);
   assert.deepEqual(errors, [], 'screen reset must not throw');
   assert(await page.locator('#uiScalingSelect').isDisabled());
   // Reported PC geometry, including a non-preset ultrawide mode, must be visible
@@ -93,10 +112,22 @@ try {
   await page.waitForFunction(()=>document.querySelector('#resolutionPresetSelect').value==='3440x1440');
   await page.frameLocator('#jolee-core').locator('#unknown').click();
   await page.waitForFunction(()=>document.querySelector('#resolutionPresetSelect').value==='');
-  await page.getByRole('button', { name: 'Reset to Window', exact: true }).click();
+  assert(await page.getByRole('button', {name:'Set to Best Fit',exact:true}).isDisabled());
   await page.frameLocator('#jolee-core').locator('#current').click();
+  await page.getByRole('button', {name:'Set to Best Fit',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#manualWidthInput').value==='1920');
   assert.equal(await page.locator('#manualHeightInput').inputValue(),'1200');
+  assert(await page.locator('#resolutionPresetSelect option[value="7680x4320"]').isDisabled());
+  assert.match(await page.locator('#resolutionPresetSelect option[value="7680x4320"]').innerText(),/capture limit/);
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.displayRequests.length===1);
+  assert.equal(await page.frameLocator('#jolee-core').locator('body').evaluate(()=>window.displayRequests[0].type),'setBestFit');
+  await page.frameLocator('#jolee-core').locator('#removed').click();
+  await page.getByText('The selected monitor is disconnected. Select an available monitor.',{exact:true}).waitFor();
+  assert(await page.getByRole('button',{name:'Set to Best Fit',exact:true}).isDisabled());
+  assert.equal(await page.locator('#remoteDisplaySelect').isDisabled(),false);
+  await page.locator('#remoteDisplaySelect').selectOption('1'.padStart(32,'0'));
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.displayRequests.length===2);
+  assert.equal(await page.frameLocator('#jolee-core').locator('body').evaluate(()=>window.displayRequests[1].type),'selectRemoteDisplay');
   // Touch users need an actual notice: a hover-only disabled title cannot help.
   await page.setViewportSize({width:390,height:844});
   await page.getByTitle('Microphone forwarding requires a connected PC with confirmed support.',{exact:true}).first().click();

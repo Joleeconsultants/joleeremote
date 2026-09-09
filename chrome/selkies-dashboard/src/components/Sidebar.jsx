@@ -50,6 +50,7 @@
  * @module
  */
 import { useState, useEffect, useCallback, useId, useMemo, useRef } from "react";
+import { readDisplayCatalog, selectedDisplay, resolutionChoices } from "../../../../public/display-catalog.js";
 import { displayLabel, decodableEncoders, canDecodeFullColor, getRoutePrefix, getStorageAppName, isMobileClient } from "../jolee-shims/util.js";
 import { sessionAuthHeaders, withSessionToken } from "../jolee-shims/session-token.js";
 import { resolveSpec, isSettingPinned, HIDPI_SPEC, RATE_CONTROL_SPEC,
@@ -122,20 +123,6 @@ const encoderOptionsWR = [
 const webcamEncoderOptions = ["auto", "h264", "vp8", "mjpeg"];
 
 const rateControlOptions = ["cbr", "crf"];
-
-const commonResolutionValues = [
-  "",
-  "1920x1080",
-  "1280x720",
-  "1366x768",
-  "1920x1200",
-  "2560x1440",
-  "3840x2160",
-  "1024x768",
-  "800x600",
-  "640x480",
-  "320x240",
-];
 
 const dpiScalingOptions = [
   { label: "100%", value: 96 },
@@ -264,13 +251,6 @@ function formatBytes(bytes, decimals = 2, rawDict) {
 const calculateGaugeOffset = (percentage, radius, circumference) => {
   const clampedPercentage = Math.max(0, Math.min(100, percentage || 0));
   return circumference * (1 - clampedPercentage / 100);
-};
-
-/** Parses a dimension and rounds it down to an even number; non-numbers become 0. */
-const roundDownToEven = (num) => {
-  const n = parseInt(num, 10);
-  if (isNaN(n)) return 0;
-  return Math.floor(n / 2) * 2;
 };
 
 /**
@@ -1291,6 +1271,11 @@ function Sidebar() {
   );
   const [agentCapabilities, setAgentCapabilities] = useState({});
   const [currentResolution, setCurrentResolution] = useState("");
+  const [displayCatalog, setDisplayCatalog] = useState(null);
+  const [displayPending, setDisplayPending] = useState(false);
+  const remoteDisplay = selectedDisplay(displayCatalog);
+  const displayModes = resolutionChoices(remoteDisplay);
+  const canChangeResolution = serverSettings?.enable_resize?.value !== false && !!remoteDisplay?.can_resize && displayModes.some(choice => choice.mode.selectable) && !displayPending;
   const manualResolutionDirty = useRef(false);
   const [encoderLoadExpired, setEncoderLoadExpired] = useState(false);
   const hasEncoderCapabilities = Array.isArray(agentCapabilities.supported_encoders) && agentCapabilities.supported_encoders.length > 0;
@@ -1309,10 +1294,14 @@ function Sidebar() {
       if (event.data?.type === 'status' && event.data.state !== 'paired') {
         setAgentCapabilities({});
         setCurrentResolution('');
+        setDisplayCatalog(null);
+        setDisplayPending(false);
         return;
       }
+      if(event.data?.type === 'screenResult') setDisplayPending(false);
       if (event.data?.type !== 'statsUpdate') return;
       const message = event.data;
+      setDisplayCatalog(readDisplayCatalog(message.screen?.catalog));
       const effective = message.screen?.effective;
       setCurrentResolution(Number.isInteger(effective?.width) && Number.isInteger(effective?.height) &&
         effective.width > 0 && effective.height > 0 && effective.width <= 32768 && effective.height <= 32768
@@ -2256,32 +2245,16 @@ function Sidebar() {
       window.location.origin
     );
   };
+  const sendDisplayRequest = (type, extra = {}) => {
+    if(!displayCatalog || displayPending) return;
+    manualResolutionDirty.current = false;
+    setDisplayPending(true);
+    postToCore({type,display_id:displayCatalog.selected_display_id,
+      catalog_revision:displayCatalog.revision,...extra}, window.location.origin);
+  };
   const handlePresetChange = (event) => {
-    const selectedValue = event.target.value;
-    if (!selectedValue) return;
-    const parts = selectedValue.split("x");
-    if (parts.length === 2) {
-      const width = parseInt(parts[0], 10),
-        height = parseInt(parts[1], 10);
-      if (!isNaN(width) && width > 0 && !isNaN(height) && height > 0) {
-        const evenWidth = roundDownToEven(width),
-          evenHeight = roundDownToEven(height);
-        manualResolutionDirty.current = false;
-        setManualWidth(evenWidth.toString());
-        setManualHeight(evenHeight.toString());
-        localStorage.setItem(getPrefixedKey("manual_width"), evenWidth.toString());
-        localStorage.setItem(getPrefixedKey("manual_height"), evenHeight.toString());
-        postToCore(
-          { type: "setManualResolution", width: evenWidth, height: evenHeight },
-          window.location.origin
-        );
-        deriveHidpiForResolution(true);
-      } else
-        console.error(
-          "Dashboard: Error parsing selected resolution preset:",
-          selectedValue
-        );
-    }
+    const choice = displayModes.find(item => item.value === event.target.value);
+    if(canChangeResolution && choice?.mode.selectable) sendDisplayRequest('setDisplayMode', {mode_id:choice.mode.id});
   };
   /**
    * A half-typed size stays in component state: the stored `manual_width`
@@ -2384,37 +2357,11 @@ function Sidebar() {
     debouncedPostSetting({ enable_binary_clipboard: newState });
   };
   const handleSetManualResolution = () => {
-    const width = parseInt(manual_width.trim(), 10),
-      height = parseInt(manual_height.trim(), 10);
-    if (isNaN(width) || width <= 0 || isNaN(height) || height <= 0) {
-      alert(t("alerts.invalidResolution"));
-      return;
-    }
-    const evenWidth = roundDownToEven(width),
-      evenHeight = roundDownToEven(height);
-    manualResolutionDirty.current = false;
-    setManualWidth(evenWidth.toString());
-    setManualHeight(evenHeight.toString());
-    localStorage.setItem(getPrefixedKey("manual_width"), evenWidth.toString());
-    localStorage.setItem(getPrefixedKey("manual_height"), evenHeight.toString());
-    postToCore(
-      { type: "setManualResolution", width: evenWidth, height: evenHeight },
-      window.location.origin
-    );
-    deriveHidpiForResolution(true);
+    const choice = displayModes.find(item => item.mode.width === Number(manual_width) && item.mode.height === Number(manual_height));
+    if(canChangeResolution && choice?.mode.selectable) sendDisplayRequest('setDisplayMode', {mode_id:choice.mode.id});
   };
   const handleResetResolution = () => {
-    manualResolutionDirty.current = false;
-    setManualWidth("");
-    setManualHeight("");
-    localStorage.removeItem(getPrefixedKey("manual_width"));
-    localStorage.removeItem(getPrefixedKey("manual_height"));
-    postToCore(
-      { type: "resetResolutionToWindow" },
-      window.location.origin
-    );
-    resetHidpiToDerivedDefault();
-    resetDpiToDerivedDefault();
+    if(canChangeResolution) sendDisplayRequest('setBestFit');
   };
   const handleVideoToggle = () => {
     const enabled = !isVideoActive;
@@ -2989,6 +2936,7 @@ function Sidebar() {
             apply_failed: 'The PC could not apply the resolution.',
             verify_failed: 'The PC could not verify the resulting resolution.',
             restore_failed: 'The PC could not restore the previous resolution.',
+            catalog_changed: 'The display list changed or is unavailable. Wait for the PC to report its current displays.',
           };
           const size = message.effective;
           if (message.status === 'applied' && (!Number.isInteger(size?.width) || !Number.isInteger(size?.height) || size.width < 1 || size.height < 1)) return;
@@ -3297,16 +3245,9 @@ function Sidebar() {
     gaugeRadius,
     gaugeCircumference
   );
-  const translatedCommonResolutions = [...commonResolutionValues,
-    ...(currentResolution && !commonResolutionValues.includes(currentResolution) ? [currentResolution] : [])].map(
-    (value, index) => ({
-      value: value,
-      text:
-        index === 0
-          ? t("sections.screen.resolutionPresetSelect")
-          : (raw?.resolutionPresets?.[value] || value) + (value === currentResolution ? ' (Current)' : ''),
-    })
-  );
+  const translatedCommonResolutions = [{value:'',text:displayCatalog ? 'Select resolution' : 'Windows display modes unavailable',disabled:true},
+    ...displayModes.map(({value,mode,current}) => ({value,disabled:!mode.selectable,
+      text:`${mode.width} × ${mode.height}${current ? ' (Current)' : ''}${!mode.selectable ? ` — ${mode.reason === 'capture_limit' ? 'Exceeds capture limit' : 'Unavailable for this session'}` : ''}`}))];
 
   /** One encoder knob serves both transports; CBR/CRF applies to every H.264 encoder on both. */
   const activeEncoder = agentCapabilities.supported_encoders?.includes(agentCapabilities.active_encoder)
@@ -4045,21 +3986,37 @@ function Sidebar() {
                 {(!serverSettings?.manual_resolution?.locked) && (
                   <>
                     <div className="dev-setting-item">
+                      <label htmlFor="remoteDisplaySelect">Remote monitor</label>
+                      <select id="remoteDisplaySelect" value={displayCatalog?.selected_display_id || ''}
+                        disabled={!displayCatalog || displayPending}
+                        onChange={event => sendDisplayRequest('selectRemoteDisplay', {display_id:event.target.value})}>
+                        {!displayCatalog && <option value="">Windows displays unavailable</option>}
+                        {displayCatalog && !remoteDisplay && <option value="" disabled>Select an available monitor</option>}
+                        {displayCatalog?.displays.map(display => <option key={display.id} value={display.id}>
+                          {display.label}{display.primary ? ' (Primary)' : ''}
+                        </option>)}
+                      </select>
+                    </div>
+                    <div className="dev-setting-item">
                       <label htmlFor="resolutionPresetSelect">
                         {t("sections.screen.presetLabel")}
                       </label>
                       <select
                         id="resolutionPresetSelect"
-                        value={currentResolution}
+                        value={displayModes.some(choice => choice.value === currentResolution) ? currentResolution : ''}
+                        disabled={!canChangeResolution}
                         onChange={handlePresetChange}
                       >
                         {translatedCommonResolutions.map((res, i) => (
-                          <option key={i} value={res.value} disabled={i === 0}>
+                          <option key={i} value={res.value} disabled={res.disabled}>
                             {res.text}
                           </option>
                         ))}
                       </select>
                     </div>
+                    {!displayCatalog && <p role="status">The PC has not supplied its Windows display modes. Resolution controls are unavailable.</p>}
+                    {displayCatalog && !remoteDisplay && <p role="status">The selected monitor is disconnected. Select an available monitor.</p>}
+                    {displayPending && <p role="status">Waiting for the PC to confirm the display change…</p>}
                     <div className="resolution-manual-inputs">
                       <div className="dev-setting-item manual-input-item">
                         <label htmlFor="manualWidthInput">
@@ -4096,14 +4053,18 @@ function Sidebar() {
                       <button
                         className="resolution-button"
                         onClick={handleSetManualResolution}
+                        disabled={!canChangeResolution || !displayModes.some(choice => choice.mode.selectable && choice.mode.width === Number(manual_width) && choice.mode.height === Number(manual_height))}
+                        title="Choose a resolution advertised by this Windows monitor"
                       >
                         {t("sections.screen.setManualButton")}
                       </button>
                       <button
                         className="resolution-button reset-button"
                         onClick={handleResetResolution}
+                        disabled={!canChangeResolution}
+                        title="Choose the supported resolution that best fits this window"
                       >
-                        {t("sections.screen.resetButton")}
+                        Set to Best Fit
                       </button>
                     </div>
                   </>

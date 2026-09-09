@@ -38,6 +38,8 @@ import { ClipboardPasteGate } from './clipboard-paste.js?v=jo-ui-41';
 import { SasControl } from './sas-control.js?v=jo-ui-47';
 import { UploadControl } from './upload-control.js?v=jo-ui-49';
 import { SessionState } from './session-state.js';
+import { readDisplayCatalog } from './display-catalog.js';
+import { DisplayTransition } from './display-transition.js';
 const VERSION=1, KIND_FRAME=1, KIND_INPUT=2, KIND_AUDIO=3;
 const DEFAULT_CURSOR_SVG="data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round" d="M1 1v16.5l4.2-4.3 3.3 8 2.5-1-3.3-7.9H15z"/></svg>');
 const DEFAULT_CURSOR_HX=1, DEFAULT_CURSOR_HY=1;
@@ -90,7 +92,7 @@ function applyCursorMode(){
 let sessionPaired=false;
 const sasControl=new SasControl({
   send:(payload,connection)=>{
-    if(!sessionPaired||socket!==connection||socket?.readyState!==1)throw new Error('Session unavailable');
+    if(!sessionPaired||displayTransition.blocked||socket!==connection||socket?.readyState!==1)throw new Error('Session unavailable');
     socket.send(encodeInput(payload));
   },
   changed:state=>{if(window.parent!==window)window.parent.postMessage({type:'sasState',...state},window.location.origin);},
@@ -99,10 +101,15 @@ const sasControl=new SasControl({
 });
 let latestSettings={video_protocol:1,max_edge:3840};
 let pendingScreenRequest=null, screenAutoEnabled=false;
+const displayTransition=new DisplayTransition(), heldViewerKeys=new Map();
 let screenUseCssScaling=true, screenAligned=false, screenResizeTimer=null;
 function finishScreenRequest(status,reason,effective=null){
   if(!pendingScreenRequest)return;
   const request=pendingScreenRequest;
+  if(displayTransition.id===request.id && displayTransition.state==='pending'){
+    displayTransition.fail(request.id);
+    sessionState.stale('Display change could not be confirmed. Input is paused. Retry the display selection or reconnect.');
+  }
   clearTimeout(request.timer);pendingScreenRequest=null;
   if(window.parent!==window)window.parent.postMessage({type:'screenResult',id:request.id,status,reason,effective},window.location.origin);
 }
@@ -160,6 +167,11 @@ function consumeScreenAck(screen){
     const size=screen.effective;
     const effective=size&&Number.isInteger(size.width)&&Number.isInteger(size.height)&&size.width>0&&size.height>0?size:null;
     if(screen.status==='applied'&&!effective)return;
+    if(displayTransition.acknowledge(screen.request_id)){
+      invalidateVideoFrames();
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      sessionState.stale('Display confirmed. Waiting for a fresh screen before input resumes…');
+    }
     finishScreenRequest(screen.status,typeof screen.reason==='string'?screen.reason:null,effective);
   }
 }
@@ -175,6 +187,38 @@ function requestScreenSize(width,height,mode){
 function requestWindowSize(){
   const dpr=screenUseCssScaling?1:(devicePixelRatio||1);
   requestScreenSize(Math.round(innerWidth*dpr),Math.round(innerHeight*dpr),'auto');
+}
+function requestCatalogDisplay(message){
+  if(pendingScreenRequest)return;
+  const id=crypto.randomUUID();
+  pendingScreenRequest={id,timer:setTimeout(()=>finishScreenRequest('rejected','confirmation_timeout'),15000)};
+  if(!sessionPaired){finishScreenRequest('rejected','session_unavailable');return;}
+  const catalog=performance.now()-agentStatsReceivedAt<5000?readDisplayCatalog(agentScreen?.catalog):null;
+  if(!catalog||message.catalog_revision!==catalog.revision){finishScreenRequest('rejected','catalog_changed');return;}
+  const display=catalog.displays.find(item=>item.id===message.display_id);
+  if(!display){finishScreenRequest('rejected','catalog_changed');return;}
+  const base={display_id:display.id,catalog_revision:catalog.revision,request_id:id};
+  let payload;
+  if(message.type==='selectRemoteDisplay')payload={t:'display_select',...base};
+  else {
+    if(display.id!==catalog.selected_display_id||!display.can_resize){finishScreenRequest('rejected','unsupported_mode');return;}
+    if(message.type==='setBestFit'){
+      if(!display.modes.some(mode=>mode.selectable)){finishScreenRequest('rejected','unsupported_mode');return;}
+      const dpr=screenUseCssScaling?1:(devicePixelRatio||1);
+      payload={t:'resize',...base,mode:'best_fit',w:Math.max(1,Math.min(32768,Math.round(innerWidth*dpr))),h:Math.max(1,Math.min(32768,Math.round(innerHeight*dpr)))};
+    }else{
+      const mode=display.modes.find(item=>item.id===message.mode_id&&item.selectable);
+      if(!mode){finishScreenRequest('rejected','unsupported_mode');return;}
+      payload={t:'resize',...base,mode:'manual',mode_id:mode.id,w:mode.width,h:mode.height};
+    }
+  }
+  screenAutoEnabled=false;scheduleScreenResize();
+  pointerInput.cancel();
+  for(const key of heldViewerKeys.values())sendInput({...key,e:'up'});
+  heldViewerKeys.clear();clipboardPaste.reset();hideDrawnCursor();
+  displayTransition.begin(id);
+  sessionState.stale('Changing display. Input is paused until a fresh screen arrives…');
+  sendInput(payload);
 }
 function scheduleScreenResize(){
   if(screenResizeTimer!==null)clearTimeout(screenResizeTimer);
@@ -211,6 +255,7 @@ function setStatus(state,expiresAt=null){
   uploadControl.bind(sessionPaired?socket:null,expiresAt);
   sasControl.bind(sessionPaired?socket:null,session,expiresAt===null?null:Number.isSafeInteger(expiresAt)?expiresAt:0);
   if(!sessionPaired){
+    displayTransition.reset();heldViewerKeys.clear();
     for(const job of printJobChunks.values())clearTimeout(job.timer);
     printJobChunks.clear();
     delete canvas.dataset.printFolder;
@@ -456,19 +501,22 @@ const negotiatedVideo=new NegotiatedVideo(frame=>{
   if(canvas.width!==frame.displayWidth)canvas.width=frame.displayWidth;
   if(canvas.height!==frame.displayHeight)canvas.height=frame.displayHeight;
   applySmoothing();ctx.drawImage(frame,0,0);
-  sessionState.frame();
+  displayFramePainted();
   observedEncoder='h264enc';frameCount++;
 },()=>{observedEncoder=null;sendInput({t:'settings',settings:{encoder:'jpeg'}});});
 function invalidateVideoFrames(){
   videoGeneration++;
   negotiatedVideo.reset();
 }
+function displayFramePainted(){
+  if(!displayTransition.blocked || displayTransition.painted())sessionState.frame();
+}
 async function paintJpegOrPng(payload,generation=videoGeneration,sequence=++receivedFrameSequence){
   const bitmap=await createImageBitmap(new Blob([payload]));
   try{
     if(!videoEnabled||generation!==videoGeneration||sequence<=latestPaintedFrame)return;
     canvas.width=bitmap.width;canvas.height=bitmap.height;applySmoothing();ctx.drawImage(bitmap,0,0);
-    sessionState.frame();
+    displayFramePainted();
     latestPaintedFrame=sequence;observedEncoder=payload[0]===255&&payload[1]===216?"jpeg":null;frameCount++;
   }finally{bitmap.close();}
 }
@@ -973,6 +1021,7 @@ function connect(opts){
   });
 }
 function sendInput(payload){
+  if(!displayTransition.allows(payload))return;
   if(payload.t==='pointer'&&payload.e==='down'||payload.t==='wheel')clipboardPaste.cancel('conflicting_input');
   if(payload.t==="settings"&&payload.settings&&typeof payload.settings==="object"){
     if(payload.settings.enable_binary_clipboard===false)clipboardPaste.invalidate('cancelled');
@@ -995,6 +1044,10 @@ function sendInput(payload){
   const encoded=encodeInput(payload);
   if(encoded.length>MAX_ENVELOPE_BYTES)return;
   socket.send(encoded);
+  if(payload.t==='key'){
+    const identity=payload.code||payload.key;
+    if(payload.e==='down')heldViewerKeys.set(identity,payload);else heldViewerKeys.delete(identity);
+  }
 }
 function requestFullscreen(){
   const el=stage;
@@ -1389,6 +1442,11 @@ window.addEventListener("message",(event)=>{
       if(msg.context==="output"){
         selectAudioOutput(typeof msg.deviceId==="string"?msg.deviceId:"");
       }
+      break;
+    case "selectRemoteDisplay":
+    case "setDisplayMode":
+    case "setBestFit":
+      requestCatalogDisplay(msg);
       break;
     case "setManualResolution":
       screenAutoEnabled=false;

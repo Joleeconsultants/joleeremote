@@ -14,4 +14,5 @@ export class SessionState {
     this.render({state,text:text[state]||'Session unavailable.',visible:state!=='paired'||!this.fresh,terminal:this.terminal});
   }
   frame(){if(this.paired&&!this.terminal){this.fresh=true;this.set('paired');}}
+  stale(text){if(this.paired&&!this.terminal){this.fresh=false;this.render({state:'paired',text,visible:true,terminal:false});}}
 }

@@ -44,8 +44,13 @@ export type ResizeInput = {
   h: number;
   reset?: boolean;
   id?: string;
-  mode?: "auto" | "manual";
+  mode?: "auto" | "manual" | "best_fit";
+  display_id?: string;
+  catalog_revision?: string;
+  mode_id?: string;
+  request_id?: string;
 };
+export type DisplaySelectInput = { t: "display_select"; display_id: string; catalog_revision: string; request_id: string };
 
 export type CssScalingInput = { t: "cssScaling"; value: boolean };
 
@@ -88,6 +93,7 @@ export type InputPayload =
   | ClipboardInput
   | ClipboardPasteInput
   | ResizeInput
+  | DisplaySelectInput
   | CssScalingInput
   | SettingsInput
   | AudioDeviceInput
@@ -183,16 +189,36 @@ function parseObject(obj: Record<string, unknown>): InputPayload | null {
     case "resize": {
       if (!isFiniteNumber(obj.w) || !isFiniteNumber(obj.h)) return null;
       const out: ResizeInput = { t: "resize", w: obj.w, h: obj.h };
+      const catalogRequest = ['display_id', 'catalog_revision', 'mode_id', 'request_id'].some(key => obj[key] !== undefined) || obj.mode === 'best_fit';
+      if (catalogRequest) {
+        if (typeof obj.display_id !== 'string' || !/^[a-f0-9]{32}$/i.test(obj.display_id) ||
+            typeof obj.catalog_revision !== 'string' || !/^[a-f0-9]{32}$/i.test(obj.catalog_revision) ||
+            typeof obj.request_id !== 'string' || obj.request_id.length < 1 || obj.request_id.length > 64 ||
+            !Number.isInteger(obj.w) || !Number.isInteger(obj.h) || obj.w < 1 || obj.h < 1 || obj.w > 32768 || obj.h > 32768 ||
+            obj.reset !== undefined || obj.id !== undefined ||
+            (obj.mode !== 'manual' && obj.mode !== 'best_fit')) return null;
+        if (obj.mode === 'manual' && (typeof obj.mode_id !== 'string' || !/^[a-f0-9]{32}$/i.test(obj.mode_id))) return null;
+        if (obj.mode === 'best_fit' && obj.mode_id !== undefined) return null;
+        out.display_id = obj.display_id; out.catalog_revision = obj.catalog_revision; out.request_id = obj.request_id;
+        if (typeof obj.mode_id === 'string') out.mode_id = obj.mode_id;
+      }
       if (obj.reset === true) out.reset = true;
       if (obj.id !== undefined) {
         if (typeof obj.id !== "string" || obj.id.length < 1 || obj.id.length > 64) return null;
         out.id = obj.id;
       }
       if (obj.mode !== undefined) {
-        if (obj.mode !== "auto" && obj.mode !== "manual") return null;
+        if (obj.mode !== "auto" && obj.mode !== "manual" && obj.mode !== "best_fit") return null;
         out.mode = obj.mode;
       }
       return out;
+    }
+    case "display_select": {
+      if (Object.keys(obj).some(key => !['t', 'display_id', 'catalog_revision', 'request_id'].includes(key)) ||
+          typeof obj.display_id !== 'string' || !/^[a-f0-9]{32}$/i.test(obj.display_id) ||
+          typeof obj.catalog_revision !== 'string' || !/^[a-f0-9]{32}$/i.test(obj.catalog_revision) ||
+          typeof obj.request_id !== 'string' || obj.request_id.length < 1 || obj.request_id.length > 64) return null;
+      return { t: 'display_select', display_id: obj.display_id, catalog_revision: obj.catalog_revision, request_id: obj.request_id };
     }
     case "cssScaling": {
       if (typeof obj.value !== "boolean") return null;

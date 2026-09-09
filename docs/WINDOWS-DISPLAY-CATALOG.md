@@ -20,6 +20,8 @@ Set to Best Fit is a one-shot request. Windows chooses the largest eligible mode
 
 Screen acknowledgements retain `request_id`, `status`, `reason`, and `effective`, with selected ID/revision and refreshed catalog. A stale request fails with `catalog_changed`. The viewer requires fresh telemetry, waits for the matching native acknowledgement, and reports timeout/disconnection. Controls are unavailable when an older agent supplies no catalog.
 
+Display commands release held input and pause new pointer, keyboard, wheel, Paste and shortcut input. A matching acknowledgement invalidates outstanding decoder callbacks; input resumes only after a subsequent frame is painted. Timeouts stay visibly paused rather than accepting clicks on a possibly stale picture. Native publication must order all old frames before the acknowledgement and emit a fresh video configuration/keyframe (or JPEG) afterward, including no-op and rejected requests. Identical monitor dimensions do not remove this ordering requirement.
+
 ## Verification
 
 Automated checks cover strict catalog validation, disabled modes, duplicate resolution preference, negative monitor origins, removed monitor representation, exact request identities, stale revisions, and the built Edge controls. Native capture, mouse effects, mode application/restoration and multi-monitor behavior require integrated pilot verification before declaring this feature complete.

@@ -28,6 +28,17 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
   var session = search.get("session") || "";
   // noVNC-style tab title from hop/shell glue (?device=), not Selkies Sidebar.
   var deviceName = (search.get("device") || "").trim();
+  // The display-only query is removed below. Keep its label in this tab,
+  // scoped to the exact session, so refresh cannot lose or reuse a PC name.
+  try {
+    var cachedTitle = JSON.parse(sessionStorage.getItem("jolee_tab_device") || "null");
+    if (!deviceName && session && cachedTitle?.session === session && typeof cachedTitle.name === "string") {
+      deviceName = cachedTitle.name;
+    }
+    if (session && deviceName) sessionStorage.setItem("jolee_tab_device", JSON.stringify({session:session,name:deviceName.slice(0,128)}));
+    else if (cachedTitle?.session !== session) sessionStorage.removeItem("jolee_tab_device");
+  } catch (e) {}
+  deviceName = deviceName.slice(0,128);
   if (deviceName) {
     document.title = "Jolee Remote - " + deviceName;
   }

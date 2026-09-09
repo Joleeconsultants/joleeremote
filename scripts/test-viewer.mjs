@@ -7,8 +7,9 @@ import { canSetDpi, initialDpi } from '../chrome/selkies-dashboard/src/jolee-dpi
 import { SasControl } from '../public/sas-control.js';
 import { ClipboardPasteGate } from '../public/clipboard-paste.js';
 import { UploadControl } from '../public/upload-control.js';
+import { DisplayTransition } from '../public/display-transition.js';
 function viewerContext(globals) {
-  globals={printJobChunks:new Map(),stage:{classList:{toggle(){}},scrollLeft:0,scrollTop:0},sessionState:{set(){},frame(){}},...globals};
+  globals={DisplayTransition,displayTransition:new DisplayTransition(),heldViewerKeys:new Map(),printJobChunks:new Map(),stage:{classList:{toggle(){}},scrollLeft:0,scrollTop:0},sessionState:{set(){},frame(){},stale(){}},...globals};
   return vm.createContext({ canvas:{dataset:{}},setMicrophoneForwarding:()=>{},resetRemoteCursor:()=>{},pointerInput:{reset(){}},clearTimeout:()=>{},session:'fixture-session', SasControl, structuredClone, sasControl:{consume:()=>false,request:()=>{},publish:()=>{}}, ClipboardPasteGate, clipboardPaste: new ClipboardPasteGate({ send() {}, report() {}, supported: () => false, connection: () => null }), ...globals,
     UploadControl,uploadControl:{bind(){},capability(){},consume(){return false;}},crypto:{subtle:webcrypto.subtle,...globals.crypto} });
 }

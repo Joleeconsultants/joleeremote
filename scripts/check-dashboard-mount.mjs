@@ -11,6 +11,7 @@ const core = `<!doctype html><title>Inert core fixture</title>
 <button id="current">Current</button><button id="custom">Custom</button><button id="unknown">Unknown</button>
 <button id="camera">Camera status</button><button id="encoders">Encoders</button><button id="lost">Lost</button>
 <button id="securefail">Secure failure</button><button id="sasnext">Next command</button>
+<button id="removed">Monitor removed</button>
 <script>
 window.cursorMode=null;
 window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='setUseBrowserCursors')window.cursorMode=e.data.value;});
@@ -22,8 +23,9 @@ function publish(id){
     {id:opaque(3),width:3440,height:1440,refresh_hz:60,selectable:true,reason:null},
     {id:opaque(4),width:7680,height:4320,refresh_hz:60,selectable:false,reason:'capture_limit'}];
   const display={id:opaque(1),label:'Test monitor',primary:true,x:0,y:0,width:size?.width||1920,height:size?.height||1200,current_mode_id:opaque(id==='custom'?3:2),modes,can_resize:true,reason:null};
-  parent.postMessage({type:'statsUpdate',screen:{effective:size,catalog:size?{revision:opaque(9),selected_display_id:opaque(1),displays:[display]}:null},microphone_supported:false,webcam_supported:false},location.origin);
+  parent.postMessage({type:'statsUpdate',screen:{effective:size,catalog:size?{revision:opaque(9),selected_display_id:id==='removed'?null:opaque(1),displays:[display]}:null},microphone_supported:false,webcam_supported:false},location.origin);
 }
+sizes.removed=sizes.current;
 for(const id of Object.keys(sizes))document.getElementById(id).onclick=()=>publish(id);
 window.displayRequests=[];
 window.addEventListener('message',e=>{
@@ -119,6 +121,13 @@ try {
   assert.match(await page.locator('#resolutionPresetSelect option[value="7680x4320"]').innerText(),/capture limit/);
   await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.displayRequests.length===1);
   assert.equal(await page.frameLocator('#jolee-core').locator('body').evaluate(()=>window.displayRequests[0].type),'setBestFit');
+  await page.frameLocator('#jolee-core').locator('#removed').click();
+  await page.getByText('The selected monitor is disconnected. Select an available monitor.',{exact:true}).waitFor();
+  assert(await page.getByRole('button',{name:'Set to Best Fit',exact:true}).isDisabled());
+  assert.equal(await page.locator('#remoteDisplaySelect').isDisabled(),false);
+  await page.locator('#remoteDisplaySelect').selectOption('1'.padStart(32,'0'));
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.displayRequests.length===2);
+  assert.equal(await page.frameLocator('#jolee-core').locator('body').evaluate(()=>window.displayRequests[1].type),'selectRemoteDisplay');
   // Touch users need an actual notice: a hover-only disabled title cannot help.
   await page.setViewportSize({width:390,height:844});
   await page.getByTitle('Microphone forwarding requires a connected PC with confirmed support.',{exact:true}).first().click();

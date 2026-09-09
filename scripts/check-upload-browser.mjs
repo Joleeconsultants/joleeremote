@@ -25,7 +25,14 @@ try{
  browser=await chromium.launch({headless:true,...(process.env.DASHBOARD_BROWSER_CHANNEL?{channel:process.env.DASHBOARD_BROWSER_CHANNEL}:{})});
  const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  page.setDefaultTimeout(10000);
- await page.goto(`http://127.0.0.1:${server.address().port}`);await page.locator('.toggle-handle').waitFor({state:'attached'});
+ const origin=`http://127.0.0.1:${server.address().port}`;
+ await page.goto(origin+'/?session=title-fixture&device=Zach%20PC%20Work');await page.locator('.toggle-handle').waitFor({state:'attached'});
+ assert.equal(await page.title(),'Jolee Remote - Zach PC Work');
+ assert.equal(new URL(page.url()).searchParams.has('device'),false);
+ await page.reload();await page.locator('.toggle-handle').waitFor({state:'attached'});
+ assert.equal(await page.title(),'Jolee Remote - Zach PC Work','refresh retains this session title');
+ await page.goto(origin+'/?session=different-session');await page.locator('.toggle-handle').waitFor({state:'attached'});
+ assert.equal(await page.title(),'Jolee Remote','another session cannot inherit a stale device name');
  await page.waitForTimeout(600);
  await page.locator('.toggle-handle').click();
  await page.getByText('Files',{exact:true}).click();

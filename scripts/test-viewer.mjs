@@ -275,7 +275,7 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   const sent = [];
   const c = viewerContext({ performance: { now: () => now }, consumeScreenAck: () => {}, remoteAudio:{reading:()=>({level:null,state:"unavailable"})},
     window: { parent: { postMessage: value => sent.push(value) }, location: { origin: 'https://test.invalid' } },
-    frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, agentScreen: null, agentStatsReceivedAt: 0, observedEncoder: null, latencyReading: () => null });
+    sessionPaired: true, frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, agentScreen: null, agentStatsReceivedAt: 0, observedEncoder: null, latencyReading: () => null });
   vm.runInContext(html.slice(html.indexOf('function numberOr('), html.indexOf('setInterval(postStats,1000)')), c);
   c.frameCount = 30; c.bytesSinceStats = 125000;
   now = 500; c.postStats();
@@ -310,6 +310,8 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   assert.equal(sent.at(-1).system_stats.cpu_percent, 10);
   assert.equal(c.agentStatsReceivedAt, 5000);
   assert.equal(sent.at(-1).screen.request_id, 'screen-1');
+  c.sessionPaired=false; c.postStats(); assert.equal(sent.at(-1).screen,null);
+  c.sessionPaired=true;
   c.observedEncoder = 'jpeg';
   c.agentStats = { active_encoder: 'h264enc', supported_encoders: ['jpeg', 'invalid'], microphone_supported: false };
   c.postStats();
@@ -327,6 +329,7 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   Object.assign(c.agentStats,{capture_backend:'gdi-bootstrap',capture_max_edge:320,jpeg_quality_effective:1});
   c.agentStatsReceivedAt=now;c.postStats();assert.equal(sent.at(-1).jpeg_quality_effective,1);
   now+=5000;c.postStats();assert.equal(sent.at(-1).capture_backend,null);assert.equal(sent.at(-1).capture_max_edge,null);assert.equal(sent.at(-1).jpeg_quality_effective,null);
+  assert.equal(sent.at(-1).screen,null);
 });
 
 test('exact-resolution pointer mapping uses the centered native image and smoothing reaches CSS', () => {

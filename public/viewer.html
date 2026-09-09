@@ -1137,7 +1137,7 @@ function postStats(){
   stats.capture_backend=['gdi','gdi-bootstrap','dxgi','paused'].includes(agentStats.capture_backend)?agentStats.capture_backend:null;
   stats.capture_max_edge=Number.isInteger(agentStats.capture_max_edge)&&agentStats.capture_max_edge>=320&&agentStats.capture_max_edge<=3840?agentStats.capture_max_edge:null;
   stats.jpeg_quality_effective=stats.active_encoder==='jpeg'&&Number.isInteger(agentStats.jpeg_quality_effective)&&agentStats.jpeg_quality_effective>=1&&agentStats.jpeg_quality_effective<=100?agentStats.jpeg_quality_effective:null;
-  stats.screen=agentScreen;
+  stats.screen=sessionPaired && now-agentStatsReceivedAt<5000 ? agentScreen : null;
   if(window.parent!==window) window.parent.postMessage(stats,window.location.origin);
 }
 setInterval(postStats,1000);

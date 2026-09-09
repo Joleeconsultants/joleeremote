@@ -184,7 +184,7 @@ test('single-part print still opens immediately', () => {
 function settingsViewer() {
   const sent=[];
   const window={}; window.parent=window;
-  const context=viewerContext({window, socket:{readyState:0,send:value=>sent.push(JSON.parse(value))},
+  const context=viewerContext({window, agentStats:{},agentStatsReceivedAt:0,performance:{now:()=>100}, socket:{readyState:0,send:value=>sent.push(JSON.parse(value))},
     stopAudioPlayback:()=>{}, stopWebcam:()=>{}, invalidateVideoFrames:()=>{}, MAX_ENVELOPE_BYTES:1048576, encodeInput:JSON.stringify});
   const statusSource=html.slice(html.indexOf('let sessionPaired='),html.indexOf('function encodeInput('));
   const sendSource=html.slice(html.indexOf('function sendInput('),html.indexOf('function requestFullscreen('));
@@ -537,6 +537,32 @@ test('webcam capture requires confirmed support and a late permission grant cann
   c.agentStats.webcam_supported=true;const pending=c.setWebcamEnabled(true);await c.setWebcamEnabled(true);assert.equal(calls,1);
   c.stopWebcam();resolveCamera({getTracks:()=>[{stop:()=>stopped++}]});await pending;
   assert.equal(stopped,1);assert.equal(c.webcamStream,null);assert.equal(c.webcamStarting,false);assert.ok(status.every(x=>x[1]===false));
+});
+
+test('DPI does not replay across capability loss or reconnect while other settings survive',()=>{
+  const {context:c,sent}=settingsViewer();
+  c.socket.readyState=1;c.setStatus('paired');
+  c.agentStats={dpi_scaling_supported:true};
+  c.sendInput({t:'settings',settings:{scaling_dpi:144,framerate:8}});
+  assert.equal(sent.at(-1).settings.scaling_dpi,144);
+  c.agentStats={dpi_scaling_supported:false};
+  c.sendInput({t:'settings',settings:{scaling_dpi:192,jpeg_quality:50}});
+  assert.equal(Object.hasOwn(sent.at(-1).settings,'scaling_dpi'),false);
+  c.setStatus('waiting');c.setStatus('paired');
+  assert.deepEqual(sent.at(-1).settings,{video_protocol:1,max_edge:3840,framerate:8,jpeg_quality:50});
+  c.agentStats={dpi_scaling_supported:true};
+  c.sendInput({t:'settings',settings:{scaling_dpi:120}});
+  c.setStatus('waiting');c.setStatus('paired');
+  assert.equal(Object.hasOwn(sent.at(-1).settings,'scaling_dpi'),false);
+});
+
+test('DPI rejects expired capability without dropping coalesced settings',()=>{
+  const {context:c,sent}=settingsViewer();
+  c.socket.readyState=1;c.setStatus('paired');
+  c.agentStats={dpi_scaling_supported:true};c.performance.now=()=>5000;
+  c.sendInput({t:'settings',settings:{scaling_dpi:144,framerate:8}});
+  assert.equal(Object.hasOwn(sent.at(-1).settings,'scaling_dpi'),false);
+  assert.equal(sent.at(-1).settings.framerate,8);
 });
 
 test('webcam normalizes portrait frames, bounds encoding, and retires on expired support',async()=>{

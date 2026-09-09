@@ -931,6 +931,15 @@ function sendInput(payload){
   if(payload.t==="settings"&&payload.settings&&typeof payload.settings==="object"){
     if(payload.settings.enable_binary_clipboard===false)clipboardPaste.invalidate('cancelled');
     payload={...payload,settings:{...payload.settings,video_protocol:1}};
+    // A cached DPI choice belongs to the helper that confirmed support.
+    // Recheck at the final send boundary, including reconnect replay.
+    if(Object.hasOwn(payload.settings,'scaling_dpi')||Object.hasOwn(latestSettings,'scaling_dpi')){
+      const age=performance.now()-agentStatsReceivedAt;
+      if(!sessionPaired||agentStats.dpi_scaling_supported!==true||age<0||age>=5000){
+        delete payload.settings.scaling_dpi;
+        delete latestSettings.scaling_dpi;
+      }
+    }
     const merged=Object.assign({},latestSettings,payload.settings);
     if(encodeInput({t:"settings",settings:merged}).length>MAX_ENVELOPE_BYTES)return;
     latestSettings=merged;

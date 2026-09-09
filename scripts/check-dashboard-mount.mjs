@@ -73,8 +73,8 @@ try {
   await page.getByText('Screen Settings', { exact: true }).click();
   await page.locator('#uiScalingSelect').waitFor({ state: 'visible' });
   assert(await page.locator('#uiScalingSelect').isDisabled(), 'unknown DPI capability stays disabled');
-  assert.equal(await page.locator('#useBrowserCursorsToggle').getAttribute('aria-pressed'),'true','desktop starts with native cursors');
-  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===true);
+  assert.equal(await page.locator('#useBrowserCursorsToggle').getAttribute('aria-pressed'),'false','desktop starts with drawn cursors');
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===false);
   await page.getByRole('button', { name: 'Reset to Window', exact: true }).click();
   await page.waitForTimeout(600);
   assert.deepEqual(errors, [], 'screen reset must not throw');
@@ -124,9 +124,9 @@ try {
   // Explicit choices survive reload; touch clients get a drawn default until
   // they choose otherwise. Only a preference is replayed into the core.
   await page.locator('#useBrowserCursorsToggle').click();
-  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===false);
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===true);
   await page.reload();
-  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===false);
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===true);
   const mobileContext=await browser.newContext({hasTouch:true,isMobile:true,viewport:{width:390,height:844}});
   try {
     await mobileContext.route('**/*',route=>route.request().url().startsWith(`${origin}/`)?route.continue():route.abort());

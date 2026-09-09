@@ -200,6 +200,7 @@ function setStatus(state,expiresAt=null){
   if(!sessionPaired){
     for(const job of printJobChunks.values())clearTimeout(job.timer);
     printJobChunks.clear();
+    delete canvas.dataset.printFolder;
     delete canvas.dataset.clipboardReceipt;
     clipboardPaste.reset();
     setMicrophoneForwarding(false);
@@ -659,7 +660,7 @@ async function setMicrophoneEnabled(enabled){
       console.warn("[jolee] microphone recorder error", err&&err.name, err&&err.message);
       stopMicrophone((err&&err.name)||"MediaRecorderError");
     });
-    // Unexpected stop (stream ended) â€” do not use an unconditional stopâ†’false
+    // Unexpected stop (stream ended) — do not use an unconditional stopâ†’false
     // listener that can race a fresh start after stopMicrophone().
     recorder.addEventListener("stop",()=>{
       if(gen!==microphoneGen) return;
@@ -976,7 +977,7 @@ function requestFullscreen(){
 }
 function showVirtualKeyboard(){
   // Parent shell owns #keyboard-input-assist + OSK (Selkies). Do not steal
-  // focus to canvas/vk â€” that was the mobile keyboard regression.
+  // focus to canvas/vk — that was the mobile keyboard regression.
 }
 function clipboardUpdateFromUI(text){
   const {id}=beginClipboardRequest('text');
@@ -1139,6 +1140,13 @@ function audioCaptureReading(value,receiptAge){
   const currentAge=Math.min(60000,age+Math.floor(receiptAge));
   return {state:currentAge<=1500?'streaming':'waiting',sample_rate_hz:rate,channels,sample_format:format,last_chunk_age_ms:currentAge,reason:null};
 }
+function printForwardingReading(value,fresh){
+  if(!fresh||!value||value.supported!==true||value.mode!=='pdf_folder'||
+    typeof value.state!=='string'||value.state.length>64||
+    typeof value.folder!=='string'||!value.folder||value.folder.length>4096||/[\x00-\x1f]/.test(value.folder)||
+    value.max_bytes!==16777216)return null;
+  return {supported:true,state:value.state,folder:value.folder,mode:'pdf_folder',max_bytes:16777216};
+}
 function acceptAgentStats(stats){
   uploadControl.capability(stats.file_upload_result_supported);
   if(stats.webcam_supported===false&&(webcamStream||webcamStarting))stopWebcam('Webcam forwarding is not supported by this PC.');
@@ -1178,6 +1186,9 @@ function postStats(){
   stats.active_encoder=observedEncoder||(['jpeg','h264enc'].includes(agentStats.active_encoder)?agentStats.active_encoder:null);
   stats.supported_encoders=Array.isArray(agentStats.supported_encoders)?agentStats.supported_encoders.filter(value=>['jpeg','h264enc'].includes(value)):null;
   const micFresh=sessionPaired&&performance.now()-agentStatsReceivedAt<5000;
+  stats.print_forwarding=printForwardingReading(agentStats.print_forwarding,micFresh);
+  if(stats.print_forwarding)canvas.dataset.printFolder=stats.print_forwarding.folder;
+  else delete canvas.dataset.printFolder;
   stats.microphone_supported=micFresh&&typeof agentStats.microphone_supported==='boolean'?agentStats.microphone_supported:null;
   stats.microphone_formats=micFresh&&Array.isArray(agentStats.microphone_formats)?agentStats.microphone_formats.filter(x=>typeof x==='string').slice(0,8):[];
   stats.webcam_supported=micFresh&&typeof agentStats.webcam_supported==='boolean'?agentStats.webcam_supported:null;

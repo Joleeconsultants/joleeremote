@@ -78,6 +78,29 @@ test('a decoder that accepts input without output is bounded and eventually requ
   let closed=0;healthy.instances[0].callbacks.output({close:()=>closed++});
   assert.equal(healthy.consumer.inFlight,0);assert.equal(healthy.timers.size,0);assert.equal(closed,1);
 });
+
+test('H264 startup without any access units requests JPEG once and a new generation can recover',async()=>{
+  const h=harness();h.consumer.configure(config());await settle();
+  assert.equal(h.decoded.length,0);
+  assert.equal(h.timers.size,1,'decoder support alone must not end the startup deadline');
+  const expired=[...h.timers.values()][0];expired();expired();
+  assert.equal(h.fallback.length,1);
+  h.consumer.configure(config('recovered'));await settle();h.consumer.push(key);
+  assert.equal(h.timers.size,1,'first input replaces the startup timer');
+  h.instances.at(-1).callbacks.output({close(){}});
+  assert.equal(h.painted.length,1);assert.equal(h.timers.size,0);
+  expired();assert.equal(h.fallback.length,1);
+});
+
+test('reset or JPEG transition cancels the no-frame startup deadline',async()=>{
+  for(const action of ['reset','jpeg']){
+    const h=harness();h.consumer.configure(config());await settle();
+    assert.equal(h.timers.size,1);
+    const expired=[...h.timers.values()][0];
+    if(action==='reset')h.consumer.reset();else h.consumer.configure({generation:'image',encoder:'jpeg'});
+    assert.equal(h.timers.size,0);expired();assert.equal(h.fallback.length,0);
+  }
+});
 test('a slow first output does not falsely fall back and queued references drain in order',async()=>{
   const h=harness();h.consumer.configure(config());await settle();h.consumer.push(key);
   for(let i=0;i<11;i++){h.advance(33);h.consumer.push(delta);}

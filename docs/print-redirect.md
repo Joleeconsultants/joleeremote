@@ -75,7 +75,9 @@ Keep `public/viewer.html` in sync with `src/json-frame.ts` (`PrintFrame` / `prin
 { "t": "print", "job": "<id>", "part": 0, "parts": 3, "mime": "application/pdf", "name": "document.pdf", "data": "<base64 of byte slice>" }
 ```
 
-Viewer decodes each slice to bytes, concatenates in order, then opens print preview. Incomplete jobs clear on disconnect.
+Viewer decodes each slice to bytes, concatenates in order, then opens print preview. The receiver admits at most 86 parts, 16 MiB per assembled job and four incomplete jobs. Incomplete jobs expire after 120 seconds and clear when pairing is lost. Conflicting duplicate chunks or metadata discard the job; only completed documents emit the parent print notification.
+
+The Windows 0.5.104 producer's `pdf_folder` mode is an intermediate transport implementation: Microsoft Print to PDF must save into the current session's designated random folder. It is not automatic virtual-printer redirection. The producer's 192 KiB raw chunks fit the 1 MiB envelope after base64 and bounded metadata. Folder discovery and an actual browser print-dialog check are required before accepting that workflow.
 
 ### Viewer behavior
 

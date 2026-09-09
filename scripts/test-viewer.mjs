@@ -8,6 +8,7 @@ import { SasControl } from '../public/sas-control.js';
 import { ClipboardPasteGate } from '../public/clipboard-paste.js';
 import { UploadControl } from '../public/upload-control.js';
 function viewerContext(globals) {
+  globals={printJobChunks:new Map(),...globals};
   return vm.createContext({ canvas:{dataset:{}},setMicrophoneForwarding:()=>{},resetRemoteCursor:()=>{},pointerInput:{reset(){}},clearTimeout:()=>{},session:'fixture-session', SasControl, structuredClone, sasControl:{consume:()=>false,request:()=>{},publish:()=>{}}, ClipboardPasteGate, clipboardPaste: new ClipboardPasteGate({ send() {}, report() {}, supported: () => false, connection: () => null }), ...globals,
     UploadControl,uploadControl:{bind(){},capability(){},consume(){return false;}},crypto:{subtle:webcrypto.subtle,...globals.crypto} });
 }
@@ -136,10 +137,12 @@ assert.ok(source.startsWith('function handlePrintFrame(pf){'));
 
 function viewer() {
   const previews = [];
+  const timers=new Map();let nextTimer=0;
   const window = {};
   window.parent = window;
   const context = viewerContext({
-    window, Uint8Array, printJobChunks: new Map(),
+    window, Uint8Array, printJobChunks: new Map(),sessionPaired:true,
+    setTimeout:callback=>{timers.set(++nextTimer,callback);return nextTimer;},clearTimeout:id=>timers.delete(id),
     base64ToBytes: data => new Uint8Array(Buffer.from(data, 'base64')),
     openPrintPreview: file => previews.push(file),
   });
@@ -148,8 +151,29 @@ function viewer() {
     job, part, parts, name: 'test.pdf', mime: 'application/pdf',
     data: Buffer.from(data).toString('base64'),
   });
-  return { send, previews };
+  return { send, previews,context,timers };
 }
+
+test('print assembly bounds parts, concurrent jobs, duplicates and lifetime',()=>{
+  const {send,previews,context,timers}=viewer();
+  send(0,'x','huge',87);assert.equal(context.printJobChunks.size,0);
+  for(let i=0;i<5;i++)send(0,'x','job-'+i,2);
+  assert.equal(context.printJobChunks.size,4);
+  send(0,'changed','job-0',2);assert.equal(context.printJobChunks.has('job-0'),false);
+  assert.equal(timers.size,3);
+  for(const callback of timers.values())callback();
+  assert.equal(context.printJobChunks.size,0);assert.equal(previews.length,0);
+  context.sessionPaired=false;send(0,'single','closed',1);assert.equal(previews.length,0);
+});
+
+test('print assembly rejects aggregate overflow and inconsistent metadata',()=>{
+  const {send,context,previews}=viewer();
+  send(0,'a','limit',2);context.printJobChunks.get('limit').total=16777216;
+  send(1,'b','limit',2);assert.equal(context.printJobChunks.size,0);
+  send(0,'a','metadata',2);
+  context.handlePrintFrame({job:'metadata',part:1,parts:2,name:'other.pdf',mime:'application/pdf',data:'Yg=='});
+  assert.equal(context.printJobChunks.size,0);assert.equal(previews.length,0);
+});
 
 test('multipart print waits for every chunk, then assembles in order', () => {
   const { send, previews } = viewer();

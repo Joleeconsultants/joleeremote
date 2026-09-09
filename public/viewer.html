@@ -198,6 +198,8 @@ function setStatus(state,expiresAt=null){
   uploadControl.bind(sessionPaired?socket:null,expiresAt);
   sasControl.bind(sessionPaired?socket:null,session,expiresAt===null?null:Number.isSafeInteger(expiresAt)?expiresAt:0);
   if(!sessionPaired){
+    for(const job of printJobChunks.values())clearTimeout(job.timer);
+    printJobChunks.clear();
     delete canvas.dataset.clipboardReceipt;
     clipboardPaste.reset();
     setMicrophoneForwarding(false);
@@ -657,7 +659,7 @@ async function setMicrophoneEnabled(enabled){
       console.warn("[jolee] microphone recorder error", err&&err.name, err&&err.message);
       stopMicrophone((err&&err.name)||"MediaRecorderError");
     });
-    // Unexpected stop (stream ended) — do not use an unconditional stop→false
+    // Unexpected stop (stream ended) â€” do not use an unconditional stopâ†’false
     // listener that can race a fresh start after stopMicrophone().
     recorder.addEventListener("stop",()=>{
       if(gen!==microphoneGen) return;
@@ -799,31 +801,46 @@ function openPrintPreview(file){
   }
 }
 function handlePrintFrame(pf){
-  if(window.parent!==window){
-    window.parent.postMessage({type:"printJob",name:pf.name,mime:pf.mime},window.location.origin);
-  }
+  if(!sessionPaired||!Number.isInteger(pf.parts)||pf.parts<1||pf.parts>86||
+    !Number.isInteger(pf.part)||pf.part<0||pf.part>=pf.parts||
+    typeof pf.job!=="string"||pf.job.length>128||typeof pf.name!=="string"||pf.name.length>255||
+    typeof pf.mime!=="string"||pf.mime.length>128||typeof pf.data!=="string"||pf.data.length>1048576)return;
+  const discard=()=>{const job=printJobChunks.get(pf.job);if(job)clearTimeout(job.timer);printJobChunks.delete(pf.job);};
   let bytes;
   try{bytes=base64ToBytes(pf.data);}catch(e){return;}
+  const preview=(file)=>{
+    if(window.parent!==window)window.parent.postMessage({type:"printJob",name:file.name,mime:file.mime},window.location.origin);
+    openPrintPreview(file);
+  };
   if(pf.parts<=1){
-    openPrintPreview({name:pf.name,mime:pf.mime,bytes});
+    discard();
+    preview({name:pf.name,mime:pf.mime,bytes});
     return;
   }
   let job=printJobChunks.get(pf.job);
-  if(!job||job.parts!==pf.parts){
+  if(job&&(job.parts!==pf.parts||job.name!==pf.name||job.mime!==pf.mime)){discard();return;}
+  if(!job){
+    if(printJobChunks.size>=4)return;
     // Fill every slot: Array.every skips holes and would accept an incomplete job.
-    job={name:pf.name,mime:pf.mime,parts:pf.parts,chunks:new Array(pf.parts).fill(null)};
+    job={name:pf.name,mime:pf.mime,parts:pf.parts,total:0,chunks:new Array(pf.parts).fill(null)};
+    job.timer=setTimeout(()=>{if(printJobChunks.get(pf.job)===job)printJobChunks.delete(pf.job);},120000);
     printJobChunks.set(pf.job,job);
   }
-  job.name=pf.name;
-  job.mime=pf.mime;
+  if(job.chunks[pf.part]!==null){
+    const prior=job.chunks[pf.part];
+    if(prior.length!==bytes.length||prior.some((value,index)=>value!==bytes[index]))discard();
+    return;
+  }
+  if(job.total+bytes.length>16777216){discard();return;}
+  job.total+=bytes.length;
   job.chunks[pf.part]=bytes;
   if(!job.chunks.every((chunk)=>chunk instanceof Uint8Array)) return;
-  printJobChunks.delete(pf.job);
+  discard();
   const total=job.chunks.reduce((n,chunk)=>n+chunk.length,0);
   const merged=new Uint8Array(total);
   let offset=0;
   for(const chunk of job.chunks){merged.set(chunk,offset);offset+=chunk.length;}
-  openPrintPreview({name:job.name,mime:job.mime,bytes:merged});
+  preview({name:job.name,mime:job.mime,bytes:merged});
 }
 function setVideoEnabled(enabled){
   videoEnabled=!!enabled;
@@ -843,7 +860,7 @@ function setAudioEnabled(enabled){
 }
 function playAudioChunk(payload){remoteAudio.push(payload);}
 function unlockAudioFromGesture(){remoteAudio.unlock();}
-function disconnect(){const previous=socket;socket=null;if(previous)previous.close();stopAudioPlayback();stopMicrophone();stopWebcam();printJobChunks.clear();setStatus("disconnected");}
+function disconnect(){const previous=socket;socket=null;if(previous)previous.close();stopAudioPlayback();stopMicrophone();stopWebcam();setStatus("disconnected");}
 function connect(opts){
   if(opts&&typeof opts==="object"){
     if(typeof opts.session==="string") session=opts.session;
@@ -959,7 +976,7 @@ function requestFullscreen(){
 }
 function showVirtualKeyboard(){
   // Parent shell owns #keyboard-input-assist + OSK (Selkies). Do not steal
-  // focus to canvas/vk — that was the mobile keyboard regression.
+  // focus to canvas/vk â€” that was the mobile keyboard regression.
 }
 function clipboardUpdateFromUI(text){
   const {id}=beginClipboardRequest('text');

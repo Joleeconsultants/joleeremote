@@ -148,8 +148,19 @@ try {
   assert.equal(await page.locator('#hidpiToggle').getAttribute('aria-pressed'),hidpiBefore==='true'?'false':'true');
   // Touch users need an actual notice: a hover-only disabled title cannot help.
   await page.setViewportSize({width:390,height:844});
-  await page.getByTitle('Microphone forwarding requires a connected PC with confirmed support.',{exact:true}).first().click();
-  assert.match(await page.locator('.notification-item').filter({hasText:'Microphone'}).last().innerText(),/cannot send it to Windows yet/);
+  assert(await page.getByRole('button',{name:'Microphone forwarding requires a connected PC with confirmed support.',exact:true}).isDisabled());
+  await page.getByText('Audio Settings',{exact:true}).click();
+  const reportBitrate=()=>page.frameLocator('#jolee-core').locator('body').evaluate(()=>parent.postMessage({type:'statsUpdate',audio_bitrate_supported:true,audio_bitrate_choices:[96000,128000,160000,192000],audio_bitrate_effective:96000},location.origin));
+  await reportBitrate();
+  await page.waitForFunction(()=>!document.querySelector('#audioBitrateSlider').disabled);
+  await page.locator('#audioBitrateSlider').press('End');
+  assert.equal(await page.locator('#audioBitrateSlider').inputValue(),'3','drag/keyboard selection updates immediately');
+  await reportBitrate();
+  await page.waitForTimeout(100);
+  assert.equal(await page.locator('#audioBitrateSlider').inputValue(),'3','old effective reports cannot snap pending selection back');
+  await page.waitForTimeout(6100);
+  await reportBitrate();
+  await page.waitForFunction(()=>document.querySelector('#audioBitrateSlider').value==='0');
   await page.getByTitle('The PC has not confirmed webcam forwarding support.',{exact:true}).click();
   assert.match(await page.locator('.notification-item').filter({hasText:'Camera'}).last().innerText(),/cannot send it to Windows yet/);
   await page.frameLocator('#jolee-core').locator('#camera').click();

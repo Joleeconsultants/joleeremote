@@ -1,3 +1,12 @@
+/** Display-only label follows this session's restart; it never changes target IDs. */
+export function preserveRestartName(url, sessionId, cachedTitle) {
+  try {
+    const cached = JSON.parse(cachedTitle || 'null');
+    if (cached?.session === sessionId && typeof cached.name === 'string' && cached.name.trim())
+      url.searchParams.set('machineName', cached.name.trim().slice(0, 128));
+  } catch {}
+  return url;
+}
 /** Browser projection of server-confirmed lifetime. No activity-based renewal. */
 export class SessionRenewal {
   constructor({request,render,now=Date.now,schedule=(fn,ms)=>setTimeout(fn,ms),unschedule=id=>clearTimeout(id),

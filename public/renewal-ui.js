@@ -1,4 +1,4 @@
-import {SessionRenewal} from './session-renewal.js';
+import {SessionRenewal,preserveRestartName} from './session-renewal.js';
 /** Optional private integration: unsupported hosts and older PCs retain their existing lifetime. */
 export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.body}){
  const box=document.createElement('div');box.hidden=true;box.setAttribute('role','status');
@@ -47,6 +47,7 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
    if(supported&&typeof value.restartPath==='string'){
     const url=new URL(value.restartPath,location.origin);
     if(url.origin===location.origin&&url.pathname==='/'&&url.searchParams.has('clientId')&&url.searchParams.has('agentId')){
+     try{preserveRestartName(url,sessionId,sessionStorage.getItem('jolee_tab_device'));}catch{}
      restartPath=url.pathname+url.search;
      try{sessionStorage.setItem('jolee-restart:'+sessionId,restartPath);}catch{}
     }

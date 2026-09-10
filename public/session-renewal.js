@@ -1,6 +1,6 @@
 /** Browser projection of server-confirmed lifetime. No activity-based renewal. */
 export class SessionRenewal {
-  constructor({request,render,now=Date.now,schedule=(fn,ms)=>setTimeout(fn,ms),unschedule=clearTimeout,
+  constructor({request,render,now=Date.now,schedule=(fn,ms)=>setTimeout(fn,ms),unschedule=id=>clearTimeout(id),
     makeId=()=>crypto.randomUUID()}) {
     Object.assign(this,{request,render,now,schedule,unschedule,makeId});this.epoch=0;this.reset();
   }
@@ -41,3 +41,4 @@ export class SessionRenewal {
     }
   }
 }
+

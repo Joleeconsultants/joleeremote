@@ -38,6 +38,7 @@ import { ClipboardPasteGate } from './clipboard-paste.js?v=jo-ui-41';
 import { SasControl } from './sas-control.js?v=jo-ui-47';
 import { UploadControl } from './upload-control.js?v=jo-ui-49';
 import { SessionState } from './session-state.js';
+import { mountRenewalUi } from './renewal-ui.js';
 import { readDisplayCatalog } from './display-catalog.js';
 import { DisplayTransition } from './display-transition.js';
 import { NegotiatedAudioDecoder } from './audio-decoder.js';
@@ -74,6 +75,7 @@ const sessionState=new SessionState(({text,visible,state})=>{
   const notice=document.getElementById('connection-status');
   notice.textContent=text;notice.hidden=!visible;notice.dataset.state=state;
 });
+const renewalUi=mountRenewalUi({sessionId:session,browserToken:token,onExpired:()=>queueMicrotask(()=>setStatus('expired'))});
 let cursorHx=DEFAULT_CURSOR_HX, cursorHy=DEFAULT_CURSOR_HY, cursorPosition=null;
 cursorEl.src=DEFAULT_CURSOR_SVG;
 function applyScale(){
@@ -252,6 +254,7 @@ function consumeLatencyReply(payload){
 }
 function setStatus(state,expiresAt=null){
   sessionState.set(state);
+  if(typeof renewalUi!=='undefined')renewalUi.bind(state,expiresAt);
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
   uploadControl.bind(sessionPaired?socket:null,expiresAt);

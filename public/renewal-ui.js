@@ -4,7 +4,7 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
  const connectionBox=document.getElementById('connection-status');
  const box=connectionBox||document.createElement('div');if(!connectionBox)box.hidden=true;box.setAttribute('role','status');
  if(!connectionBox)box.style.cssText='position:absolute;top:16px;left:50%;transform:translateX(-50%);max-width:calc(100% - 48px);padding:12px 16px;border:1px solid #75839a;border-radius:8px;background:#222833;color:#e6ebf3;font:16px system-ui;z-index:5;text-align:center';
- const text=document.createElement('span'),button=document.createElement('button');button.type='button';button.hidden=true;button.style.marginLeft='12px';text.dataset.renewalText='';box.append(text,button);if(!connectionBox)root.append(box);
+ const text=document.createElement('span'),button=document.createElement('button');button.type='button';button.className='session-action';button.hidden=true;text.dataset.renewalText='';box.append(text,button);if(!connectionBox)root.append(box);
  box.style.pointerEvents='auto';
  let supported=false,checked=false,checking=false,restartPath=null,lastState='',expiredNotified=false,inspectAttempts=0,retryTimer,identityGeneration=0;
  async function call(payload){
@@ -26,7 +26,9 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
   box.dataset.renewalActive=String(active);
   if(!active){text.textContent='';button.hidden=true;const label=box.querySelector('[data-connection-text]');if(label)label.hidden=false;box.hidden=connectionBox?box.dataset.connectionVisible!=='true':true;return;}
   box.hidden=false;
-  const connectionText=box.querySelector('[data-connection-text]');if(connectionText)connectionText.hidden=true;
+  const connectionPriority=!ended&&box.dataset.connectionVisible==='true';
+  const connectionText=box.querySelector('[data-connection-text]');if(connectionText)connectionText.hidden=!connectionPriority;
+  text.hidden=connectionPriority;
   text.textContent=ended?(lastState==='expired'||state.expired?'Session expired. The last screen is not live.':'Session ended. The last screen is not live.'):state.pending?'Confirming session extension…':state.error||'Session expires in '+Math.max(1,Math.ceil((state.expiresAt-Date.now())/60000))+' minutes.';
   button.textContent=ended?'Restart session':'Keep session active';button.hidden=ended?!restartPath:false;
   button.disabled=ended?false:!state.canRenew;

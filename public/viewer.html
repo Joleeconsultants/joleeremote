@@ -211,6 +211,7 @@ function requestCatalogDisplay(message){
     if(display.id!==catalog.selected_display_id||!display.can_resize){finishScreenRequest('rejected','unsupported_mode');return;}
     if(message.type==='setBestFit'){
       if(!display.modes.some(mode=>mode.selectable)){finishScreenRequest('rejected','unsupported_mode');return;}
+      if(typeof message.use_css_scaling==='boolean')screenUseCssScaling=message.use_css_scaling;
       const dpr=screenUseCssScaling?1:(devicePixelRatio||1);
       payload={t:'resize',...base,mode:'best_fit',w:Math.max(1,Math.min(32768,Math.round(innerWidth*dpr))),h:Math.max(1,Math.min(32768,Math.round(innerHeight*dpr)))};
     }else{

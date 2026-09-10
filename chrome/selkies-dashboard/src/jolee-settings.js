@@ -56,7 +56,8 @@ export const JOLEE_SERVER_SETTINGS = {
   webcam_enabled: flag(true),
   gamepad_enabled: { value: false, locked: true },
   use_css_scaling: { value: true },
-  force_aligned_resolution: { value: false },
+  // Windows catalog modes must retain their exact advertised dimensions.
+  force_aligned_resolution: { value: false, locked: true },
   scaling_dpi: {
     value: "96",
     allowed: ["96", "120", "144", "168", "192", "216", "240", "264", "288"],

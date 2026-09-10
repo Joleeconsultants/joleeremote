@@ -34,6 +34,7 @@ parse_upstream() {
   local line
   line="$(grep -E "^${key}=" "$UPSTREAM_FILE" | head -n 1 || true)"
   [ -n "$line" ] || die "UPSTREAM missing ${key}="
+  line="${line%$'\r'}"
   printf '%s\n' "${line#${key}=}"
 }
 
@@ -79,6 +80,7 @@ is_overlay() {
   local rel="${1#./}"
   local pat
   while IFS= read -r pat || [ -n "$pat" ]; do
+    pat="${pat%$'\r'}"
     case "$pat" in
       ""|\#*) continue ;;
     esac
@@ -159,6 +161,7 @@ done < "$ALL_DEST"
 PATCHES=()
 if [ -f "$PATCH_DIR/series" ]; then
   while IFS= read -r name || [ -n "$name" ]; do
+    name="${name%$'\r'}"
     case "$name" in
       ""|\#*) continue ;;
     esac

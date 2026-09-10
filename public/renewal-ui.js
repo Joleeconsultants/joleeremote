@@ -23,7 +23,7 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
  },render:state=>{
   const ended=state.expired||['ended','expired','unavailable'].includes(lastState);
   box.hidden=!supported||(!state.warning&&!ended&&!state.error&&!state.pending);
-  text.textContent=ended?'Session ended.':state.pending?'Confirming session extension…':state.error||'Session expires in '+Math.max(1,Math.ceil((state.expiresAt-Date.now())/60000))+' minutes.';
+  text.textContent=ended?'Session ended.':state.pending?'Confirming session extension...':state.error||'Session expires in '+Math.max(1,Math.ceil((state.expiresAt-Date.now())/60000))+' minutes.';
   button.textContent=ended?'Start New Session':'Keep Session Active';button.hidden=ended&&!restartPath;
   button.disabled=ended?false:!state.canRenew;
   button.onclick=()=>{if(ended&&restartPath)window.top.location.assign(restartPath);else void model.renew();};

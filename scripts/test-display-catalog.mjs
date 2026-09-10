@@ -42,6 +42,11 @@ test('actual viewer sends exact catalog modes, rejects stale catalog and does no
   assert.equal(results.at(-1)[1],'catalog_changed');assert.equal(sent.length,2);
   c.requestCatalogDisplay({type:'setDisplayMode',display_id:id(1),catalog_revision:id(9),mode_id:id(5)});
   assert.equal(results.at(-1)[1],'unsupported_mode');assert.equal(sent.length,2);
+  c.requestCatalogDisplay({type:'setBestFit',display_id:id(1),catalog_revision:id(9),use_css_scaling:false});
+  assert.equal(sent[2].w,2730);assert.equal(sent[2].h,1534);
+  c.pendingScreenRequest=null;
+  c.requestCatalogDisplay({type:'setBestFit',display_id:id(1),catalog_revision:id(9),use_css_scaling:true});
+  assert.equal(sent[3].w,1365);assert.equal(sent[3].h,767);
 });
 test('display input guard requires matched acknowledgement then fresh paint; timeout never unlocks input',()=>{
   const guard=new DisplayTransition();

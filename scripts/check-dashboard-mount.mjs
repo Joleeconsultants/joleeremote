@@ -97,6 +97,9 @@ try {
   await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===false);
   assert(await page.getByRole('button', { name: 'Set to Best Fit', exact: true }).isDisabled());
   assert(await page.locator('#resolutionPresetSelect').isDisabled());
+  assert(await page.locator('#hidpiToggle').isDisabled());
+  assert(await page.locator('#forceAlignedResolutionToggle').isDisabled());
+  assert.equal(await page.locator('#forceAlignedResolutionToggle').getAttribute('aria-pressed'),'false');
   assert.equal(await page.locator('#manualWidthInput').inputValue(), '');
   assert.equal(await page.locator('#manualHeightInput').inputValue(), '');
   await page.frameLocator('#jolee-core').locator('#legacy').click();
@@ -136,6 +139,13 @@ try {
   await page.locator('#remoteDisplaySelect').selectOption('1'.padStart(32,'0'));
   await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.displayRequests.length===2);
   assert.equal(await page.frameLocator('#jolee-core').locator('body').evaluate(()=>window.displayRequests[1].type),'selectRemoteDisplay');
+  const hidpiBefore=await page.locator('#hidpiToggle').getAttribute('aria-pressed');
+  await page.locator('#hidpiToggle').click();
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.displayRequests.length===3);
+  const hidpiRequest=await page.frameLocator('#jolee-core').locator('body').evaluate(()=>window.displayRequests[2]);
+  assert.equal(hidpiRequest.type,'setBestFit');
+  assert.equal(hidpiRequest.use_css_scaling,hidpiBefore==='true');
+  assert.equal(await page.locator('#hidpiToggle').getAttribute('aria-pressed'),hidpiBefore==='true'?'false':'true');
   // Touch users need an actual notice: a hover-only disabled title cannot help.
   await page.setViewportSize({width:390,height:844});
   await page.getByTitle('Microphone forwarding requires a connected PC with confirmed support.',{exact:true}).first().click();

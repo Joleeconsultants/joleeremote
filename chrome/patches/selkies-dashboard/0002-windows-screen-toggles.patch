@@ -1,0 +1,56 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index 9d3394a..4962d0f 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -1043,7 +1043,7 @@ function Sidebar() {
+ 
+     // HiDPI on is use_css_scaling off.
+     newRenderable.hidpi = isRenderable('use_css_scaling');
+-    newRenderable.forceAlignedResolution = isRenderable('force_aligned_resolution');
++    newRenderable.forceAlignedResolution = true; // Keep the Windows-unsupported control visible but disabled.
+ 
+     newRenderable.enableSharing = s.enable_sharing?.value ?? true;
+     newRenderable.enableShared = s.enable_shared?.value ?? true;
+@@ -2295,7 +2295,9 @@ function Sidebar() {
+   };
+   /** HiDPI toggle: an explicit choice, pinned; the core persists `useCssScaling` when it applies the message. */
+   const handleHidpiToggle = () => {
++    if (!canChangeResolution || serverSettings?.use_css_scaling?.locked) return;
+     writeConditional(HIDPI_SPEC, !hidpiEnabled, setHidpiEnabled, { persist: true });
++    sendDisplayRequest('setBestFit', { use_css_scaling: hidpiEnabled });
+   };
+   /**
+    * Manual and preset resolutions pair with CSS scaling: HiDPI off when one
+@@ -2375,7 +2377,7 @@ function Sidebar() {
+     if(canChangeResolution && choice?.mode.selectable) sendDisplayRequest('setDisplayMode', {mode_id:choice.mode.id});
+   };
+   const handleResetResolution = () => {
+-    if(canChangeResolution) sendDisplayRequest('setBestFit');
++    if(canChangeResolution) sendDisplayRequest('setBestFit', { use_css_scaling: !hidpiEnabled });
+   };
+   const handleVideoToggle = () => {
+     const enabled = !isVideoActive;
+@@ -3908,9 +3910,9 @@ function Sidebar() {
+                           className={`toggle-button-sidebar ${hidpiEnabled ? "active" : ""}`}
+                           onClick={handleHidpiToggle}
+                           aria-pressed={hidpiEnabled}
+-                          disabled={serverSettings?.enable_resize?.value === false}
+-                          title={serverSettings?.enable_resize?.value === false
+-                            ? t("sections.screen.hidpiDisabledNoResizeTitle", "Resolution changes are disabled by the server (enable_resize)")
++                          disabled={!canChangeResolution || serverSettings?.use_css_scaling?.locked}
++                          title={!canChangeResolution || serverSettings?.use_css_scaling?.locked
++                            ? "HiDPI requires an available, writable Windows display resolution."
+                             : t(hidpiEnabled ? "sections.screen.hidpiDisableTitle" : "sections.screen.hidpiEnableTitle",
+                                 hidpiEnabled ? "Disable HiDPI (Use CSS Scaling)" : "Enable HiDPI (Pixel Perfect)")}
+                         >
+@@ -3932,7 +3934,9 @@ function Sidebar() {
+                           onClick={handleForceAlignedResolutionToggle}
+                           aria-pressed={forceAlignedResolution}
+                           disabled={!serverSettings || serverSettings.force_aligned_resolution?.locked}
+-                          title={t(forceAlignedResolution ? "sections.screen.forceAlignedResolutionDisableTitle" : "sections.screen.forceAlignedResolutionEnableTitle", forceAlignedResolution ? "Disable Force Aligned Resolution" : "Enable Force Aligned Resolution")}
++                          title={serverSettings?.force_aligned_resolution?.locked
++                            ? "Windows uses its supported display modes without rounding their dimensions."
++                            : t(forceAlignedResolution ? "sections.screen.forceAlignedResolutionDisableTitle" : "sections.screen.forceAlignedResolutionEnableTitle", forceAlignedResolution ? "Disable Force Aligned Resolution" : "Enable Force Aligned Resolution")}
+                         >
+                           <span className="toggle-button-sidebar-knob"></span>
+                         </button>

@@ -302,10 +302,11 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   const sent = [];
   const c = viewerContext({ performance: { now: () => now }, consumeScreenAck: () => {}, remoteAudio:{reading:()=>({level:null,state:"unavailable"})},
     window: { parent: { postMessage: value => sent.push(value) }, location: { origin: 'https://test.invalid' } },
-    sessionPaired: true, frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, agentScreen: null, agentStatsReceivedAt: 0, observedEncoder: null, latencyReading: () => null });
+    microphoneFeatureEnabled: false, sessionPaired: true, frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, agentScreen: null, agentStatsReceivedAt: 0, observedEncoder: null, latencyReading: () => null });
   vm.runInContext(html.slice(html.indexOf('function numberOr('), html.indexOf('setInterval(postStats,1000)')), c);
   c.agentStats={print_forwarding:{supported:true,state:'ready',mode:'pdf_folder',folder:'C:\\Session\\Print',max_bytes:16777216}};
-  c.postStats();assert.equal(c.canvas.dataset.printFolder,'C:\\Session\\Print');
+  c.agentStats.microphone_supported=true;c.agentStats.microphone_formats=['pcm'];
+  c.postStats();assert.equal(sent.at(-1).microphone_supported,false);assert.equal(sent.at(-1).microphone_formats.length,0);assert.equal(c.canvas.dataset.printFolder,'C:\\Session\\Print');
   assert.equal(sent.at(-1).print_forwarding.folder,'C:\\Session\\Print');
   c.sessionPaired=false;c.postStats();assert.equal(c.canvas.dataset.printFolder,undefined);
   c.sessionPaired=true;now=5000;c.postStats();assert.equal(sent.at(-1).print_forwarding,null);

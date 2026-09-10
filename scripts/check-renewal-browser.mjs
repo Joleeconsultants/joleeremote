@@ -43,7 +43,14 @@ try{
  await keep.waitFor({state:'visible'});await keep.click();await page.waitForFunction(()=>document.querySelector('[role=status]').hidden);
  assert.equal(request.sessionId,'new-session');assert.equal(request.browserToken,'new-browser');
  await page.reload();await page.waitForFunction(()=>!!window.ui);
+ await page.clock.install();
  await page.evaluate(()=>{window.sessionState.set('waiting');window.ui.bind('waiting');});
+ assert.equal(await page.getByRole('button',{name:'Restart session'}).isVisible(),false);
+ assert.equal(await page.locator('[data-connection-text]').isVisible(),true);
+ await page.clock.fastForward(14000);
+ await page.evaluate(()=>window.ui.bind('disconnected'));
+ assert.equal(await page.getByRole('button',{name:'Restart session'}).isVisible(),false);
+ await page.clock.fastForward(1000);
  await page.getByRole('button',{name:'Restart session'}).waitFor({state:'visible'});
  assert.match(await page.locator('[data-connection-text]').innerText(),/Waiting for the PC/);
  await page.evaluate(()=>window.ui.bind('expired'));await page.getByRole('button',{name:'Restart session'}).waitFor({state:'visible'});

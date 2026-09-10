@@ -14,9 +14,9 @@ try{
  window.shape=css=>{const image=document.createElement('canvas');image.width=32;image.height=32;const ctx=image.getContext('2d');ctx.fillRect(2,2,8,24);const data=image.toDataURL('image/png').split(',')[1];applyCursorFrame(cursorFromFrame({t:'cursor',visible:true,mime:'image/png',data,hx:2,hy:3,css}));return {cursor:canvas.style.cursor,overlay:cursorEl.style.display,source:cursorEl.src};};
  window.drawn=()=>{useBrowserCursors=false;applyCursorMode();return cursorEl.style.display;};`});
  for(const css of ['text','pointer','ew-resize','ns-resize','wait','default'])assert.equal((await page.evaluate(css=>window.shape(css),css)).cursor,css);
- const custom=await page.evaluate(()=>window.shape());assert.match(custom.cursor,/^url\("data:image\/png;base64,/);assert.match(custom.cursor,/2 3, default$/);assert.equal(custom.overlay,'none');
+ const custom=await page.evaluate(()=>window.shape());assert.equal(custom.cursor,'default');assert.match(custom.source,/^data:image\/png;base64,/);assert.equal(custom.overlay,'none');
  assert.equal(await page.evaluate(()=>window.drawn()),'block');
  const size=await page.evaluate(async()=>{const image=document.querySelector('#cursor');await image.decode();return [image.naturalWidth,image.naturalHeight];});assert.deepEqual(size,[32,32]);
- console.log('Edge stock shapes, bounded custom PNG/hotspot and unchanged drawn dimensions PASS; OS cursor/drag acceptance still requires installed session.');
+ console.log('Edge native stock shapes, local arrow fallback and unchanged drawn dimensions PASS; OS cursor/drag acceptance still requires installed session.');
 }finally{await browser.close();}
 

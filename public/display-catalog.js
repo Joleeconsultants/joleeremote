@@ -29,6 +29,31 @@ export function readDisplayCatalog(value) {
 export function selectedDisplay(catalog) {
   return catalog?.displays.find(display => display.id === catalog.selected_display_id) ?? null;
 }
+
+// DOM diagnostics contain only bounded protocol metadata, never labels or content.
+export function publishScreenDiagnostic(dataset, received, forwarded, paired, receiptAge) {
+  const size = value => dimension(value?.width) && dimension(value?.height)
+    ? {width:value.width,height:value.height} : null;
+  const summarize = screen => {
+    if (!screen || typeof screen !== 'object') return null;
+    const catalog = readDisplayCatalog(screen.catalog);
+    const selected = selectedDisplay(catalog);
+    return {
+      status:['idle','pending','applied','rejected'].includes(screen.status) ? screen.status : 'invalid',
+      mode:['auto','manual','select','best_fit'].includes(screen.mode) ? screen.mode : 'invalid',
+      effective:size(screen.effective), encoded:size(screen.encoded), requested:size(screen.requested),
+      catalog_present:screen.catalog != null, catalog_valid:catalog !== null,
+      revision:catalog?.revision ?? null, selected_display_id:catalog?.selected_display_id ?? null,
+      display_count:catalog?.displays.length ?? 0,
+      selected:selected ? {width:selected.width,height:selected.height,can_resize:selected.can_resize,
+        mode_count:selected.modes.length,current_mode_id:selected.current_mode_id} : null,
+    };
+  };
+  const value = JSON.stringify({paired:paired === true, received:summarize(received), forwarded:summarize(forwarded)});
+  if (dataset.screenDiagnostic !== value) dataset.screenDiagnostic = value;
+  const age = Number.isFinite(receiptAge) && receiptAge >= 0 ? String(Math.min(60000,Math.floor(receiptAge/100)*100)) : 'unknown';
+  if (dataset.screenReceiptAgeMs !== age) dataset.screenReceiptAgeMs = age;
+}
 export function resolutionChoices(display) {
   if (!display) return [];
   const current = display.modes.find(mode => mode.id === display.current_mode_id);

@@ -38,10 +38,10 @@ test('native mode uses local cursor types while drawn mode retains remote shape 
   f.useBrowserCursors=false;f.applyCursorMode();assert.equal(f.cursorEl.style.display,'none');
 });
 
-test('unknown or missing native type uses bounded PNG and never remote CSS',()=>{
+test('unknown or missing native type uses local arrow while preserving drawn PNG',()=>{
   const f=fixture();f.useBrowserCursors=true;
   for(const css of [undefined,'url(https://example.invalid/cursor), auto','inherit',{},'']){
-    f.applyCursorFrame(f.cursorFromFrame({...cursor(),css}));assert.equal(f.canvas.style.cursor,'url("data:image/png;base64,'+cursor().data+'") 2 3, default');
+    f.applyCursorFrame(f.cursorFromFrame({...cursor(),css}));assert.equal(f.canvas.style.cursor,'default');assert.equal(f.cursorEl.src,'data:image/png;base64,'+cursor().data);assert.equal(f.cursorEl.style.display,'none');
   }
   for(const css of ['pointer','wait','progress','crosshair','move','not-allowed','help','ew-resize','ns-resize','nesw-resize','nwse-resize']){
     f.applyCursorFrame(f.cursorFromFrame({...cursor(),css}));assert.equal(f.canvas.style.cursor,css);
@@ -57,9 +57,9 @@ test('drawn cursor remains at the touch location after lift but hides on mouse l
   f.pointerOver=true;f.leaveCursor({pointerType:'mouse'});assert.equal(f.cursorEl.style.display,'none');
 });
 
-test('cursor defaults select drawn on desktop and mobile without overriding saved choices',()=>{
+test('cursor defaults select native desktop and drawn mobile without overriding saved choices',()=>{
   for(const mobileClient of [true,false]){
-    assert.equal(resolveSpec(USE_BROWSER_CURSORS_SPEC,null,{mobileClient},()=>null),false);
+    assert.equal(resolveSpec(USE_BROWSER_CURSORS_SPEC,null,{mobileClient},()=>null),!mobileClient);
     for(const value of [true,false])assert.equal(resolveSpec(USE_BROWSER_CURSORS_SPEC,null,{mobileClient},()=>String(value)),value);
   }
   assert.equal(resolveSpec(USE_BROWSER_CURSORS_SPEC,{use_browser_cursors:{locked:true,value:false}},{mobileClient:false},()=> 'true'),false);

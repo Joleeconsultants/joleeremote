@@ -1,5 +1,5 @@
 const availabilityReasons = new Set(['unsupported', 'unauthorized', 'expired', 'unpaired',
-  'policy_denied', 'policy_unreadable', 'service_required', 'session_unavailable',
+  'policy_denied', 'policy_unreadable', 'rdp_session_unsupported', 'service_required', 'session_unavailable',
   'session_changed', 'audit_unavailable', 'native_unavailable']);
 const rejectCodes = new Set([...availabilityReasons, 'invalid_request', 'stale_generation',
   'id_conflict', 'rate_limited', 'busy', 'ledger_full', 'cancelled', 'preflight_unavailable']);

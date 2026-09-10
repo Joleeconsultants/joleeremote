@@ -8,6 +8,7 @@ import { SasControl } from '../public/sas-control.js';
 import { ClipboardPasteGate } from '../public/clipboard-paste.js';
 import { UploadControl } from '../public/upload-control.js';
 import { DisplayTransition } from '../public/display-transition.js';
+import { publishScreenDiagnostic } from '../public/display-catalog.js';
 import { NegotiatedAudioDecoder } from '../public/audio-decoder.js';
 import { AudioControl } from '../public/audio-control.js';
 function viewerContext(globals) {
@@ -300,7 +301,7 @@ test('core load replays initial and latest settings, never keys or commands', ()
 test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth samples', () => {
   let now = 0;
   const sent = [];
-  const c = viewerContext({ performance: { now: () => now }, consumeScreenAck: () => {}, remoteAudio:{reading:()=>({level:null,state:"unavailable"})},
+  const c = viewerContext({ publishScreenDiagnostic, performance: { now: () => now }, consumeScreenAck: () => {}, remoteAudio:{reading:()=>({level:null,state:"unavailable"})},
     window: { parent: { postMessage: value => sent.push(value) }, location: { origin: 'https://test.invalid' } },
     microphoneFeatureEnabled: false, sessionPaired: true, frameCount: 0, statsStartedAt: 0, bytesSinceStats: 0, hopFps: 0, hopBandwidth: 0, agentStats: {}, agentScreen: null, agentStatsReceivedAt: 0, observedEncoder: null, latencyReading: () => null });
   vm.runInContext(html.slice(html.indexOf('function numberOr('), html.indexOf('setInterval(postStats,1000)')), c);

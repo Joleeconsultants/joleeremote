@@ -1,0 +1,23 @@
+diff --git a/chrome/selkies-dashboard/src/components/Sidebar.jsx b/chrome/selkies-dashboard/src/components/Sidebar.jsx
+index 176f2ef..23304b7 100644
+--- a/chrome/selkies-dashboard/src/components/Sidebar.jsx
++++ b/chrome/selkies-dashboard/src/components/Sidebar.jsx
+@@ -2839,7 +2839,7 @@ function Sidebar() {
+       if (message?.type === 'status' && message.state !== 'paired') setSasState({ available: false, pending: false });
+       if (message?.type === 'sasState' && typeof message.available === 'boolean' && typeof message.pending === 'boolean') {
+         if (message.pending) { setSasFailure(null); removeNotification('secure-desktop-result'); }
+-        setSasState({ available: message.available && !message.pending, pending: message.pending });
++        setSasState({ available: message.available && !message.pending && message.reason !== 'rdp_session_unsupported', pending: message.pending, reason: message.reason });
+       }
+       if (message?.type === 'secureDesktopResult') {
+         const texts = {
+@@ -4990,7 +4990,8 @@ function Sidebar() {
+                       )}
+                       disabled={!sasState.available || sasState.pending}
+                       title={sasFailure || (sasState.pending ? 'Waiting for the PC response' : sasState.available
+-                        ? 'Send Ctrl+Alt+Del to the remote PC' : 'Ctrl+Alt+Delete is unavailable for this session')}
++                        ? 'Send Ctrl+Alt+Del to the remote PC' : sasState.reason === 'rdp_session_unsupported'
++                          ? 'Ctrl+Alt+Delete is not supported in RDP sessions yet.' : 'Ctrl+Alt+Delete is unavailable for this session')}
+                     >
+                       Ctrl + Alt + Del
+                     </button>

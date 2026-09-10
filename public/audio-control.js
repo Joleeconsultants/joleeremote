@@ -7,13 +7,14 @@ export class AudioControl {
     Object.assign(this,{send,applied,changed,Decoder,makeId,schedule,unschedule});this.epoch=0;this.reset();
   }
   clearPending(){this.unschedule(this.timer);this.timer=null;this.pending=null;}
-  reset(){this.epoch++;this.capability=null;this.clearPending();this.active=null;this.choices=[];this.changed?.({choices:[],effective:null});}
+  reset(){this.epoch++;this.capability=null;this.clearPending();this.queued=null;this.active=null;this.choices=[];this.changed?.({choices:[],effective:null});}
+  next(){const fields=this.queued;this.queued=null;if(fields)this.request(fields);}
   async consume(message){
     if(!message||!['audio_capabilities','audio_config_result'].includes(message.t))return false;
     if(message.v!==1)return true;
     if(message.t==='audio_capabilities'){
       if(!generation(message.sourceGeneration)||!Array.isArray(message.codecs)||message.codecs.length>2)return true;
-      const epoch=++this.epoch;this.capability=null;this.choices=[];this.clearPending();
+      const epoch=++this.epoch;this.capability=null;this.choices=[];this.clearPending();this.queued=null;
       const aac=message.codecs.find(c=>c?.codec==='mp4a.40.2');
       try{
         if(!aac||!Array.isArray(aac.bitratesBps)||!aac.bitratesBps.length||aac.bitratesBps.length>4||
@@ -31,13 +32,14 @@ export class AudioControl {
       message.requestId===this.active?.requestId&&['encoder_failed_pcm_fallback','source_changed'].includes(message.reason);
     if(!pending&&!fallback||pending&&message.requestId!==pending.requestId&&!fallback)return true;
     if(!['applied','rejected'].includes(message.status)||!generation(message.generation)||!generation(message.sourceGeneration))return true;
-    if(message.status==='rejected'){this.clearPending();this.changed({choices:this.choices,effective:this.active});return true;}
+    if(message.status==='rejected'){this.clearPending();this.changed({choices:this.choices,effective:this.active});this.next();return true;}
     if(!fallback){
       if(message.codec!==pending.codec)return true;
       if(message.codec==='mp4a.40.2'&&['sourceGeneration','sampleRate','channels','targetBitrate'].some(k=>message[k]!==pending[k]))return true;
     }
-    this.clearPending();this.active={...message};this.applied(message);
-    this.changed({choices:this.choices,effective:this.active});return true;
+    if(pending?.requestId===message.requestId)this.clearPending();
+    this.active={...message};this.applied(message);
+    this.changed({choices:this.choices,effective:this.active});if(!this.pending)this.next();return true;
   }
   select(bitrate){
     if(!this.capability||!this.choices.includes(bitrate))return false;
@@ -47,11 +49,14 @@ export class AudioControl {
   }
   pcm(){return this.request({codec:'pcm_s16le'});}
   request(fields){
+    // Keep one in-flight request and at most the latest user intent. A timeout
+    // changes the notice, not correlation: next source chunk can legitimately ack late.
+    if(this.pending){this.queued=fields;return true;}
     const request={t:'audio_config',v:1,requestId:this.makeId(),...fields};
     this.clearPending();this.pending=request;
     this.timer=this.schedule(()=>{
       if(this.pending!==request)return;
-      this.clearPending();this.changed({choices:this.choices,effective:this.active,error:'confirmation_timeout'});
+      this.timer=null;this.changed({choices:this.choices,effective:this.active,error:'confirmation_timeout'});
     },5000);
     try{this.send(request);return true;}catch{
       this.clearPending();this.changed({choices:this.choices,effective:this.active,error:'send_failed'});return false;

@@ -19,6 +19,17 @@ test('off clears pending request and timeout never reports applied or retries',(
   let fire;const sent=[],applied=[],states=[];
   const c=new AudioControl({send:m=>sent.push(m),applied:m=>applied.push(m),changed:m=>states.push(m),schedule:fn=>{fire=fn;return 1;},unschedule(){},makeId:()=> '12345678-1234-1234-1234-123456789abc'});
   c.pcm();const old=fire;c.reset();old();assert.equal(c.pending,null);assert.equal(states.at(-1).error,undefined);
-  c.pcm();fire();assert.equal(c.pending,null);assert.equal(states.at(-1).error,'confirmation_timeout');
+  c.pcm();fire();assert.ok(c.pending);assert.equal(states.at(-1).error,'confirmation_timeout');
   assert.equal(applied.length,0);assert.equal(sent.length,2);
+});
+test('late AAC ack reconciles after timeout and rapid choices serialize',async()=>{
+  let fire,n=0;const sent=[],applied=[];
+  const c=new AudioControl({send:m=>sent.push(m),applied:m=>applied.push(m),changed(){},schedule:fn=>{fire=fn;return 1;},unschedule(){},makeId:()=>`00000000-0000-0000-0000-${String(++n).padStart(12,'0')}`,Decoder:{isConfigSupported:async()=>({supported:true})}});
+  await c.consume(cap);c.select(96000);c.select(128000);assert.equal(sent.length,1);
+  fire();const ack={...sent[0],t:'audio_config_result',status:'applied',generation:'c'.repeat(32)};
+  await c.consume(ack);assert.equal(applied.length,1);assert.equal(sent.length,2);assert.equal(c.active.targetBitrate,96000);
+  await c.consume({...ack,requestId:sent[1].requestId,status:'rejected',reason:'encoder_unavailable'});
+  assert.equal(c.active.targetBitrate,96000);assert.equal(c.pending,null);
+  c.pcm();fire();await c.consume({...ack,requestId:sent[2].requestId,codec:'pcm_s16le',generation:'d'.repeat(32)});
+  assert.equal(c.active.codec,'pcm_s16le');assert.equal(applied.length,2);
 });

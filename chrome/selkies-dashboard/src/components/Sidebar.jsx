@@ -4169,6 +4169,14 @@ function Sidebar() {
                         ))}
                       </select>
                     </div>
+                    {(microphoneReady || isMicrophoneActive) && (
+                      <p className="device-support-notice" data-testid="microphone-driver-notice">
+                        Microphone forwarding uses VB-CABLE by VB-Audio.{' '}
+                        The origin of VB-CABLE: <a href="https://www.vb-cable.com/" target="_blank" rel="noopener noreferrer">www.vb-cable.com</a>.
+                        {' '}VB-CABLE is a donationware, all participations are welcome.{' '}
+                        <a href="https://vb-audio.com/Services/licensing.htm" target="_blank" rel="noopener noreferrer">Donate / pay for a license</a>.
+                      </p>
+                    )}
                     {isOutputSelectionSupported && (
                       <div className="dev-setting-item">
                         <label htmlFor="audioOutputSelect">

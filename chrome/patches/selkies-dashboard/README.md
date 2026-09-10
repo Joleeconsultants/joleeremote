@@ -115,3 +115,9 @@ stored DPI untouched when unsupported. These checks do not implement native DPI
 or establish live scaling acceptance. Local canvas scaling remains separate.
 
 `0009-resolution-fields-encoder-filter.patch`: synchronize idle manual size fields with confirmed PC geometry, preserve unfinished edits, and populate the encoder control from fresh PC/browser capabilities. Loading/unavailable states disable the existing control; disconnect clears capabilities.
+
+## Automatic upstream updates
+
+The scheduled Selkies workflow now attempts a real sync, reapplies the patch series, builds the dashboard and runs its checks before publishing a single update PR. The bot does not auto-merge upstream UI changes. If patches or validation fail, the existing tracking issue is updated with the latest revision and failing run instead of being left stale. Once main catches up, the issue closes automatically. Private sync/deployment follows the reviewed public merge.
+
+Sync manifests support LF and CRLF checkouts. Latest upstream currently conflicts with the integration baseline's Sidebar imports; that requires a patch refresh, not dropping the overlays or forcing a failed build through.

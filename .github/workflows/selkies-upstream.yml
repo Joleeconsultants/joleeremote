@@ -1,76 +1,93 @@
 name: Selkies dashboard upstream
-
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 14 * * 1-5"
-
+    - cron: '0 14 * * 1-5'
 permissions:
-  contents: read
+  contents: write
   issues: write
-
+  pull-requests: write
+concurrency:
+  group: selkies-dashboard-upstream
+  cancel-in-progress: false
 jobs:
-  check:
+  sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
       - uses: actions/github-script@v9
+        id: upstream
         with:
           script: |
             const fs = require('fs');
-            const TITLE = 'Selkies dashboard upstream moved';
-            const raw = fs.readFileSync('chrome/selkies-dashboard/UPSTREAM', 'utf8');
-            const pinned = (raw.match(/^commit=(.+)$/m) || [])[1];
-            if (!pinned) {
-              core.setFailed('chrome/selkies-dashboard/UPSTREAM is missing commit=');
+            const pinned = fs.readFileSync('chrome/selkies-dashboard/UPSTREAM','utf8').match(/^commit=([0-9a-f]{40})\s*$/m)?.[1];
+            const {data} = await github.rest.repos.listCommits({owner:'selkies-project',repo:'selkies',path:'addons/selkies-dashboard',per_page:1});
+            const latest = data[0]?.sha;
+            if (!pinned || !/^[0-9a-f]{40}$/.test(latest ?? '')) throw Error('Invalid upstream pin');
+            core.setOutput('pinned',pinned); core.setOutput('latest',latest); core.setOutput('changed',String(pinned!==latest));
+      - name: Sync and validate
+        if: steps.upstream.outputs.changed == 'true'
+        env:
+          UPSTREAM_SHA: ${{ steps.upstream.outputs.latest }}
+        run: |
+          set -euo pipefail
+          bash scripts/sync-selkies-dashboard.sh "$UPSTREAM_SHA"
+          npm ci
+          npm ci --prefix chrome/selkies-dashboard
+          npm run build:dashboard
+          npm run typecheck
+          npm test
+          npx playwright install --with-deps --only-shell chromium
+          npm run check:dashboard
+      - name: Publish validated branch
+        if: success() && steps.upstream.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_SHA: ${{ steps.upstream.outputs.latest }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          branch=automation/selkies-dashboard-upstream
+          git fetch origin "$branch:refs/remotes/origin/$branch" || true
+          git checkout -B "$branch"
+          git add -- chrome/selkies-dashboard public/dashboard
+          git diff --cached --quiet && exit 0
+          git commit -m "Sync Selkies dashboard to $UPSTREAM_SHA"
+          git push --force-with-lease origin "HEAD:refs/heads/$branch"
+      - name: Update PR or actionable issue
+        if: always() && steps.upstream.outcome == 'success'
+        uses: actions/github-script@v9
+        env:
+          SYNC_STATUS: ${{ job.status }}
+          PINNED: ${{ steps.upstream.outputs.pinned }}
+          LATEST: ${{ steps.upstream.outputs.latest }}
+        with:
+          script: |
+            const repo=context.repo, title='Selkies dashboard upstream moved';
+            const issues=await github.paginate(github.rest.issues.listForRepo,{...repo,state:'open',per_page:100});
+            const issue=issues.find(i=>!i.pull_request&&i.title===title);
+            if(process.env.PINNED===process.env.LATEST){
+              if(issue)await github.rest.issues.update({...repo,issue_number:issue.number,state:'closed',state_reason:'completed'});
               return;
             }
-            const { data: commits } = await github.rest.repos.listCommits({
-              owner: 'selkies-project',
-              repo: 'selkies',
-              path: 'addons/selkies-dashboard',
-              per_page: 1,
-            });
-            if (!commits.length) {
-              core.setFailed('GitHub returned no commits for addons/selkies-dashboard');
-              return;
+            const run=`${context.serverUrl}/${repo.owner}/${repo.repo}/actions/runs/${context.runId}`;
+            let detail=`Automatic sync failed. Inspect [the run](${run}) for the exact patch or validation failure. No failed update is published.`;
+            if(process.env.SYNC_STATUS==='success'){
+              const head='automation/selkies-dashboard-upstream';
+              const {data:prs}=await github.rest.pulls.list({...repo,state:'open',head:`${repo.owner}:${head}`});
+              const body=`Re-vendor ${process.env.LATEST}, preserving Jolee overlays and patches. Build, typecheck, tests and browser checks passed in [this run](${run}). Review upstream UI changes before merging; private sync/deployment follows the public merge.`;
+              const pr=prs[0]?await github.rest.pulls.update({...repo,pull_number:prs[0].number,title:'Sync Selkies dashboard upstream',body}):await github.rest.pulls.create({...repo,head,base:context.payload.repository.default_branch,title:'Sync Selkies dashboard upstream',body});
+              detail=`Automatic sync and validation succeeded: ${pr.data.html_url}. This issue closes once the default-branch pin catches up.`;
             }
-            const latest = commits[0].sha;
-            core.info(`pinned=${pinned} latest=${latest}`);
-            if (latest === pinned) {
-              core.info('Selkies dashboard path is at the pinned commit.');
-              return;
-            }
-            const { data: open } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              per_page: 100,
-            });
-            if (open.some((issue) => issue.title === TITLE)) {
-              core.info('An open issue with this title already exists; not opening another.');
-              return;
-            }
-            const body = [
-              'The vendored Selkies dashboard pin is behind upstream.',
-              '',
-              `- Pinned: \`${pinned}\``,
-              `- Latest commit on \`addons/selkies-dashboard\`: \`${latest}\``,
-              `- Upstream: https://github.com/selkies-project/selkies/commits/${latest}/addons/selkies-dashboard`,
-              `- Compare: https://github.com/selkies-project/selkies/compare/${pinned}...${latest}`,
-              '',
-              'Bump with:',
-              '',
-              '```',
-              `scripts/sync-selkies-dashboard.sh ${latest}`,
-              '```',
-              '',
-              'If patches fail to apply, refresh `chrome/patches/selkies-dashboard/` against the new tree. Do not auto-merge a broken apply. Overlay files in `chrome/selkies-dashboard/OVERLAY` must stay.',
-            ].join('\n');
-            const issue = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: TITLE,
-              body,
-            });
-            core.info(`Opened ${issue.data.html_url}`);
+            const body=`Pinned: ${process.env.PINNED}\n\nLatest: ${process.env.LATEST}\n\n${detail}\n\nRefresh conflicting patches; never discard Jolee overlays or merge a failed build.`;
+            if(issue)await github.rest.issues.update({...repo,issue_number:issue.number,body});
+            else await github.rest.issues.create({...repo,title,body});

@@ -4,7 +4,7 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
  const box=document.createElement('div');box.hidden=true;box.setAttribute('role','status');
  box.style.cssText='position:absolute;bottom:24px;left:50%;transform:translateX(-50%);max-width:calc(100% - 48px);padding:12px 16px;border:1px solid #75839a;border-radius:8px;background:#222833;color:#e6ebf3;font:16px system-ui;z-index:5;text-align:center';
  const text=document.createElement('span'),button=document.createElement('button');button.type='button';button.style.marginLeft='12px';box.append(text,button);root.append(box);
- let supported=false,checked=false,checking=false,restartPath=null,lastState='',expiredNotified=false;
+ let supported=false,checked=false,checking=false,restartPath=null,lastState='',expiredNotified=false,inspectAttempts=0,retryTimer;
  async function call(payload){
   const response=await fetch('/api/session-renewal',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',cache:'no-store',
    signal:AbortSignal.timeout(4000),body:JSON.stringify({...payload,browserToken})});
@@ -29,12 +29,13 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
   button.onclick=()=>{if(ended&&restartPath)window.top.location.assign(restartPath);else void model.renew();};
   if(state.expired&&!expiredNotified){expiredNotified=true;onExpired();}
  }});
- return {bind(state,expiresAt){
+ const api={bind(state,expiresAt){
+  if(state==='paired'&&lastState!=='paired'&&!supported){checked=false;inspectAttempts=0;}
   lastState=state;
   if(Number.isSafeInteger(expiresAt))model.bind(sessionId,expiresAt,supported);
   else model.publish();
   if(state!=='paired'||checked||checking||!Number.isSafeInteger(expiresAt))return;
-  checking=true;
+  checking=true;inspectAttempts++;
   void call({action:'inspect',sessionId,previousExpiresAt:expiresAt,requestId:crypto.randomUUID()}).then(value=>{
    checked=true;supported=value.status==='available'&&value.sessionId===sessionId;
    if(supported&&typeof value.restartPath==='string'){
@@ -45,6 +46,10 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
     }
    }
    model.bind(sessionId,model.expiresAt??expiresAt,supported);
-  }).catch(()=>{checked=true;}).finally(()=>{checking=false;});
+  }).catch(()=>{
+   checked=inspectAttempts>=3;
+   if(!checked){clearTimeout(retryTimer);retryTimer=setTimeout(()=>{if(lastState==='paired')api.bind(lastState,model.expiresAt);},inspectAttempts*5000);}
+  }).finally(()=>{checking=false;});
  }};
+ return api;
 }

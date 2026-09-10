@@ -28,10 +28,10 @@ export class SessionRenewal {
       const result=await Promise.race([this.request({sessionId:session,previousExpiresAt,requestId}),
         new Promise((_,reject)=>{timeout=this.schedule(()=>reject(Error('confirmation_timeout')),15000);})]);
       if(epoch!==this.epoch)return false;
-      if(this.now()>=previousExpiresAt||result?.sessionId!==session||result.requestId!==requestId||
+      if((this.now()>=previousExpiresAt&&this.expiresAt<=previousExpiresAt)||result?.sessionId!==session||result.requestId!==requestId||
         result.status!=='committed'||!Number.isSafeInteger(result.expiresAt)||result.expiresAt<=previousExpiresAt||
         result.expiresAt>this.now()+3600000)throw Error('renewal_not_confirmed');
-      this.expiresAt=result.expiresAt;this.attempt=null;return true;
+      this.expiresAt=Math.max(this.expiresAt,result.expiresAt);this.attempt=null;return true;
     }catch{
       if(epoch===this.epoch)this.error='Renewal was not confirmed.';
       return false;

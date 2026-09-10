@@ -28,3 +28,16 @@ test('retry after uncertain confirmation retains the exact request and previous 
  assert.deepEqual(requests[1],requests[0]);assert.equal(ids,1);
  h.c.reset();assert.equal(h.c.attempt,null);
 });
+
+test('late confirmation reconciles a fresh server extension and allows the next renewal',async()=>{
+ let resolve;const h=harness(()=>new Promise(r=>resolve=r));h.c.bind('session',2000,true);
+ const pending=h.c.renew();h.c.bind('session',3601000,true);h.advance(1100);
+ resolve({sessionId:'session',requestId:'request',status:'committed',expiresAt:3601000});
+ assert.equal(await pending,true);assert.equal(h.c.attempt,null);assert.equal(h.state.expiresAt,3601000);
+});
+test('matching late confirmation never regresses a newer server-bound expiry',async()=>{
+ let resolve;const h=harness(()=>new Promise(r=>resolve=r));h.c.bind('session',2000,true);
+ const pending=h.c.renew();h.c.bind('session',3601001,true);
+ resolve({sessionId:'session',requestId:'request',status:'committed',expiresAt:3601000});
+ assert.equal(await pending,true);assert.equal(h.state.expiresAt,3601001);
+});

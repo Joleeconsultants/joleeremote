@@ -3,12 +3,13 @@ import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 const browser=await chromium.launch({channel:'msedge',headless:true});
 try{
- const page=await browser.newPage();page.on('pageerror',e=>console.log('PAGE ERROR',e.message));let starts=0,request,unsupported=false;
+ const page=await browser.newPage();page.on('pageerror',e=>console.log('PAGE ERROR',e.message));let starts=0,request,unsupported=false,inspections=0;
  await page.route('https://renewal.test/**',async route=>{
   const path=new URL(route.request().url()).pathname;
   if(path==='/api/session-renewal'){
    const body=route.request().postDataJSON();
    if(unsupported)return route.fulfill({status:409,body:'{}'});
+   if(body.action==='inspect'&&++inspections===1)return route.fulfill({status:503,body:'{}'});
    if(body.action==='inspect')return route.fulfill({json:{...body,status:'available',restartPath:'/?clientId=client&agentId=device'}});
    if(body.action==='start'){starts++;request=body;return route.fulfill({json:{...body,status:'pending'}});}
    assert.equal(body.requestId,request.requestId);
@@ -20,7 +21,7 @@ try{
  await page.goto('https://renewal.test/');
  const keep=page.getByRole('button',{name:'Keep Session Active'});
  await page.waitForFunction(()=>!!window.ui);
- await keep.waitFor({state:'visible',timeout:4000});assert.equal(starts,0);
+ await keep.waitFor({state:'visible',timeout:10000});assert.equal(starts,0);assert.equal(inspections,2);
  await keep.click();await page.waitForFunction(()=>document.querySelector('[role=status]').hidden);
  assert.equal(starts,1);
  await page.evaluate(()=>window.ui.bind('expired',Date.now()-1));

@@ -42,7 +42,11 @@ try{
  await page.evaluate(()=>window.ui.bind('paired',Date.now()+60000,{sessionId:'new-session',browserToken:'new-browser'}));
  await keep.waitFor({state:'visible'});await keep.click();await page.waitForFunction(()=>document.querySelector('[role=status]').hidden);
  assert.equal(request.sessionId,'new-session');assert.equal(request.browserToken,'new-browser');
- await page.reload();await page.waitForFunction(()=>!!window.ui);await page.evaluate(()=>window.ui.bind('expired'));await page.getByRole('button',{name:'Restart session'}).waitFor({state:'visible'});
+ await page.reload();await page.waitForFunction(()=>!!window.ui);
+ await page.evaluate(()=>{window.sessionState.set('waiting');window.ui.bind('waiting');});
+ await page.getByRole('button',{name:'Restart session'}).waitFor({state:'visible'});
+ assert.match(await page.locator('[data-connection-text]').innerText(),/Waiting for the PC/);
+ await page.evaluate(()=>window.ui.bind('expired'));await page.getByRole('button',{name:'Restart session'}).waitFor({state:'visible'});
  unsupported=true;await page.reload();await page.waitForFunction(()=>!!window.ui);
  assert.equal(await keep.isVisible(),false);
  console.log('Edge explicit renewal, committed confirmation, expiry/restart and unsupported-agent hiding PASS.');

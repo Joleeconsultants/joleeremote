@@ -22,7 +22,8 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
  restoreRestart();
  const render=state=>{
   const ended=state.expired||['ended','expired','unavailable'].includes(lastState);
-  const active=Boolean(ended||(supported&&(state.warning||state.error||state.pending)));
+  const recovering=Boolean(restartPath&&['waiting','disconnected'].includes(lastState));
+  const active=Boolean(ended||recovering||(supported&&(state.warning||state.error||state.pending)));
   box.dataset.renewalActive=String(active);
   if(!active){text.textContent='';button.hidden=true;const label=box.querySelector('[data-connection-text]');if(label)label.hidden=false;box.hidden=connectionBox?box.dataset.connectionVisible!=='true':true;return;}
   box.hidden=false;
@@ -30,9 +31,9 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
   const connectionText=box.querySelector('[data-connection-text]');if(connectionText)connectionText.hidden=!connectionPriority;
   text.hidden=connectionPriority;
   text.textContent=ended?(lastState==='expired'||state.expired?'Session expired. The last screen is not live.':'Session ended. The last screen is not live.'):state.pending?'Confirming session extension…':state.error||'Session expires in '+Math.max(1,Math.ceil((state.expiresAt-Date.now())/60000))+' minutes.';
-  button.textContent=ended?'Restart session':'Keep session active';button.hidden=ended?!restartPath:false;
-  button.disabled=ended?false:!state.canRenew;
-  button.onclick=()=>{if(ended&&restartPath)window.top.location.assign(restartPath);else void model.renew();};
+  button.textContent=ended||recovering?'Restart session':'Keep session active';button.hidden=ended?!restartPath:false;
+  button.disabled=ended||recovering?false:!state.canRenew;
+  button.onclick=()=>{if((ended||recovering)&&restartPath)window.top.location.assign(restartPath);else void model.renew();};
   if(state.expired&&!expiredNotified){expiredNotified=true;onExpired();}
  };
  const model=new SessionRenewal({request:async payload=>{

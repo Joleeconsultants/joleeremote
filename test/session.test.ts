@@ -239,6 +239,9 @@ describe("session hop", () => {
   it("tears down on TTL alarm and rejects later joins", async () => {
     const minted = await mint(60);
     const stub = env.Session.getByName(minted.sessionId);
+    await runInDurableObject(stub, (_instance, state) => {
+      state.storage.sql.exec('UPDATE session SET expires_at = ?', Date.now() - 1);
+    });
     const ran = await runDurableObjectAlarm(stub);
     expect(ran).toBe(true);
 

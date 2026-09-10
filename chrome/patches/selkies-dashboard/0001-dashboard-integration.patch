@@ -1,8 +1,7 @@
-diff --git b/.gitignore a/.gitignore
-index 9f321a1..6a38f1f 100644
---- b/.gitignore
-+++ a/.gitignore
-@@ -6,7 +6,6 @@ yarn-debug.log*
+diff --git a/.gitignore b/.gitignore
+--- a/.gitignore
++++ b/.gitignore
+@@ -6,7 +6,6 @@
  yarn-error.log*
  pnpm-debug.log*
  lerna-debug.log*
@@ -10,10 +9,9 @@ index 9f321a1..6a38f1f 100644
  node_modules
  dist
  dist-ssr
-diff --git b/src/components/DashboardOverlay.jsx a/src/components/DashboardOverlay.jsx
-index e881b22..80e73e9 100644
---- b/src/components/DashboardOverlay.jsx
-+++ a/src/components/DashboardOverlay.jsx
+diff --git a/src/components/DashboardOverlay.jsx b/src/components/DashboardOverlay.jsx
+--- a/src/components/DashboardOverlay.jsx
++++ b/src/components/DashboardOverlay.jsx
 @@ -5,12 +5,13 @@
   */
  
@@ -29,10 +27,9 @@ index e881b22..80e73e9 100644
  
  /**
   * Renders the sidebar into `container` through a portal, or nothing until a
-diff --git b/src/components/PlayerGamepadButton.jsx a/src/components/PlayerGamepadButton.jsx
-index 399ee73..662703e 100644
---- b/src/components/PlayerGamepadButton.jsx
-+++ a/src/components/PlayerGamepadButton.jsx
+diff --git a/src/components/PlayerGamepadButton.jsx b/src/components/PlayerGamepadButton.jsx
+--- a/src/components/PlayerGamepadButton.jsx
++++ b/src/components/PlayerGamepadButton.jsx
 @@ -10,7 +10,8 @@
   */
  import React from "react";
@@ -43,7 +40,7 @@ index 399ee73..662703e 100644
  
  /** Id of the element the touch gamepad overlay is mounted in. */
  const TOUCH_GAMEPAD_HOST_DIV_ID = "touch-gamepad-host";
-@@ -82,13 +83,13 @@ function PlayerGamepadButton({ touchOnly = false, isActive, onToggle }) {
+@@ -82,13 +83,13 @@
          setOwnActive(newActiveState);
  
          if (newActiveState && !isTouchGamepadSetup) {
@@ -59,10 +56,9 @@ index 399ee73..662703e 100644
                  type: "TOUCH_GAMEPAD_VISIBILITY",
                  payload: { visible: newActiveState, targetDivId: TOUCH_GAMEPAD_HOST_DIV_ID },
              }, window.location.origin);
-diff --git b/src/components/Sidebar.jsx a/src/components/Sidebar.jsx
-index 0621183..6fb05d7 100644
---- b/src/components/Sidebar.jsx
-+++ a/src/components/Sidebar.jsx
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
 @@ -6,7 +6,7 @@
  
  /**
@@ -72,22 +68,24 @@ index 0621183..6fb05d7 100644
   *
   * Renders a draggable toggle handle, the core action buttons (video, audio,
   * microphone, webcam, gamepad), the soft modifier keys and virtual keyboard
-@@ -50,11 +50,11 @@
+@@ -50,12 +50,12 @@
   * @module
   */
  import { useState, useEffect, useCallback, useId, useMemo, useRef } from "react";
--import { displayLabel, decodableEncoders, canDecodeFullColor, getRoutePrefix, getStorageAppName, isMobileClient } from "../../../selkies-web-core/lib/util.js";
+-import { displayLabel, decodableEncoders, canDecodeFullColor, getRoutePrefix, getStorageAppName, isMobileClient, isMacDesktop } from "../../../selkies-web-core/lib/util.js";
 -import { sessionAuthHeaders, withSessionToken } from "../../../selkies-web-core/lib/session-token.js";
++import { readDisplayCatalog, selectedDisplay, resolutionChoices } from "../../../../public/display-catalog.js";
 +import { displayLabel, decodableEncoders, canDecodeFullColor, getRoutePrefix, getStorageAppName, isMobileClient } from "../jolee-shims/util.js";
 +import { sessionAuthHeaders, withSessionToken } from "../jolee-shims/session-token.js";
  import { resolveSpec, isSettingPinned, HIDPI_SPEC, RATE_CONTROL_SPEC,
    USE_BROWSER_CURSORS_SPEC, VIDEO_FULLCOLOR_SPEC, VIDEO_STREAMING_MODE_SPEC,
--  USE_PAINT_OVER_QUALITY_SPEC, USE_CPU_SPEC, FORCE_ALIGNED_RESOLUTION_SPEC } from "../../../selkies-web-core/lib/conditional-settings.js";
+-  USE_PAINT_OVER_QUALITY_SPEC, USE_CPU_SPEC, FORCE_ALIGNED_RESOLUTION_SPEC,
+-  RAW_POINTER_MOTION_SPEC, MAC_CMD_AS_CTRL_SPEC } from "../../../selkies-web-core/lib/conditional-settings.js";
 +  USE_PAINT_OVER_QUALITY_SPEC, USE_CPU_SPEC, FORCE_ALIGNED_RESOLUTION_SPEC } from "../jolee-shims/conditional-settings.js";
  import GamepadVisualizer from "./GamepadVisualizer";
  import PlayerGamepadButton from "./PlayerGamepadButton.jsx";
  import { getTranslator } from "../translations";
-@@ -68,7 +68,17 @@ import {
+@@ -69,7 +69,19 @@
    readInstalledApps,
    resolveFailedAppCommand,
    writeInstalledApps,
@@ -99,14 +97,78 @@ index 0621183..6fb05d7 100644
 +  startParentMicrophone,
 +  stopParentMicrophone,
 +  setParentMicDeviceId,
++  setParentMicFormats,
 +  parentMicrophoneGeneration,
-+} from "../jolee-mic-capture.js";
++} from "../jolee-mic-pcm-capture.js";
 +import { createMicrophoneSession } from "../jolee-mic-session.js";
++import { canSetDpi, initialDpi, filterDpiSetting } from "../jolee-dpi-settings.js";
 +import { JOLEE_SERVER_SETTINGS } from "../jolee-settings.js";
  import * as yaml from "js-yaml";
  
  const urlHash = window.location.hash;
-@@ -686,7 +696,8 @@ function AppsModal({ isOpen, onClose, t, commandsAvailable, commandsKnown,
+@@ -111,20 +123,6 @@
+ const webcamEncoderOptions = ["auto", "h264", "vp8", "mjpeg"];
+ 
+ const rateControlOptions = ["cbr", "crf"];
+-
+-const commonResolutionValues = [
+-  "",
+-  "1920x1080",
+-  "1280x720",
+-  "1366x768",
+-  "1920x1200",
+-  "2560x1440",
+-  "3840x2160",
+-  "1024x768",
+-  "800x600",
+-  "640x480",
+-  "320x240",
+-];
+ 
+ const dpiScalingOptions = [
+   { label: "100%", value: 96 },
+@@ -147,6 +145,26 @@
+   (typeof navigator !== "undefined" &&
+     (navigator.language || navigator.userLanguage)) || "en";
+ const BROWSER_PRIMARY_LANG = BROWSER_LANG_TAG.split("-")[0].toLowerCase();
++
++/**
++ * The `scaling_dpi` default derived from the local display scaling
++ * (`devicePixelRatio`), so the remote desktop's fonts and UI match the local
++ * environment; an explicit picker value wins over it. Same formula as the
++ * core's `autoDeriveDpi` and independent of the resolution. Snapping to the
++ * nearest option puts a density the options do not name on the closest one
++ * and clamps at both ends.
++ * @returns {number} One of the `dpiScalingOptions` values.
++ */
++const deriveDpiFromDpr = () => {
++  const dpr = (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
++  const target = Math.round(dpr * 4) * 24;
++  return dpiScalingOptions.reduce((prev, curr) =>
++    Math.abs(curr.value - target) < Math.abs(prev.value - target) ? curr : prev
++  ).value;
++};
++
++/** Seeds the picker with the value the server is told, so the two never disagree. */
++const DEVICE_DPI = deriveDpiFromDpr();
+ 
+ const STATS_READ_INTERVAL_MS = 500;
+ const DEFAULT_FRAMERATE = 60;
+@@ -233,13 +251,6 @@
+ const calculateGaugeOffset = (percentage, radius, circumference) => {
+   const clampedPercentage = Math.max(0, Math.min(100, percentage || 0));
+   return circumference * (1 - clampedPercentage / 100);
+-};
+-
+-/** Parses a dimension and rounds it down to an even number; non-numbers become 0. */
+-const roundDownToEven = (num) => {
+-  const n = parseInt(num, 10);
+-  if (isNaN(n)) return 0;
+-  return Math.floor(n / 2) * 2;
+ };
+ 
+ /**
+@@ -667,7 +678,8 @@
              <p>{error}</p>
              <button
                onClick={() => setFetchAttempt((n) => n + 1)}
@@ -116,7 +178,59 @@ index 0621183..6fb05d7 100644
              >
                {t("appsModal.retryButton", "Retry")}
              </button>
-@@ -933,7 +944,7 @@ function Sidebar() {
+@@ -815,51 +827,6 @@
+ /** Reads a setting's stored value under its prefixed key. */
+ const readStored = (key) => localStorage.getItem(getPrefixedKey(key));
+ 
+-/** The rows a 96 DPI desktop is for, which a manual resolution is read against. */
+-const DPI_UNITY_ROWS = 1080;
+-
+-/**
+- * The `scaling_dpi` default, derived as the core derives it
+- * (lib/stream-density.js): from a manual resolution when one is set, since
+- * that framebuffer decides how large the desktop draws its UI and the local
+- * screen says nothing about it, and otherwise from the local display scaling
+- * (`devicePixelRatio`), so the remote UI matches the local environment. An
+- * explicit picker value wins over either. A manual resolution is read off its
+- * shorter side -- an ultrawide is wide rather than dense -- and snapping to
+- * the nearest option puts a density the options do not name on the closest one
+- * and clamps at both ends.
+- * @returns {number} One of the `dpiScalingOptions` values.
+- */
+-const deriveDpi = (manual) => {
+-  const rows = Math.min(manual?.w || 0, manual?.h || 0);
+-  const dpr = (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
+-  const target = rows > 0 ? 96 * rows / DPI_UNITY_ROWS : Math.round(dpr * 4) * 24;
+-  return dpiScalingOptions.reduce((prev, curr) =>
+-    Math.abs(curr.value - target) < Math.abs(prev.value - target) ? curr : prev
+-  ).value;
+-};
+-
+-/**
+- * The manual resolution in force, as the cores resolve it: a deployment that
+- * forces one and names its size wins, since the core takes the server's over
+- * the client's there; otherwise the stored pick, and `{w: 0, h: 0}` for a
+- * session sized to its window.
+- * @param {Object|null} serverSettings The server's settings payload.
+- * @returns {{w: number, h: number}}
+- */
+-const manualResolution = (serverSettings) => {
+-  const forced = serverSettings?.manual_resolution?.value === true;
+-  const server = {
+-    w: parseInt(serverSettings?.manual_width?.value, 10) || 0,
+-    h: parseInt(serverSettings?.manual_height?.value, 10) || 0,
+-  };
+-  if (forced && server.w > 0 && server.h > 0) return server;
+-  return {
+-    w: parseInt(readStored("manual_width"), 10) || 0,
+-    h: parseInt(readStored("manual_height"), 10) || 0,
+-  };
+-};
+-
+ /**
+  * Marker written beside a value the user chose explicitly. The cores persist
+  * every value they are told to apply, so the stored key alone cannot tell a
+@@ -959,7 +926,7 @@
      document.documentElement.lang = BROWSER_LANG_TAG;
    }, []);
    useEffect(() => {
@@ -125,21 +239,41 @@ index 0621183..6fb05d7 100644
    }, [isOpen]);
    /**
     * Entering fullscreen (button, Ctrl+Shift+F, or browser UI) folds the
-@@ -969,10 +980,10 @@ function Sidebar() {
+@@ -982,6 +949,7 @@
+     document.addEventListener("fullscreenchange", foldOnFullscreen);
+     return () => document.removeEventListener("fullscreenchange", foldOnFullscreen);
+   }, []);
++  const currentDeviceDpi = DEVICE_DPI;
+   const isMobile = isMobileClient;
+   const [isTrackpadModeActive, setIsTrackpadModeActive] = useState(false);
+   const [hasDetectedTouch, setHasDetectedTouch] = useState(false);
+@@ -994,12 +962,10 @@
    const [isTouchGamepadActive, setIsTouchGamepadActive] = useState(false);
    const [isTouchGamepadSetup, setIsTouchGamepadSetup] = useState(false);
    const [availablePlacements, setAvailablePlacements] = useState(null);
 -  const [serverSettings, setServerSettings] = useState(null);
-+  const [serverSettings, setServerSettings] = useState(JOLEE_SERVER_SETTINGS);
- 
+-  /** The derived default, marked in the picker so the two never disagree. */
+-  const currentDeviceDpi = deriveDpi(manualResolution(serverSettings));
+-
 -  const [uiTitle, setUiTitle] = useState('Selkies');
 -  const [uiShowLogo, setUiShowLogo] = useState(true);
++  const [serverSettings, setServerSettings] = useState(JOLEE_SERVER_SETTINGS);
++
 +  const [uiTitle, setUiTitle] = useState('Jolee Remote');
 +  const [uiShowLogo, setUiShowLogo] = useState(false);
  
    useEffect(() => {
      const handleMessage = (event) => {
-@@ -1232,9 +1243,9 @@ function Sidebar() {
+@@ -1072,8 +1038,6 @@
+     newRenderable.binaryClipboard = isRenderable('enable_binary_clipboard')
+       && (s.clipboard_enabled?.value ?? true);
+     newRenderable.use_browser_cursors = isRenderable('use_browser_cursors');
+-    newRenderable.rawPointerMotion = isRenderable('raw_pointer_motion');
+-    newRenderable.macCmdAsCtrl = isRenderable('mac_cmd_as_ctrl') && isMacDesktop();
+     newRenderable.video_bitrate = isRenderable('video_bitrate');
+     newRenderable.audio_bitrate = isRenderable('audio_bitrate');
+ 
+@@ -1261,9 +1225,9 @@
      const isCurrentlyHeld = heldKeys[key];
      const currentHeldCount = Object.values(heldKeys).filter(Boolean).length;
      if (!isCurrentlyHeld && currentHeldCount === 0) {
@@ -151,24 +285,76 @@ index 0621183..6fb05d7 100644
      }
      const nextHeldState = {
        ...heldKeys,
-@@ -1276,6 +1287,24 @@ function Sidebar() {
+@@ -1305,6 +1269,76 @@
    const [encoder, setEncoder] = useState(
      localStorage.getItem(getPrefixedKey("encoder")) || DEFAULT_ENCODER
    );
 +  const [agentCapabilities, setAgentCapabilities] = useState({});
++  const [currentResolution, setCurrentResolution] = useState("");
++  const [displayCatalog, setDisplayCatalog] = useState(null);
++  const [displayPending, setDisplayPending] = useState(false);
++  const remoteDisplay = selectedDisplay(displayCatalog);
++  const displayModes = resolutionChoices(remoteDisplay);
++  const canChangeResolution = serverSettings?.enable_resize?.value !== false && !!remoteDisplay?.can_resize && displayModes.some(choice => choice.mode.selectable) && !displayPending;
++  const manualResolutionDirty = useRef(false);
++  const [encoderLoadExpired, setEncoderLoadExpired] = useState(false);
++  const hasEncoderCapabilities = Array.isArray(agentCapabilities.supported_encoders) && agentCapabilities.supported_encoders.length > 0;
++  useEffect(() => {
++    setEncoderLoadExpired(false);
++    if (hasEncoderCapabilities && agentCapabilities.active_encoder) return;
++    const timer = setTimeout(() => setEncoderLoadExpired(true), 10000);
++    return () => clearTimeout(timer);
++  }, [hasEncoderCapabilities, agentCapabilities.active_encoder]);
 +  const [sasState, setSasState] = useState({ available: false, pending: false });
++  const [sasFailure, setSasFailure] = useState(null);
 +  useEffect(() => {
 +    const receive = (event) => {
 +      const core = document.getElementById('jolee-core');
-+      if (event.origin !== window.location.origin || event.source !== core?.contentWindow || event.data?.type !== 'statsUpdate') return;
++      if (event.origin !== window.location.origin || event.source !== core?.contentWindow) return;
++      if (event.data?.type === 'status' && event.data.state !== 'paired') {
++        setAgentCapabilities({});
++        setCurrentResolution('');
++        setManualWidth('');
++        setManualHeight('');
++        manualResolutionDirty.current = false;
++        setDisplayCatalog(null);
++        setDisplayPending(false);
++        return;
++      }
++      if(event.data?.type === 'screenResult') setDisplayPending(false);
++      if (event.data?.type !== 'statsUpdate') return;
 +      const message = event.data;
++      const catalog = readDisplayCatalog(message.screen?.catalog);
++      setDisplayCatalog(catalog);
++      // Legacy screen.effective can contain startup capture defaults. Only the
++      // selected Windows monitor catalog confirms dimensions for these controls.
++      const effective = selectedDisplay(catalog);
++      if (!effective) {
++        setManualWidth('');
++        setManualHeight('');
++        manualResolutionDirty.current = false;
++      }
++      setCurrentResolution(Number.isInteger(effective?.width) && Number.isInteger(effective?.height) &&
++        effective.width > 0 && effective.height > 0 && effective.width <= 32768 && effective.height <= 32768
++        ? `${effective.width}x${effective.height}` : "");
++      // Confirmed geometry updates idle fields, never a user's unfinished edit.
++      // Do not persist or post settings: telemetry must not request a resize.
++      if (!manualResolutionDirty.current && Number.isInteger(effective?.width) &&
++        Number.isInteger(effective?.height) && effective.width > 0 && effective.height > 0 &&
++        effective.width <= 32768 && effective.height <= 32768) {
++        setManualWidth(String(effective.width));
++        setManualHeight(String(effective.height));
++      }
 +      setAgentCapabilities({ active_encoder: message.active_encoder,
 +        jpeg_quality_effective: message.jpeg_quality_effective,
 +        supported_encoders: message.supported_encoders,
 +        microphone_supported: message.microphone_supported,
 +        webcam_supported: message.webcam_supported,
++        webcam_capture: message.webcam_capture,
 +        dpi_scaling_supported: message.dpi_scaling_supported,
-+        audio_bitrate_supported: message.audio_bitrate_supported });
++        audio_bitrate_supported: message.audio_bitrate_supported,
++        audio_bitrate_choices: Array.isArray(message.audio_bitrate_choices) ? message.audio_bitrate_choices.filter(v=>[96000,128000,160000,192000].includes(v)) : [] });
++      if ([96000,128000,160000,192000].includes(message.audio_bitrate_effective)) setAudioBitrate(message.audio_bitrate_effective);
 +    };
 +    window.addEventListener('message', receive);
 +    return () => window.removeEventListener('message', receive);
@@ -176,7 +362,51 @@ index 0621183..6fb05d7 100644
    const [webcamEncoderChoice, setWebcamEncoderChoice] = useState(
      localStorage.getItem(getPrefixedKey("webcam_encoder"))
    );
-@@ -1367,19 +1396,28 @@ function Sidebar() {
+@@ -1332,10 +1366,10 @@
+       DEFAULT_PAINT_OVER_JPEG_QUALITY
+   );
+   const [selectedDpi, setSelectedDpi] = useState(
+-    parseInt(localStorage.getItem(getPrefixedKey("scaling_dpi")), 10) || deriveDpi(manualResolution(serverSettings))
++    parseInt(localStorage.getItem(getPrefixedKey("scaling_dpi")), 10) || deriveDpiFromDpr()
+   );
+-  const [manual_width, setManualWidth] = useState(localStorage.getItem(getPrefixedKey("manual_width")) || "");
+-  const [manual_height, setManualHeight] = useState(localStorage.getItem(getPrefixedKey("manual_height")) || "");
++  const [manual_width, setManualWidth] = useState("");
++  const [manual_height, setManualHeight] = useState("");
+   const [scaleLocally, setScaleLocally] = useState(() => {
+     const saved = localStorage.getItem(getPrefixedKey("scaleLocallyManual"));
+     return saved !== null ? saved === "true" : DEFAULT_SCALE_LOCALLY;
+@@ -1350,6 +1384,7 @@
+    * rate-control default.
+    */
+   const conditionalCtx = {
++    mobileClient: isMobile,
+     manualActive: !!readStored("manual_width") || serverSettings?.manual_resolution?.value === true,
+     streamMode,
+     activeEncoder: readStored("encoder") || encoder,
+@@ -1357,7 +1392,6 @@
+     useCpu: readStored("use_cpu") !== null
+       ? readStored("use_cpu") === "true" : !!serverSettings?.use_cpu?.value,
+     allowedRateControl: serverSettings?.rate_control_mode?.allowed || rateControlOptions,
+-    macDesktop: isMacDesktop(),
+   };
+   /**
+    * Each conditional setting is one hook call over a shared spec. The hook
+@@ -1387,10 +1421,9 @@
+     FORCE_ALIGNED_RESOLUTION_SPEC, serverSettings, conditionalCtx, [serverSettings]);
+   const [use_browser_cursors, setUseBrowserCursors] = useConditionalSetting(
+     USE_BROWSER_CURSORS_SPEC, serverSettings, conditionalCtx, [serverSettings]);
+-  const [rawPointerMotion, setRawPointerMotion] = useConditionalSetting(
+-    RAW_POINTER_MOTION_SPEC, serverSettings, conditionalCtx, [serverSettings]);
+-  const [macCmdAsCtrl, setMacCmdAsCtrl] = useConditionalSetting(
+-    MAC_CMD_AS_CTRL_SPEC, serverSettings, conditionalCtx, [serverSettings]);
++  useEffect(() => {
++    postToCore({ type: "setUseBrowserCursors", value: use_browser_cursors });
++  }, [use_browser_cursors]);
+   /**
+    * The cursor value the core reports as in effect (multi-monitor forces
+    * browser cursors on), `null` until reported; displayed over the stored
+@@ -1401,19 +1434,27 @@
      const saved = localStorage.getItem(getPrefixedKey("antiAliasingEnabled"));
      return saved !== null ? saved === "true" : true;
    });
@@ -188,10 +418,10 @@ index 0621183..6fb05d7 100644
      const saved = localStorage.getItem(getPrefixedKey("enable_binary_clipboard"));
      return saved !== null ? saved === 'true' : DEFAULT_ENABLE_BINARY_CLIPBOARD;
    });
+-  const [presetValue, setPresetValue] = useState("");
 +  const binaryClipboardEnabledRef = useRef(enableBinaryClipboard);
 +  binaryClipboardEnabledRef.current = enableBinaryClipboard;
 +  const clipboardDeliveryRef = useRef(null);
-   const [presetValue, setPresetValue] = useState("");
    const [clientFps, setClientFps] = useState(0);
 -  const [audioLevel, setAudioLevel] = useState(0);
 +  const [audioLevel, setAudioLevel] = useState(null);
@@ -209,7 +439,7 @@ index 0621183..6fb05d7 100644
    const [gpuMemPercent, setGpuMemPercent] = useState(0);
    const [sysMemUsed, setSysMemUsed] = useState(null);
    const [sysMemTotal, setSysMemTotal] = useState(null);
-@@ -1427,7 +1465,32 @@ function Sidebar() {
+@@ -1461,7 +1502,35 @@
    });
    const [notifications, setNotifications] = useState([]);
    const notificationTimeouts = useRef({});
@@ -225,7 +455,10 @@ index 0621183..6fb05d7 100644
 +    const receive = (event) => {
 +      if (event.origin !== window.location.origin || event.source !== core?.contentWindow) return;
 +      if (event.data?.type === 'status') microphoneSession.paired(event.data.state === 'paired');
-+      if (event.data?.type === 'statsUpdate') microphoneSession.support(event.data.microphone_supported);
++      if (event.data?.type === 'statsUpdate') {
++        const pcm = setParentMicFormats(event.data.microphone_formats);
++        microphoneSession.support(event.data.microphone_supported === true && pcm);
++      }
 +    };
 +    window.addEventListener('message', receive);
 +    window.addEventListener('pagehide', reset);
@@ -239,21 +472,32 @@ index 0621183..6fb05d7 100644
 +  }, [microphoneSession]);
    const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
 +  const [filesIframeSrc, setFilesIframeSrc] = useState("");
+   const [isFilesModalLoading, setIsFilesModalLoading] = useState(true);
    const [isAppsModalOpen, setIsAppsModalOpen] = useState(false);
    const [keyboardButtonPosition, setKeyboardButtonPosition] = useState({ bottom: 20, right: 20 });
-   const dragInfo = useRef({
-@@ -1474,8 +1537,8 @@ function Sidebar() {
+@@ -1503,14 +1572,18 @@
+   const [dynamicEncoderOptions, setDynamicEncoderOptions] = useState(
+     () => offeredEncoders(isWebrtc ? encoderOptionsWR : encoderOptions));
+   /** Audio bitrate stops the slider indexes into: the server's allowed enum, else the local list. */
+-  const audioBitrateChoices = (serverSettings?.audio_bitrate?.allowed?.map((v) => parseInt(v, 10))) || audioBitrateOptions;
++  const audioBitrateChoices = agentCapabilities.audio_bitrate_choices?.length ? agentCapabilities.audio_bitrate_choices : audioBitrateOptions;
+ 
+   const DEBOUNCE_DELAY = 500;
++  const dpiPolicyRef = useRef({});
++  dpiPolicyRef.current = { setting: serverSettings?.scaling_dpi, supported: agentCapabilities.dpi_scaling_supported };
  
    /** One debounced poster for the component's lifetime, so a burst of slider moves coalesces into a single post. */
    const debouncedPostSetting = useMemo(
 -    () => debounce((setting) => {
 -      window.postMessage(
 +    () => debounceSettings((setting) => {
++      setting = filterDpiSetting(setting, dpiPolicyRef.current.setting, dpiPolicyRef.current.supported);
++      if (Object.keys(setting).length === 0) return;
 +      postToCore(
          { type: "settings", settings: setting },
          window.location.origin
        );
-@@ -1483,10 +1546,12 @@ function Sidebar() {
+@@ -1518,10 +1591,12 @@
      []
    );
  
@@ -267,7 +511,7 @@ index 0621183..6fb05d7 100644
    };
    /**
     * Uniform write path for conditional settings: optimistic setState, an
-@@ -1522,6 +1587,7 @@ function Sidebar() {
+@@ -1557,6 +1632,7 @@
    /* eslint-disable react-hooks/set-state-in-effect */
    useEffect(() => {
      if (!serverSettings) return;
@@ -275,7 +519,7 @@ index 0621183..6fb05d7 100644
      const getStoredInt = (key) => parseInt(localStorage.getItem(getPrefixedKey(key)), 10);
      const getStoredBool = (key, fallback = false) => {
        const stored = localStorage.getItem(getPrefixedKey(key));
-@@ -1534,6 +1600,7 @@ function Sidebar() {
+@@ -1569,6 +1645,7 @@
        const final = allowed.includes(stored) ? stored
          : (allowed.includes(s_encoder.value) || allowed.length === 0) ? s_encoder.value : allowed[0];
        setEncoder(final);
@@ -283,7 +527,7 @@ index 0621183..6fb05d7 100644
        setDynamicEncoderOptions(allowed);
      }
      const s_framerate = serverSettings.framerate;
-@@ -1543,6 +1610,7 @@ function Sidebar() {
+@@ -1578,6 +1655,7 @@
          ? Math.max(s_framerate.min, Math.min(s_framerate.max, stored))
          : s_framerate.default;
        setFramerate(final);
@@ -291,7 +535,7 @@ index 0621183..6fb05d7 100644
      }
      const s_video_bitrate = serverSettings.video_bitrate;
      if (s_video_bitrate) {
-@@ -1580,7 +1648,9 @@ function Sidebar() {
+@@ -1615,7 +1693,9 @@
          ? Math.max(s_jpeg_quality.min, Math.min(s_jpeg_quality.max, stored))
          : s_jpeg_quality.default;
        setJpegQuality(final);
@@ -301,22 +545,67 @@ index 0621183..6fb05d7 100644
      const s_paint_over_jpeg_quality = serverSettings.paint_over_jpeg_quality;
      if (s_paint_over_jpeg_quality) {
        const stored = getStoredInt("paint_over_jpeg_quality");
-@@ -1718,6 +1788,7 @@ function Sidebar() {
+@@ -1640,22 +1720,6 @@
+         : s_video_paintover_burst.default;
+       setVideoPaintoverBurstFrames(final);
+     }
+-    const s_scaling_dpi = serverSettings.scaling_dpi;
+-    if (s_scaling_dpi) {
+-      const stored = getStoredInt("scaling_dpi");
+-      const storedAllowed = s_scaling_dpi.allowed.includes(String(stored));
+-      const serverVal = parseInt(s_scaling_dpi.value, 10);
+-      const derived = deriveDpi(manualResolution(serverSettings));
+-      const willPostDerived = !storedAllowed && !s_scaling_dpi.overridden
+-        && derived !== serverVal;
+-      const final = s_scaling_dpi.overridden ? serverVal
+-        : storedAllowed ? stored
+-        : derived;
+-      setSelectedDpi(final);
+-      if (willPostDerived) {
+-        debouncedPostSetting({ scaling_dpi: derived });
+-      }
+-    }
+     const s_enable_binary_clipboard = serverSettings.enable_binary_clipboard;
+     if (s_enable_binary_clipboard) {
+       const final = s_enable_binary_clipboard.locked ? s_enable_binary_clipboard.value : getStoredBool("enable_binary_clipboard", s_enable_binary_clipboard.value);
+@@ -1670,6 +1734,16 @@
+         setUiShowLogo(s_ui_show_logo.value);
+     }
+   }, [serverSettings, debouncedPostSetting, offeredEncoders]);
++  // Capability may arrive after settings. Keep this separate so it cannot
++  // replay initialization of unrelated controls when the agent reports support.
++  useEffect(() => {
++    const stored = parseInt(localStorage.getItem(getPrefixedKey("scaling_dpi")), 10);
++    const plan = initialDpi(serverSettings?.scaling_dpi, stored,
++      deriveDpiFromDpr(), agentCapabilities.dpi_scaling_supported);
++    if (!plan) return;
++    setSelectedDpi(plan.value);
++    if (plan.post !== null) debouncedPostSetting({ scaling_dpi: plan.post });
++  }, [serverSettings?.scaling_dpi, agentCapabilities.dpi_scaling_supported, debouncedPostSetting]);
+   /* eslint-enable react-hooks/set-state-in-effect */
  
+   /**
+@@ -1754,6 +1828,7 @@
    /** UI scaling pick: persisted, so it pins across reloads and stops the startup derived-default post. */
    const handleDpiScalingChange = (event) => {
-+    if (agentCapabilities.dpi_scaling_supported !== true) return;
      const newDpi = parseInt(event.target.value, 10);
++    if (!canSetDpi(serverSettings?.scaling_dpi, agentCapabilities.dpi_scaling_supported, newDpi)) return;
      setSelectedDpi(newDpi);
      localStorage.setItem(getPrefixedKey("scaling_dpi"), newDpi.toString());
-@@ -1839,7 +1910,17 @@ function Sidebar() {
-   };
+     debouncedPostSetting({ scaling_dpi: newDpi });
+@@ -1875,12 +1950,16 @@
  
    const toggleAppsModal = () => setIsAppsModalOpen(!isAppsModalOpen);
--  const toggleFilesModal = () => setIsFilesModalOpen(!isFilesModalOpen);
-+  const toggleFilesModal = () => {
+   const toggleFilesModal = () => {
+-    // The frame reloads whenever the modal reopens, so the spinner comes back
+-    // with it; its own onLoad clears it.
+-    if (!isFilesModalOpen) {
+-      setIsFilesModalLoading(true);
+-    }
+-    setIsFilesModalOpen(!isFilesModalOpen);
 +    setIsFilesModalOpen((wasOpen) => {
 +      if (!wasOpen) {
++        setIsFilesModalLoading(true);
 +        // Recompute absolute session+token URL on every open (avoid stale/empty src).
 +        setFilesIframeSrc(
 +          withSessionToken(new URL("/api/files/", window.location.href).href),
@@ -324,11 +613,10 @@ index 0621183..6fb05d7 100644
 +      }
 +      return !wasOpen;
 +    });
-+  };
+   };
    /**
     * Pops the on-screen keyboard by focusing the core's `#keyboard-input-assist`
-    * input; the next touch on the stream overlay blurs it again.
-@@ -1876,7 +1957,7 @@ function Sidebar() {
+@@ -1918,7 +1997,7 @@
    }, []);
  
    /**
@@ -337,7 +625,7 @@ index 0621183..6fb05d7 100644
     * microphone permission so labels are readable. Output routing goes through
     * whatever the active core plays on: the WebRTC core's `<video>` element
     * (`HTMLMediaElement.setSinkId`) or the WebSocket core's AudioContext
-@@ -1891,9 +1972,9 @@ function Sidebar() {
+@@ -1933,9 +2012,9 @@
      setAudioDeviceError(null);
      setAudioInputDevices([]);
      setAudioOutputDevices([]);
@@ -350,7 +638,7 @@ index 0621183..6fb05d7 100644
      setIsOutputSelectionSupported(supportsSinkId);
      console.log(
        "Dashboard: Output device selection supported:",
-@@ -1901,15 +1982,9 @@ function Sidebar() {
+@@ -1943,15 +2022,9 @@
      );
      try {
        console.log(
@@ -368,7 +656,7 @@ index 0621183..6fb05d7 100644
        console.log("Dashboard: Devices found:", devices);
        const inputs = [];
        const outputs = [];
-@@ -2069,6 +2144,7 @@ function Sidebar() {
+@@ -2111,6 +2184,7 @@
    const handleFramerateChange = (event) => {
      const selectedFramerate = parseInt(event.target.value, 10);
      setFramerate(selectedFramerate);
@@ -376,7 +664,13 @@ index 0621183..6fb05d7 100644
      debouncedPostSetting({ framerate: selectedFramerate });
    };
    /** Video bitrate slider: its value is an index into `videoBitrateOptions`. */
-@@ -2087,6 +2163,7 @@ function Sidebar() {
+@@ -2123,12 +2197,12 @@
+   };
+   const handleAudioBitrateChange = (selectedAudioBitrate) => {
+     if (Number.isNaN(selectedAudioBitrate)) selectedAudioBitrate = DEFAULT_AUDIO_BITRATE;
+-    setAudioBitrate(selectedAudioBitrate)
+     debouncedPostSetting({ audio_bitrate: selectedAudioBitrate})
+   }
    const handleJpegQualityChange = (event) => {
      const selectedQuality = parseInt(event.target.value, 10);
      setJpegQuality(selectedQuality);
@@ -384,7 +678,7 @@ index 0621183..6fb05d7 100644
      debouncedPostSetting({ jpeg_quality: selectedQuality });
    };
    const handlePaintOverJpegQualityChange = (event) => {
-@@ -2126,18 +2203,19 @@ function Sidebar() {
+@@ -2168,49 +2242,33 @@
    const handleRateControlChange = (event) => {
      writeConditional(RATE_CONTROL_SPEC, event.target.value, setRateControlMode, { persist: true });
    };
@@ -408,16 +702,59 @@ index 0621183..6fb05d7 100644
        { type: "audioDeviceSelected", context: "output", deviceId: deviceId },
        window.location.origin
      );
-@@ -2157,7 +2235,7 @@ function Sidebar() {
-         setManualHeight(evenHeight.toString());
-         localStorage.setItem(getPrefixedKey("manual_width"), evenWidth.toString());
-         localStorage.setItem(getPrefixedKey("manual_height"), evenHeight.toString());
+   };
++  const sendDisplayRequest = (type, extra = {}) => {
++    if(!displayCatalog || displayPending) return;
++    manualResolutionDirty.current = false;
++    setDisplayPending(true);
++    postToCore({type,display_id:displayCatalog.selected_display_id,
++      catalog_revision:displayCatalog.revision,...extra}, window.location.origin);
++  };
+   const handlePresetChange = (event) => {
+-    const selectedValue = event.target.value;
+-    setPresetValue(selectedValue);
+-    if (!selectedValue) return;
+-    const parts = selectedValue.split("x");
+-    if (parts.length === 2) {
+-      const width = parseInt(parts[0], 10),
+-        height = parseInt(parts[1], 10);
+-      if (!isNaN(width) && width > 0 && !isNaN(height) && height > 0) {
+-        const evenWidth = roundDownToEven(width),
+-          evenHeight = roundDownToEven(height);
+-        setManualWidth(evenWidth.toString());
+-        setManualHeight(evenHeight.toString());
+-        localStorage.setItem(getPrefixedKey("manual_width"), evenWidth.toString());
+-        localStorage.setItem(getPrefixedKey("manual_height"), evenHeight.toString());
 -        window.postMessage(
-+        postToCore(
-           { type: "setManualResolution", width: evenWidth, height: evenHeight },
-           window.location.origin
-         );
-@@ -2186,7 +2264,8 @@ function Sidebar() {
+-          { type: "setManualResolution", width: evenWidth, height: evenHeight },
+-          window.location.origin
+-        );
+-        deriveHidpiForResolution(true);
+-        deriveDpiForResolution();
+-      } else
+-        console.error(
+-          "Dashboard: Error parsing selected resolution preset:",
+-          selectedValue
+-        );
+-    }
++    const choice = displayModes.find(item => item.value === event.target.value);
++    if(canChangeResolution && choice?.mode.selectable) sendDisplayRequest('setDisplayMode', {mode_id:choice.mode.id});
+   };
+   /**
+    * A half-typed size stays in component state: the stored `manual_width`
+@@ -2219,17 +2277,18 @@
+    * may write them.
+    */
+   const handleManualWidthChange = (event) => {
++    manualResolutionDirty.current = true;
+     setManualWidth(event.target.value);
+-    setPresetValue("");
+   };
+   const handleManualHeightChange = (event) => {
++    manualResolutionDirty.current = true;
+     setManualHeight(event.target.value);
+-    setPresetValue("");
+   };
    const handleScaleLocallyToggle = () => {
      const newState = !scaleLocally;
      setScaleLocally(newState);
@@ -427,7 +764,47 @@ index 0621183..6fb05d7 100644
        { type: "setScaleLocally", value: newState },
        window.location.origin
      );
-@@ -2245,7 +2324,8 @@ function Sidebar() {
+@@ -2250,32 +2309,17 @@
+     writeConditional(HIDPI_SPEC, !manual, setHidpiEnabled, { persist: false });
+   };
+   /**
+-   * A resolution the operator sets carries its own UI-scaling default, since
+-   * the framebuffer asked for decides how large the desktop draws its UI. Not
+-   * stored, so it stays a default: a stored pick, or a locked or
+-   * operator-explicit server value, outranks it as it does at connect.
+-   */
+-  const deriveDpiForResolution = () => {
+-    const s = serverSettings?.scaling_dpi;
+-    if (s?.locked || s?.overridden) return;
+-    if (s?.allowed?.includes(String(parseInt(readStored("scaling_dpi"), 10)))) return;
+-    const derived = deriveDpi(manualResolution(serverSettings));
+-    setSelectedDpi(derived);
+-    debouncedPostSetting({ scaling_dpi: derived });
+-  };
+-  /**
+-   * Reset-to-window also returns UI scaling to its derived default, which with
+-   * no resolution of its own left to read is the local display's scaling: the
+-   * pinned client choice is dropped so the derived default governs again, and
+-   * the value propagates like a user change. Locked or operator-explicit
+-   * (overridden) values govern scaling instead, the same gate as the startup
+-   * derived-default post.
++   * Reset-to-window also returns UI scaling to its derived
++   * (`devicePixelRatio`) default: the pinned client choice is dropped so the
++   * derived default governs again, and the value propagates like a user
++   * change. Locked or operator-explicit (overridden) values govern scaling
++   * instead, the same gate as the startup derived-default post.
+    */
+   const resetDpiToDerivedDefault = () => {
+     const s = serverSettings?.scaling_dpi;
+-    if (s?.locked || s?.overridden) return;
++    const derived = deriveDpiFromDpr();
++    if (!canSetDpi(s, agentCapabilities.dpi_scaling_supported, derived)) return;
+     localStorage.removeItem(getPrefixedKey("scaling_dpi"));
+-    const derived = deriveDpi(manualResolution(serverSettings));
+     setSelectedDpi(derived);
+     debouncedPostSetting({ scaling_dpi: derived });
+   };
+@@ -2303,98 +2347,80 @@
    const handleAntiAliasingToggle = () => {
      const newState = !antiAliasing;
      setAntiAliasing(newState);
@@ -437,7 +814,27 @@ index 0621183..6fb05d7 100644
        { type: "setAntiAliasing", value: newState },
        window.location.origin
      );
-@@ -2262,6 +2342,8 @@ function Sidebar() {
+   };
+   /**
+-   * Browser cursors toggle. The core owns persistence: the new preference is
+-   * propagated and the core reports the effective value back. The next value
++   * Browser cursors toggle. Save the user's explicit choice and propagate it;
++   * the core reports the effective value back. The next value
+    * derives from the displayed one: while multi-monitor forces the toggle on
+    * the base preference may be off, and negating the base would silently
+    * persist the forced value over the user's real choice.
+    */
+   const handleUseBrowserCursorsToggle = () => {
+-    writeConditional(USE_BROWSER_CURSORS_SPEC, !(effectiveCursor ?? use_browser_cursors), setUseBrowserCursors, { persist: false });
+-  };
+-  /** Raw pointer motion toggle; the core owns persistence, as for browser cursors. */
+-  const handleRawPointerMotionToggle = () => {
+-    writeConditional(RAW_POINTER_MOTION_SPEC, !rawPointerMotion, setRawPointerMotion, { persist: false });
+-  };
+-  /** Command-as-Control toggle; the core owns persistence, as above. */
+-  const handleMacCmdAsCtrlToggle = () => {
+-    writeConditional(MAC_CMD_AS_CTRL_SPEC, !macCmdAsCtrl, setMacCmdAsCtrl, { persist: false });
++    writeConditional(USE_BROWSER_CURSORS_SPEC, !(effectiveCursor ?? use_browser_cursors), setUseBrowserCursors, { persist: true });
    };
    const handleEnableBinaryClipboardToggle = () => {
      const newState = !enableBinaryClipboard;
@@ -446,35 +843,28 @@ index 0621183..6fb05d7 100644
      setEnableBinaryClipboard(newState);
      debouncedPostSetting({ enable_binary_clipboard: newState });
    };
-@@ -2279,7 +2361,7 @@ function Sidebar() {
-     setPresetValue("");
-     localStorage.setItem(getPrefixedKey("manual_width"), evenWidth.toString());
-     localStorage.setItem(getPrefixedKey("manual_height"), evenHeight.toString());
+   const handleSetManualResolution = () => {
+-    const width = parseInt(manual_width.trim(), 10),
+-      height = parseInt(manual_height.trim(), 10);
+-    if (isNaN(width) || width <= 0 || isNaN(height) || height <= 0) {
+-      alert(t("alerts.invalidResolution"));
+-      return;
+-    }
+-    const evenWidth = roundDownToEven(width),
+-      evenHeight = roundDownToEven(height);
+-    setManualWidth(evenWidth.toString());
+-    setManualHeight(evenHeight.toString());
+-    setPresetValue("");
+-    localStorage.setItem(getPrefixedKey("manual_width"), evenWidth.toString());
+-    localStorage.setItem(getPrefixedKey("manual_height"), evenHeight.toString());
 -    window.postMessage(
-+    postToCore(
-       { type: "setManualResolution", width: evenWidth, height: evenHeight },
-       window.location.origin
-     );
-@@ -2291,43 +2373,44 @@ function Sidebar() {
-     setPresetValue("");
-     localStorage.removeItem(getPrefixedKey("manual_width"));
-     localStorage.removeItem(getPrefixedKey("manual_height"));
--    window.postMessage(
-+    postToCore(
-       { type: "resetResolutionToWindow" },
-       window.location.origin
-     );
-     resetHidpiToDerivedDefault();
-     resetDpiToDerivedDefault();
-   };
--  const handleVideoToggle = () =>
--    window.postMessage(
--      { type: "pipelineControl", pipeline: "video", enabled: !isVideoActive },
--      window.location.origin
--    );
--  const handleAudioToggle = () =>
--    window.postMessage(
--      { type: "pipelineControl", pipeline: "audio", enabled: !isAudioActive },
+-      { type: "setManualResolution", width: evenWidth, height: evenHeight },
++    const choice = displayModes.find(item => item.mode.width === Number(manual_width) && item.mode.height === Number(manual_height));
++    if(canChangeResolution && choice?.mode.selectable) sendDisplayRequest('setDisplayMode', {mode_id:choice.mode.id});
++  };
++  const handleResetResolution = () => {
++    if(canChangeResolution) sendDisplayRequest('setBestFit');
++  };
 +  const handleVideoToggle = () => {
 +    const enabled = !isVideoActive;
 +    setIsVideoActive(enabled);
@@ -482,13 +872,17 @@ index 0621183..6fb05d7 100644
 +      { type: "pipelineControl", pipeline: "video", enabled },
        window.location.origin
      );
--  const handleMicrophoneToggle = () =>
+-    deriveHidpiForResolution(true);
+-    deriveDpiForResolution();
+-  };
+-  const handleResetResolution = () => {
+-    setManualWidth("");
+-    setManualHeight("");
+-    setPresetValue("");
+-    localStorage.removeItem(getPrefixedKey("manual_width"));
+-    localStorage.removeItem(getPrefixedKey("manual_height"));
 -    window.postMessage(
--      {
--        type: "pipelineControl",
--        pipeline: "microphone",
--        enabled: !isMicrophoneActive,
--      },
+-      { type: "resetResolutionToWindow" },
 +  };
 +  const handleAudioToggle = () => {
 +    const enabled = !isAudioActive;
@@ -497,22 +891,58 @@ index 0621183..6fb05d7 100644
 +      { type: "pipelineControl", pipeline: "audio", enabled },
        window.location.origin
      );
--  const handleWebcamToggle = () =>
+-    resetHidpiToDerivedDefault();
+-    resetDpiToDerivedDefault();
+-  };
+-  const handleVideoToggle = () =>
+-    window.postMessage(
+-      { type: "pipelineControl", pipeline: "video", enabled: !isVideoActive },
+-      window.location.origin
+-    );
+-  const handleAudioToggle = () =>
+-    window.postMessage(
+-      { type: "pipelineControl", pipeline: "audio", enabled: !isAudioActive },
+-      window.location.origin
+-    );
+-  const handleMicrophoneToggle = () =>
 -    window.postMessage(
 +  };
-+  const handleMicrophoneToggle = () => microphoneSession.toggle(selectedInputDeviceId);
++  const showMediaUnavailable = (kind) => {
++    const id = `unsupported-${kind}`;
++    setNotifications(prev => [...prev.filter(n => n.id !== id), {
++      id, fileName: kind === 'microphone' ? 'Microphone' : 'Camera', status: 'warn',
++      message: `This PC has not confirmed ${kind === 'microphone' ? 'microphone' : 'camera'} forwarding support. Your phone cannot send it to Windows yet.`,
++      timestamp: Date.now(), fadingOut: false,
++    }].slice(-MAX_NOTIFICATIONS));
++    scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++  };
++  const handleMicrophoneToggle = () => {
++    if (!isMicrophoneActive && !microphoneReady) return showMediaUnavailable('microphone');
++    return microphoneSession.toggle(selectedInputDeviceId);
++  };
 +  const handleWebcamToggle = () => {
++    if (!isWebcamActive && agentCapabilities.webcam_supported !== true) return showMediaUnavailable('webcam');
 +    const enabled = !isWebcamActive;
 +    setIsWebcamActive(enabled);
 +    postToCore(
        {
          type: "pipelineControl",
-         pipeline: "webcam",
--        enabled: !isWebcamActive,
+-        pipeline: "microphone",
+-        enabled: !isMicrophoneActive,
++        pipeline: "webcam",
 +        enabled,
        },
        window.location.origin
      );
+-  const handleWebcamToggle = () =>
+-    window.postMessage(
+-      {
+-        type: "pipelineControl",
+-        pipeline: "webcam",
+-        enabled: !isWebcamActive,
+-      },
+-      window.location.origin
+-    );
 +  };
    const handleGamepadToggle = () =>
 -    window.postMessage(
@@ -520,7 +950,7 @@ index 0621183..6fb05d7 100644
        { type: "gamepadControl", enabled: !isGamepadEnabled },
        window.location.origin
      );
-@@ -2343,14 +2426,16 @@ function Sidebar() {
+@@ -2410,14 +2436,16 @@
    };
    const handleGamingModeRequest = () => {
      if (document.fullscreenElement) exitFullscreen();
@@ -530,9 +960,10 @@ index 0621183..6fb05d7 100644
    const handleBrowserFullscreen = () => {
      if (document.fullscreenElement) exitFullscreen();
 -    else window.postMessage({ type: "requestFullscreen" }, window.location.origin);
-+    else postToCore({ type: "requestFullscreen" }, window.location.origin);
-   };
+-  };
 -  const handleClipboardChange = (event) =>
++    else postToCore({ type: "requestFullscreen" }, window.location.origin);
++  };
 +  const handleClipboardChange = (event) => {
 +    clipboardDeliveryRef.current?.clear();
      setDashboardClipboardContent(event.target.value);
@@ -540,7 +971,7 @@ index 0621183..6fb05d7 100644
    const clipboardImageInputRef = useRef(null);
    /**
     * Hands a picked image to the core's `clipboardImageUpdate` path (a File
-@@ -2361,12 +2446,13 @@ function Sidebar() {
+@@ -2428,12 +2456,13 @@
    const handleClipboardImageUpload = (event) => {
      const file = event.target.files && event.target.files[0];
      if (file && file.type.startsWith("image/")) {
@@ -556,7 +987,7 @@ index 0621183..6fb05d7 100644
          {
            type: "fileUpload",
            payload: {
-@@ -2387,7 +2473,7 @@ function Sidebar() {
+@@ -2454,7 +2483,7 @@
    /** Pushes the edited clipboard text to the server on blur, never a truncated preview. */
    const handleClipboardBlur = (event) => {
      if (dashboardClipboardTruncated) return;
@@ -565,7 +996,7 @@ index 0621183..6fb05d7 100644
        { type: "clipboardUpdateFromUI", text: event.target.value },
        window.location.origin
      );
-@@ -2431,7 +2517,7 @@ function Sidebar() {
+@@ -2498,7 +2527,7 @@
        let response = await doSwitch();
        if (response.status === 401) {
          const entered = (typeof window !== "undefined" && window.prompt)
@@ -574,7 +1005,7 @@ index 0621183..6fb05d7 100644
            : null;
          if (entered && entered.trim()) {
            try { sessionStorage.setItem(MASTER_TOKEN_KEY, entered.trim()); } catch { /* sessionStorage unavailable */ }
-@@ -2445,7 +2531,7 @@ function Sidebar() {
+@@ -2512,7 +2541,7 @@
        }
        await response.json();
        setStreamMode(newMode);
@@ -583,7 +1014,7 @@ index 0621183..6fb05d7 100644
          { type: "mode", mode: newMode },
          window.location.origin
        );
-@@ -2466,7 +2552,7 @@ function Sidebar() {
+@@ -2533,7 +2562,7 @@
      setIsTouchGamepadActive(newActiveState);
  
      if (newActiveState && !isTouchGamepadSetup) {
@@ -592,7 +1023,7 @@ index 0621183..6fb05d7 100644
          {
            type: "TOUCH_GAMEPAD_SETUP",
            payload: { targetDivId: TOUCH_GAMEPAD_HOST_DIV_ID, visible: true },
-@@ -2480,7 +2566,7 @@ function Sidebar() {
+@@ -2547,7 +2576,7 @@
          "visible: true"
        );
      } else if (isTouchGamepadSetup) {
@@ -601,7 +1032,7 @@ index 0621183..6fb05d7 100644
          {
            type: "TOUCH_GAMEPAD_VISIBILITY",
            payload: {
-@@ -2503,7 +2589,7 @@ function Sidebar() {
+@@ -2570,7 +2599,7 @@
      setIsTrackpadModeActive(newActiveState);
      const message = newActiveState ? "touchinput:trackpad" : "touchinput:touch";
      console.log(`Dashboard: Toggling trackpad mode. Sending: ${message}`);
@@ -610,7 +1041,7 @@ index 0621183..6fb05d7 100644
    }, [isTrackpadModeActive]);
  
    /** Tooltip text for a stats gauge. */
-@@ -2512,6 +2598,7 @@ function Sidebar() {
+@@ -2579,6 +2608,7 @@
        const memNA = t("sections.stats.tooltipMemoryNA");
        switch (itemKey) {
          case "cpu":
@@ -618,7 +1049,7 @@ index 0621183..6fb05d7 100644
            return t("sections.stats.tooltipCpu", {
              value: cpuPercent.toFixed(1),
            });
-@@ -2539,11 +2626,15 @@ function Sidebar() {
+@@ -2606,11 +2636,15 @@
          }
          case "fps":
            return t("sections.stats.tooltipFps", { value: clientFps });
@@ -636,7 +1067,7 @@ index 0621183..6fb05d7 100644
            return t("sections.stats.tooltipLatency", { value: latencyMs.toFixed(1) }, `Latency: ${latencyMs.toFixed(1)} ms`);
          default:
            return "";
-@@ -2560,6 +2651,8 @@ function Sidebar() {
+@@ -2627,6 +2661,8 @@
        gpuMemTotal,
        clientFps,
        audioLevel,
@@ -645,7 +1076,7 @@ index 0621183..6fb05d7 100644
        bandwidthMbps,
        latencyMs,
      ]
-@@ -2608,11 +2701,11 @@ function Sidebar() {
+@@ -2675,11 +2711,11 @@
        const cs = window.system_stats,
          su = cs?.mem_used ?? null,
          st = cs?.mem_total ?? null;
@@ -659,7 +1090,7 @@ index 0621183..6fb05d7 100644
        );
        const cgs = window.gpu_stats,
          gp = cgs?.gpu_percent ?? cgs?.utilization_gpu ?? 0;
-@@ -2629,33 +2722,259 @@ function Sidebar() {
+@@ -2696,21 +2732,151 @@
        setGpuMemPercent(
          gu !== null && gt !== null && gt > 0 ? (gu / gt) * 100 : 0
        );
@@ -687,7 +1118,7 @@ index 0621183..6fb05d7 100644
      const intervalId = setInterval(readStats, STATS_READ_INTERVAL_MS);
      return () => clearInterval(intervalId);
    }, [isOpen]);
- 
++
 +  // The original core defers browser-blocked clipboard writes until a gesture.
 +  // Keep the same panel and report actual browser outcomes in existing notices.
 +  useEffect(() => {
@@ -753,6 +1184,8 @@ index 0621183..6fb05d7 100644
 +  useEffect(() => {
 +    const frame = document.getElementById('jolee-core');
 +    const refresh = () => {
++      setSasFailure(null);
++      removeNotification('secure-desktop-result');
 +      setSasState({ available: false, pending: false });
 +      postToCore({ type: 'getSasState' }, window.location.origin);
 +    };
@@ -760,8 +1193,10 @@ index 0621183..6fb05d7 100644
 +      if (event.origin !== window.location.origin || event.source !== frame?.contentWindow) return;
 +      const message = event.data;
 +      if (message?.type === 'status' && message.state !== 'paired') setSasState({ available: false, pending: false });
-+      if (message?.type === 'sasState' && typeof message.available === 'boolean' && typeof message.pending === 'boolean')
++      if (message?.type === 'sasState' && typeof message.available === 'boolean' && typeof message.pending === 'boolean') {
++        if (message.pending) { setSasFailure(null); removeNotification('secure-desktop-result'); }
 +        setSasState({ available: message.available && !message.pending, pending: message.pending });
++      }
 +      if (message?.type === 'secureDesktopResult') {
 +        const texts = {
 +          warning: {
@@ -782,11 +1217,14 @@ index 0621183..6fb05d7 100644
 +        };
 +        if (typeof message.status !== 'string' || typeof message.code !== 'string' || !Object.hasOwn(texts, message.status) || !Object.hasOwn(texts[message.status], message.code)) return;
 +        const id = 'secure-desktop-result';
++        if (message.status === 'failed') setSasFailure(texts.failed[message.code]);
++        if (message.status === 'returned') setSasFailure(null);
++        removeNotification(id); // Cancel an earlier warning's expiry before replacing it.
 +        setNotifications(prev => [...prev.filter(n => n.id !== id), {
 +          id, fileName: 'Remote screen', status: message.status === 'returned' ? 'notice' : 'warn',
 +          message: texts[message.status][message.code], timestamp: Date.now(), fadingOut: false,
 +        }].slice(-MAX_NOTIFICATIONS));
-+        scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
++        if (message.status !== 'failed') scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
 +        return;
 +      }
 +      if (message?.type !== 'sasResult' || !['invoked', 'rejected', 'uncertain'].includes(message.status)) return;
@@ -804,11 +1242,11 @@ index 0621183..6fb05d7 100644
 +    frame?.addEventListener('load', refresh);
 +    refresh();
 +    return () => { window.removeEventListener('message', receive); frame?.removeEventListener('load', refresh); };
-+  }, [scheduleNotificationRemoval]);
-+
++  }, [scheduleNotificationRemoval, removeNotification]);
+ 
    /** The core message listener; the module docblock lists the message types handled. */
    useEffect(() => {
-     const handleWindowMessage = (event) => {
+@@ -2718,11 +2884,115 @@
        if (event.origin !== window.location.origin) return;
        const message = event.data;
        if (typeof message === "object" && message !== null) {
@@ -879,6 +1317,7 @@ index 0621183..6fb05d7 100644
 +            apply_failed: 'The PC could not apply the resolution.',
 +            verify_failed: 'The PC could not verify the resulting resolution.',
 +            restore_failed: 'The PC could not restore the previous resolution.',
++            catalog_changed: 'The display list changed or is unavailable. Wait for the PC to report its current displays.',
 +          };
 +          const size = message.effective;
 +          if (message.status === 'applied' && (!Number.isInteger(size?.width) || !Number.isInteger(size?.height) || size.width < 1 || size.height < 1)) return;
@@ -926,7 +1365,7 @@ index 0621183..6fb05d7 100644
            if (message.webcam !== undefined)
              setIsWebcamActive(message.webcam);
          } else if (message.type === "effectiveCursorState" && typeof message.value === "boolean") {
-@@ -2678,8 +2997,7 @@ function Sidebar() {
+@@ -2745,8 +3015,7 @@
          } else if (message.type === "sidebarButtonStatusUpdate") {
            if (message.video !== undefined) setIsVideoActive(message.video);
            if (message.audio !== undefined) setIsAudioActive(message.audio);
@@ -936,7 +1375,7 @@ index 0621183..6fb05d7 100644
            if (message.webcam !== undefined)
              setIsWebcamActive(message.webcam);
            if (message.gamepad !== undefined)
-@@ -2690,7 +3008,8 @@ function Sidebar() {
+@@ -2757,7 +3026,8 @@
              setDashboardClipboardTruncated(message.truncated === true);
            }
          } else if (message.type === "audioDeviceSelected") {
@@ -946,7 +1385,24 @@ index 0621183..6fb05d7 100644
              if (message.context === "input")
                setSelectedInputDeviceId(message.deviceId);
              else if (message.context === "output")
-@@ -2899,7 +3218,7 @@ function Sidebar() {
+@@ -2803,13 +3073,13 @@
+           // An unknown or absent code keeps the raw message for third-party
+           // consumers: the translator answers a miss with the key itself.
+           const codeKey =
+-            typeof code === "string" &&
+-            (code.startsWith("clipboard") || code === "commandFailed" || code.startsWith("keyboardLock"))
++            typeof code === "string" && (code.startsWith("clipboard") || code === "commandFailed")
+               ? `notifications.${code}`
+               : null;
+           const codeMsg = codeKey ? t(codeKey, { detail: errMsg }) : null;
+           const localizedMsg = codeMsg && codeMsg !== codeKey ? codeMsg : errMsg;
+-          const id = fileName;
++          const id = typeof message.payload.requestId === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(message.payload.requestId)
++            ? `upload:${message.payload.requestId}` : fileName;
+           setNotifications((prev) => {
+             const exIdx = prev.findIndex((n) => n.id === id);
+             if (exIdx === -1) {
+@@ -2967,7 +3237,7 @@
      gaugeCircumference
    );
    const audioLevelOffset = calculateGaugeOffset(
@@ -955,21 +1411,37 @@ index 0621183..6fb05d7 100644
      gaugeRadius,
      gaugeCircumference
    );
-@@ -2932,7 +3251,12 @@ function Sidebar() {
+@@ -2989,18 +3259,19 @@
+     gaugeRadius,
+     gaugeCircumference
    );
+-  const translatedCommonResolutions = commonResolutionValues.map(
+-    (value, index) => ({
+-      value: value,
+-      text:
+-        index === 0
+-          ? t("sections.screen.resolutionPresetSelect")
+-          : raw?.resolutionPresets?.[value] || value,
+-    })
+-  );
++  const translatedCommonResolutions = [{value:'',text:displayCatalog ? 'Select resolution' : 'Windows display modes unavailable',disabled:true},
++    ...displayModes.map(({value,mode,current}) => ({value,disabled:!mode.selectable,
++      text:`${mode.width} × ${mode.height}${current ? ' (Current)' : ''}${!mode.selectable ? ` — ${mode.reason === 'capture_limit' ? 'Exceeds capture limit' : 'Unavailable for this session'}` : ''}`}))];
  
    /** One encoder knob serves both transports; CBR/CRF applies to every H.264 encoder on both. */
 -  const activeEncoder = encoder;
-+  const activeEncoder = agentCapabilities.active_encoder || '';
++  const activeEncoder = agentCapabilities.supported_encoders?.includes(agentCapabilities.active_encoder)
++    ? agentCapabilities.active_encoder : '';
 +  const effectiveJpegQuality = activeEncoder === 'jpeg' && Number.isInteger(agentCapabilities.jpeg_quality_effective)
 +    && agentCapabilities.jpeg_quality_effective >= 1 && agentCapabilities.jpeg_quality_effective <= 100
 +    ? agentCapabilities.jpeg_quality_effective : null;
 +  const confirmedEncoderOptions = agentCapabilities.supported_encoders?.length
-+    ? agentCapabilities.supported_encoders : dynamicEncoderOptions;
++    ? offeredEncoders(agentCapabilities.supported_encoders).filter(value => dynamicEncoderOptions.includes(value))
++    : [];
    const H264_ENCODERS = ["h264enc", "h264enc-striped", "nvh264enc"];
    const showFPS = [
      "jpeg",
-@@ -2941,7 +3265,7 @@ function Sidebar() {
+@@ -3009,7 +3280,7 @@
    ].includes(encoder);
    const showCRF = H264_ENCODERS.includes(activeEncoder);
    const showH264Options = H264_ENCODERS.includes(activeEncoder);
@@ -978,7 +1450,7 @@ index 0621183..6fb05d7 100644
    const showPaintOverQualityToggle = showH264Options || showJpegOptions;
    /**
     * The mode the encoder is actually using, which picks the quality slider:
-@@ -3030,21 +3354,9 @@ function Sidebar() {
+@@ -3098,21 +3369,9 @@
        <div className={sidebarClasses}>
            <div className="sidebar-header">
              {uiShowLogo && (
@@ -1002,27 +1474,31 @@ index 0621183..6fb05d7 100644
              <div className="header-controls">
              <div
                className={`theme-toggle ${theme}`}
-@@ -3119,7 +3431,8 @@ function Sidebar() {
+@@ -3187,7 +3446,7 @@
                <button
                  className={`action-button ${isMicrophoneActive ? "active" : ""}`}
                  onClick={handleMicrophoneToggle}
 -                title={t(
-+                disabled={!isMicrophoneActive && !microphoneReady}
 +                title={!microphoneReady ? 'Microphone forwarding requires a connected PC with confirmed support.' : t(
                    isMicrophoneActive
                      ? "buttons.microphoneDisableTitle"
                      : "buttons.microphoneEnableTitle"
-@@ -3132,7 +3445,8 @@ function Sidebar() {
+@@ -3200,11 +3459,12 @@
                <button
                  className={`action-button ${isWebcamActive ? "active" : ""}`}
                  onClick={handleWebcamToggle}
 -                title={t(
-+                disabled={!isWebcamActive && agentCapabilities.webcam_supported !== true}
++                data-webcam-state={agentCapabilities.webcam_capture?.state || 'unknown'}
 +                title={agentCapabilities.webcam_supported !== true ? 'The PC has not confirmed webcam forwarding support.' : t(
                    isWebcamActive
                      ? "buttons.webcamDisableTitle"
                      : "buttons.webcamEnableTitle"
-@@ -3265,11 +3579,12 @@ function Sidebar() {
+-                )}
++                ) + '\nPC camera: ' + (agentCapabilities.webcam_capture?.state || 'unknown')}
+               >
+                 <WebcamIcon />
+               </button>
+@@ -3333,11 +3593,12 @@
                      </label>
                      <select
                        id="encoderSelect"
@@ -1030,15 +1506,15 @@ index 0621183..6fb05d7 100644
 +                      value={activeEncoder}
                        onChange={handleEncoderChange}
 -                      disabled={!serverSettings || dynamicEncoderOptions.length <= 1}
-+                      disabled={!serverSettings || confirmedEncoderOptions.length <= 1}
++                      disabled={!serverSettings || !activeEncoder || confirmedEncoderOptions.length <= 1}
                      >
 -                      {dynamicEncoderOptions.map((enc) => (
-+                      {!activeEncoder && <option value="" disabled>Awaiting encoder confirmation</option>}
++                      {!activeEncoder && <option value="" disabled>{encoderLoadExpired ? 'Unavailable - reconnect to retry' : 'Loading...'}</option>}
 +                      {confirmedEncoderOptions.map((enc) => (
                          <option key={enc} value={enc}>
                            {displayLabel(enc)}
                          </option>
-@@ -3361,6 +3676,9 @@ function Sidebar() {
+@@ -3429,6 +3690,9 @@
                            {t("sections.video.jpegQualityLabel", {
                              jpegQuality: jpeg_quality,
                            })}
@@ -1048,7 +1524,68 @@ index 0621183..6fb05d7 100644
                          </label>
                          <input
                            type="range"
-@@ -3645,9 +3963,10 @@ function Sidebar() {
+@@ -3644,12 +3908,9 @@
+                           className={`toggle-button-sidebar ${hidpiEnabled ? "active" : ""}`}
+                           onClick={handleHidpiToggle}
+                           aria-pressed={hidpiEnabled}
+-                          disabled={serverSettings?.enable_resize?.value === false
+-                            || conditionalCtx.manualActive}
++                          disabled={serverSettings?.enable_resize?.value === false}
+                           title={serverSettings?.enable_resize?.value === false
+                             ? t("sections.screen.hidpiDisabledNoResizeTitle", "Resolution changes are disabled by the server (enable_resize)")
+-                            : conditionalCtx.manualActive
+-                            ? t("sections.screen.hidpiDisabledManualTitle", "A manual resolution is streamed as exact pixels either way; UI scaling sizes its desktop")
+                             : t(hidpiEnabled ? "sections.screen.hidpiDisableTitle" : "sections.screen.hidpiEnableTitle",
+                                 hidpiEnabled ? "Disable HiDPI (Use CSS Scaling)" : "Enable HiDPI (Pixel Perfect)")}
+                         >
+@@ -3702,44 +3963,8 @@
+                           className={`toggle-button-sidebar ${(effectiveCursor !== null ? effectiveCursor : use_browser_cursors) ? "active" : ""}`}
+                           onClick={handleUseBrowserCursorsToggle}
+                           aria-pressed={effectiveCursor !== null ? effectiveCursor : use_browser_cursors}
+-                          title={t(use_browser_cursors ? "sections.screen.useNativeCursorStylesDisableTitle" : "sections.screen.useNativeCursorStylesEnableTitle",
+-                                  use_browser_cursors ? "Use canvas cursor rendering (Paint to canvas)" : "Use CSS cursor rendering (Replace system cursors)")}
+-                        >
+-                          <span className="toggle-button-sidebar-knob"></span>
+-                        </button>
+-                      </div>
+-                    )}
+-                    {(renderableSettings.rawPointerMotion ?? true) && (
+-                      <div className="dev-setting-item toggle-item">
+-                        <label htmlFor="rawPointerMotionToggle">
+-                          {t("sections.screen.rawPointerMotionLabel", "Raw pointer motion")}
+-                        </label>
+-                        <button
+-                          id="rawPointerMotionToggle"
+-                          className={`toggle-button-sidebar ${rawPointerMotion ? "active" : ""}`}
+-                          onClick={handleRawPointerMotionToggle}
+-                          aria-pressed={rawPointerMotion}
+-                          title={t(rawPointerMotion ? "sections.screen.rawPointerMotionDisableTitle" : "sections.screen.rawPointerMotionEnableTitle",
+-                                  rawPointerMotion ? "Keep this device's pointer acceleration under pointer lock"
+-                                    : "Ask the browser for unaccelerated movement under pointer lock (granted on Windows and macOS, refused on Linux and Android)")}
+-                        >
+-                          <span className="toggle-button-sidebar-knob"></span>
+-                        </button>
+-                      </div>
+-                    )}
+-                    {(renderableSettings.macCmdAsCtrl ?? false) && (
+-                      <div className="dev-setting-item toggle-item">
+-                        <label htmlFor="macCmdAsCtrlToggle">
+-                          {t("sections.screen.macCmdAsCtrlLabel", "Command sends Control")}
+-                        </label>
+-                        <button
+-                          id="macCmdAsCtrlToggle"
+-                          className={`toggle-button-sidebar ${macCmdAsCtrl ? "active" : ""}`}
+-                          onClick={handleMacCmdAsCtrlToggle}
+-                          aria-pressed={macCmdAsCtrl}
+-                          title={t(macCmdAsCtrl ? "sections.screen.macCmdAsCtrlDisableTitle" : "sections.screen.macCmdAsCtrlEnableTitle",
+-                                  macCmdAsCtrl ? "Send Command as the Super key the session's window manager may bind"
+-                                    : "Send Command chords as their Control chords, so Cmd+C copies remotely")}
++                          title={t(use_browser_cursors ? "sections.screen.drawnCursorEnableTitle" : "sections.screen.localNativeCursorEnableTitle",
++                                  use_browser_cursors ? "Draw the remote cursor over the screen" : "Use this device's native pointer appearance")}
+                         >
+                           <span className="toggle-button-sidebar-knob"></span>
+                         </button>
+@@ -3752,9 +3977,10 @@
                          </label>
                          <select
                            id="uiScalingSelect"
@@ -1060,7 +1597,82 @@ index 0621183..6fb05d7 100644
                              || serverSettings.scaling_dpi?.overridden === true}
                          >
                            {(serverSettings?.scaling_dpi?.allowed || []).map((dpiValue) => {
-@@ -3793,9 +4112,10 @@ function Sidebar() {
+@@ -3774,21 +4000,36 @@
+                 {(!serverSettings?.manual_resolution?.locked) && (
+                   <>
+                     <div className="dev-setting-item">
++                      <label htmlFor="remoteDisplaySelect">Remote monitor</label>
++                      <select id="remoteDisplaySelect" value={displayCatalog?.selected_display_id || ''}
++                        disabled={!displayCatalog || displayPending}
++                        onChange={event => sendDisplayRequest('selectRemoteDisplay', {display_id:event.target.value})}>
++                        {!displayCatalog && <option value="">Windows displays unavailable</option>}
++                        {displayCatalog && !remoteDisplay && <option value="" disabled>Select an available monitor</option>}
++                        {displayCatalog?.displays.map(display => <option key={display.id} value={display.id}>
++                          {display.label}{display.primary ? ' (Primary)' : ''}
++                        </option>)}
++                      </select>
++                    </div>
++                    <div className="dev-setting-item">
+                       <label htmlFor="resolutionPresetSelect">
+                         {t("sections.screen.presetLabel")}
+                       </label>
+                       <select
+                         id="resolutionPresetSelect"
+-                        value={presetValue}
++                        value={displayModes.some(choice => choice.value === currentResolution) ? currentResolution : ''}
++                        disabled={!canChangeResolution}
+                         onChange={handlePresetChange}
+                       >
+                         {translatedCommonResolutions.map((res, i) => (
+-                          <option key={i} value={res.value} disabled={i === 0}>
++                          <option key={i} value={res.value} disabled={res.disabled}>
+                             {res.text}
+                           </option>
+                         ))}
+                       </select>
+                     </div>
++                    {displayCatalog && !remoteDisplay && <p role="status">The selected monitor is disconnected. Select an available monitor.</p>}
++                    {displayPending && <p role="status">Waiting for the PC to confirm the display change…</p>}
+                     <div className="resolution-manual-inputs">
+                       <div className="dev-setting-item manual-input-item">
+                         <label htmlFor="manualWidthInput">
+@@ -3800,7 +4041,6 @@
+                           id="manualWidthInput"
+                           min="1"
+                           step="2"
+-                          placeholder={t("sections.screen.widthPlaceholder")}
+                           value={manual_width}
+                           onChange={handleManualWidthChange}
+                         />
+@@ -3815,7 +4055,6 @@
+                           id="manualHeightInput"
+                           min="1"
+                           step="2"
+-                          placeholder={t("sections.screen.heightPlaceholder")}
+                           value={manual_height}
+                           onChange={handleManualHeightChange}
+                         />
+@@ -3825,14 +4064,18 @@
+                       <button
+                         className="resolution-button"
+                         onClick={handleSetManualResolution}
++                        disabled={!canChangeResolution || !displayModes.some(choice => choice.mode.selectable && choice.mode.width === Number(manual_width) && choice.mode.height === Number(manual_height))}
++                        title="Choose a resolution advertised by this Windows monitor"
+                       >
+                         {t("sections.screen.setManualButton")}
+                       </button>
+                       <button
+                         className="resolution-button reset-button"
+                         onClick={handleResetResolution}
++                        disabled={!canChangeResolution}
++                        title="Choose the supported resolution that best fits this window"
+                       >
+-                        {t("sections.screen.resetButton")}
++                        Set to Best Fit
+                       </button>
+                     </div>
+                   </>
+@@ -3900,9 +4143,10 @@
                        </label>
                        <select
                          id="audioInputSelect"
@@ -1072,7 +1684,7 @@ index 0621183..6fb05d7 100644
                          className="audio-device-select"
                        >
                          {audioInputDevices.map((d) => (
-@@ -3828,7 +4148,7 @@ function Sidebar() {
+@@ -3935,7 +4179,7 @@
                      {(renderableSettings.audio_bitrate ?? true) && (
                        <div className="dev-setting-item">
                          <label htmlFor="audioBitrateSlider">
@@ -1081,16 +1693,16 @@ index 0621183..6fb05d7 100644
                              bitrate: audioBitrate/ 1000,
                            })}
                          </label>
-@@ -3840,7 +4160,7 @@ function Sidebar() {
+@@ -3947,7 +4191,7 @@
                            step={1}
                            value={Math.max(0, audioBitrateChoices.indexOf(audioBitrate))}
                            onChange={(e) => handleAudioBitrateChange(audioBitrateChoices[parseInt(e.target.value, 10)])}
 -                          disabled={!serverSettings || (serverSettings.audio_bitrate?.allowed?.length ?? 0) <= 1}
-+                          disabled={agentCapabilities.audio_bitrate_supported === false || !serverSettings || (serverSettings.audio_bitrate?.allowed?.length ?? 0) <= 1}
++                          disabled={agentCapabilities.audio_bitrate_supported !== true || (agentCapabilities.audio_bitrate_choices?.length ?? 0) <= 1}
                          />
                        </div>
                      )}
-@@ -3914,9 +4234,9 @@ function Sidebar() {
+@@ -4021,9 +4265,9 @@
                              fill="var(--sidebar-text)"
                              fontWeight="bold"
                            >
@@ -1102,7 +1714,7 @@ index 0621183..6fb05d7 100644
                            </text>
                          </svg>
                          <div className="gauge-label">
-@@ -3963,10 +4283,9 @@ function Sidebar() {
+@@ -4070,10 +4314,9 @@
                              fill="var(--sidebar-text)"
                              fontWeight="bold"
                            >
@@ -1115,7 +1727,7 @@ index 0621183..6fb05d7 100644
                            </text>
                          </svg>
                          <div className="gauge-label">
-@@ -4163,7 +4482,7 @@ function Sidebar() {
+@@ -4270,7 +4513,7 @@
                              fill="var(--sidebar-text)"
                              fontWeight="bold"
                            >
@@ -1124,7 +1736,7 @@ index 0621183..6fb05d7 100644
                            </text>
                          </svg>
                          <div className="gauge-label">
-@@ -4257,7 +4576,7 @@ function Sidebar() {
+@@ -4364,7 +4607,7 @@
                              fill="var(--sidebar-text)"
                              fontWeight="bold"
                            >
@@ -1133,7 +1745,7 @@ index 0621183..6fb05d7 100644
                            </text>
                          </svg>
                          <div className="gauge-label">
-@@ -4436,7 +4755,7 @@ function Sidebar() {
+@@ -4543,7 +4786,7 @@
                </div>
              )}
  
@@ -1142,7 +1754,7 @@ index 0621183..6fb05d7 100644
                <div className="sidebar-section">
                  <div
                    className="sidebar-section-header"
-@@ -4495,7 +4814,7 @@ function Sidebar() {
+@@ -4602,7 +4845,7 @@
                </div>
              )}
  
@@ -1151,7 +1763,7 @@ index 0621183..6fb05d7 100644
                <div className="sidebar-section">
                  <div
                    className="sidebar-section-header"
-@@ -4611,53 +4930,18 @@ function Sidebar() {
+@@ -4718,53 +4961,18 @@
                  </div>
                  {sectionsOpen.shortcuts && (
                    <div className="sidebar-section-content" id="shortcuts-content">
@@ -1209,15 +1821,15 @@ index 0621183..6fb05d7 100644
 +                        window.location.origin
 +                      )}
 +                      disabled={!sasState.available || sasState.pending}
-+                      title={sasState.pending ? 'Waiting for the PC response' : sasState.available
-+                        ? 'Send Ctrl+Alt+Del to the remote PC' : 'Ctrl+Alt+Delete is unavailable for this session'}
++                      title={sasFailure || (sasState.pending ? 'Waiting for the PC response' : sasState.available
++                        ? 'Send Ctrl+Alt+Del to the remote PC' : 'Ctrl+Alt+Delete is unavailable for this session')}
 +                    >
 +                      Ctrl + Alt + Del
 +                    </button>
                    </div>
                  )}
                </div>
-@@ -4746,10 +5030,10 @@ function Sidebar() {
+@@ -4853,10 +5061,10 @@
                    )}
                  </>
                )}
@@ -1230,19 +1842,18 @@ index 0621183..6fb05d7 100644
                      {n.message ? n.message : t("notifications.warningPrefix")}
                    </span>{" "}
                  </>
-@@ -4770,7 +5054,7 @@ function Sidebar() {
-               &times;
-             </button>
-           </div>
--          <iframe src={withSessionToken("./api/files/")} title={t("filesModal.iframeTitle")} />
-+          <iframe src={filesIframeSrc} title={t("filesModal.iframeTitle")} />
-         </div>
-       )}
-       {isAppsModalOpen && (
-diff --git b/src/main.jsx a/src/main.jsx
-index 53c37f2..0728140 100644
---- b/src/main.jsx
-+++ a/src/main.jsx
+@@ -4884,7 +5092,7 @@
+             </div>
+           )}
+           <iframe
+-            src={withSessionToken("./api/files/")}
++            src={filesIframeSrc}
+             title={t("filesModal.iframeTitle")}
+             onLoad={() => setIsFilesModalLoading(false)}
+             style={{ opacity: isFilesModalLoading ? 0 : 1 }}
+diff --git a/src/main.jsx b/src/main.jsx
+--- a/src/main.jsx
++++ b/src/main.jsx
 @@ -5,94 +5,29 @@
   */
  
@@ -1305,12 +1916,23 @@ index 53c37f2..0728140 100644
 -  } catch (err) {
 -    console.warn(`Error detecting initial mode: ${err}`);
 -  }
--}
 +const dashboardRootElement = document.createElement("div");
 +dashboardRootElement.id = "dashboard-root";
 +dashboardRootElement.classList.add("allow-native-input");
 +document.body.appendChild(dashboardRootElement);
- 
++
++const appMountPoint = document.getElementById("root");
++if (appMountPoint) {
++  ReactDOM.createRoot(appMountPoint).render(
++    <React.StrictMode>
++      <App dashboardRoot={dashboardRootElement} />
++    </React.StrictMode>,
++  );
++  requestAnimationFrame(function () { postJoleeServerSettings(); setTimeout(postJoleeServerSettings, 0); setTimeout(postJoleeServerSettings, 50); });
++} else {
++  console.error("Dashboard mount point #root not found.");
+ }
+-
 -const currentHash = window.location.hash;
 -const noDashboardModes = ['#shared', '#player2', '#player3', '#player4'];
 -const playerClientModes = ['#player2', '#player3', '#player4'];
@@ -1349,21 +1971,9 @@ index 53c37f2..0728140 100644
 -    );
 -  }
 -})();
-+const appMountPoint = document.getElementById("root");
-+if (appMountPoint) {
-+  ReactDOM.createRoot(appMountPoint).render(
-+    <React.StrictMode>
-+      <App dashboardRoot={dashboardRootElement} />
-+    </React.StrictMode>,
-+  );
-+  requestAnimationFrame(function () { postJoleeServerSettings(); setTimeout(postJoleeServerSettings, 0); setTimeout(postJoleeServerSettings, 50); });
-+} else {
-+  console.error("Dashboard mount point #root not found.");
-+}
-diff --git b/src/styles/Overlay.css a/src/styles/Overlay.css
-index a82500f..f20cc30 100644
---- b/src/styles/Overlay.css
-+++ a/src/styles/Overlay.css
+diff --git a/src/styles/Overlay.css b/src/styles/Overlay.css
+--- a/src/styles/Overlay.css
++++ b/src/styles/Overlay.css
 @@ -19,16 +19,16 @@
         toggle, an error row) are lighter again. Accent as text is therefore a
         separate, lighter tint of the same hue — the fill colour is too dark
@@ -1462,11 +2072,10 @@ index a82500f..f20cc30 100644
  }
  
  /* --- Sidebar General Styles --- */
-diff --git b/src/translations.js a/src/translations.js
-index 61e2ece..af720ee 100644
---- b/src/translations.js
-+++ a/src/translations.js
-@@ -65,6 +65,7 @@ const en = {
+diff --git a/src/translations.js b/src/translations.js
+--- a/src/translations.js
++++ b/src/translations.js
+@@ -65,6 +65,7 @@
              streamingModeLabel: "Turbo",
              useCpuLabel: "CPU Encoding",
              jpegQualityLabel: "Base Quality: {jpegQuality}",
@@ -1474,7 +2083,7 @@ index 61e2ece..af720ee 100644
              paintOverJpegQualityLabel: "Paintover Quality: {paintOverJpegQuality}",
              paintoverCrfLabel: "Paint-Overs CRF ({crf}):",
              paintoverBurstLabel: "Paint-Over Burst Frames ({frames}):",
-@@ -141,8 +142,8 @@ const en = {
+@@ -148,8 +149,8 @@
          clipboard: {
              uploadImage: "Upload Image",
              title: "Clipboard",

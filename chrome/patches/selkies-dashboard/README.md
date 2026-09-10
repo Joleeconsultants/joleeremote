@@ -121,3 +121,9 @@ or establish live scaling acceptance. Local canvas scaling remains separate.
 The scheduled Selkies workflow now attempts a real sync, reapplies the patch series, builds the dashboard and runs its checks before publishing a single update PR. The bot does not auto-merge upstream UI changes. If patches or validation fail, the existing tracking issue is updated with the latest revision and failing run instead of being left stale. Once main catches up, the issue closes automatically. Private sync/deployment follows the reviewed public merge.
 
 Sync manifests support LF and CRLF checkouts. Latest upstream currently conflicts with the integration baseline's Sidebar imports; that requires a patch refresh, not dropping the overlays or forcing a failed build through.
+
+## Upstream refresh (2026-09-10)
+
+The baseline now targets7a45099a7420bfb676d7da948cb488ccc7f5b474. Previous0002-0009 patches are incorporated into0001, preserving their current deployed behavior; Git history retains the incremental originals. The live Sidebar change adopts upstream's Files loading indicator while preserving our absolute authenticated Files URL. Upstream CSS/translations merge cleanly.
+
+The ten Sidebar conflicts overlap Windows display mode acknowledgement, actual encoder capabilities, microphone/camera state and the transport adapter. Preserve these Windows paths; upstream arbitrary Linux resolution/DPI derivation and new gaming pointer controls do not have equivalent supported Windows hops. This refresh does not enable them or replace the advertised Windows mode catalog. Verify the final vendored diff as well as patch reconstruction; a large baseline diff is not a request to redesign the UI.

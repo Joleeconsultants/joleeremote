@@ -22,7 +22,7 @@ function harness(support=async()=>({supported:true})){
   const c=vm.createContext({performance:{now:()=>now},VideoDecoder:Decoder,EncodedVideoChunk:class{constructor(options){Object.assign(this,options);}},
     setTimeout:fn=>{timers.set(++id,fn);return id;},clearTimeout:id=>timers.delete(id)});
   vm.runInContext(source+'\nglobalThis.Consumer=NegotiatedVideo;',c);
-  const consumer=new c.Consumer(frame=>painted.push(frame),()=>fallback.push(true));
+  const consumer=new c.Consumer(frame=>painted.push(frame),reason=>fallback.push(reason));
   return {consumer,instances,decoded,painted,fallback,timers,advance:ms=>{now+=ms;}};
 }
 test('native Annex B config uses actual codec and coded dimensions, queues in order and requires parameter sets plus IDR',async()=>{
@@ -121,4 +121,15 @@ test('decoder dequeue wakes pending input and stale dequeue cannot revive a rese
   decoder.decodeQueueSize=8;h.consumer.push(key);assert.equal(h.decoded.length,0);
   decoder.decodeQueueSize=0;decoder.ondequeue();assert.equal(h.decoded.length,1);
   h.consumer.reset();decoder.ondequeue();assert.equal(h.decoded.length,1);assert.equal(h.fallback.length,0);
+});
+
+test('fallback preserves a bounded diagnostic reason and never reports a stale generation',async()=>{
+  const unsupported=harness(async()=>({supported:false}));unsupported.consumer.configure(config());await settle();
+  assert.deepEqual(unsupported.fallback,['unsupported_codec']);
+  const backlog=harness();backlog.consumer.configure(config());await settle();backlog.consumer.push(key);
+  backlog.instances[0].callbacks.output({close(){}});backlog.instances[0].decodeQueueSize=8;
+  backlog.consumer.push(delta);backlog.advance(501);backlog.consumer.drain();
+  assert.deepEqual(backlog.fallback,['decoder_backlog']);
+  const timer=harness(()=>new Promise(()=>{}));timer.consumer.configure(config());[...timer.timers.values()][0]();
+  assert.deepEqual(timer.fallback,['decoder_timeout']);
 });

@@ -6,7 +6,7 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
  if(!connectionBox)box.style.cssText='position:absolute;top:16px;left:50%;transform:translateX(-50%);max-width:calc(100% - 48px);padding:12px 16px;border:1px solid #75839a;border-radius:8px;background:#222833;color:#e6ebf3;font:16px system-ui;z-index:5;text-align:center';
  const text=document.createElement('span'),button=document.createElement('button');button.type='button';button.className='session-action';button.hidden=true;text.dataset.renewalText='';box.append(text,button);if(!connectionBox)root.append(box);
  box.style.pointerEvents='auto';
- let supported=false,checked=false,checking=false,restartPath=null,lastState='',expiredNotified=false,inspectAttempts=0,retryTimer,identityGeneration=0;
+ let supported=false,checked=false,checking=false,restartPath=null,lastState='',expiredNotified=false,inspectAttempts=0,retryTimer,identityGeneration=0,recoverySince=null,recoveryTimer;
  async function call(payload){
   const response=await fetch('/api/session-renewal',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',cache:'no-store',
    signal:AbortSignal.timeout(4000),body:JSON.stringify({...payload,browserToken})});
@@ -22,7 +22,7 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
  restoreRestart();
  const render=state=>{
   const ended=state.expired||['ended','expired','unavailable'].includes(lastState);
-  const recovering=Boolean(restartPath&&['waiting','disconnected'].includes(lastState));
+  const recovering=Boolean(restartPath&&['connecting','waiting','disconnected'].includes(lastState));
   const active=Boolean(ended||recovering||(supported&&(state.warning||state.error||state.pending)));
   box.dataset.renewalActive=String(active);
   if(!active){text.textContent='';button.hidden=true;const label=box.querySelector('[data-connection-text]');if(label)label.hidden=false;box.hidden=connectionBox?box.dataset.connectionVisible!=='true':true;return;}
@@ -30,8 +30,9 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
   const connectionPriority=!ended&&box.dataset.connectionVisible==='true';
   const connectionText=box.querySelector('[data-connection-text]');if(connectionText)connectionText.hidden=!connectionPriority;
   text.hidden=connectionPriority;
-  text.textContent=ended?(lastState==='expired'||state.expired?'Session expired. The last screen is not live.':'Session ended. The last screen is not live.'):state.pending?'Confirming session extension…':state.error||'Session expires in '+Math.max(1,Math.ceil((state.expiresAt-Date.now())/60000))+' minutes.';
+  text.textContent=ended?(lastState==='expired'||state.expired?'Session expired. The last screen is not live.':'Session ended. The last screen is not live.'):state.pending?'Confirming session extensionâ€¦':state.error||'Session expires in '+Math.max(1,Math.ceil((state.expiresAt-Date.now())/60000))+' minutes.';
   button.textContent=ended||recovering?'Restart session':'Keep session active';button.hidden=ended?!restartPath:false;
+  if(!ended&&['connecting','waiting','disconnected'].includes(lastState))button.hidden=!recovering||recoverySince===null||Date.now()-recoverySince<15000;
   button.disabled=ended||recovering?false:!state.canRenew;
   button.onclick=()=>{if((ended||recovering)&&restartPath)window.top.location.assign(restartPath);else void model.renew();};
   if(state.expired&&!expiredNotified){expiredNotified=true;onExpired();}
@@ -49,12 +50,15 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
  },render});
  const api={bind(state,expiresAt,identity){
   if(identity&&(identity.sessionId!==sessionId||identity.browserToken!==browserToken)){
-   identityGeneration++;clearTimeout(retryTimer);model.reset();
+   identityGeneration++;clearTimeout(retryTimer);clearTimeout(recoveryTimer);recoverySince=null;model.reset();
    sessionId=identity.sessionId;browserToken=identity.browserToken;
    supported=false;checked=false;checking=false;inspectAttempts=0;restartPath=null;expiredNotified=false;restoreRestart();
   }
   if(state==='paired'&&lastState!=='paired'&&!supported){checked=false;inspectAttempts=0;}
   lastState=state;
+  if(['connecting','waiting','disconnected'].includes(state)){
+   if(recoverySince===null){recoverySince=Date.now();recoveryTimer=setTimeout(()=>{if(model.session)model.publish();else render({});},15000);}
+  }else{clearTimeout(recoveryTimer);recoverySince=null;}
   if(Number.isSafeInteger(expiresAt))model.bind(sessionId,expiresAt,supported);
   else if(model.session)model.publish();else render({});
   if(state!=='paired'||checked||checking||!Number.isSafeInteger(expiresAt))return;

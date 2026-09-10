@@ -4,7 +4,7 @@ export class SessionRenewal {
     makeId=()=>crypto.randomUUID()}) {
     Object.assign(this,{request,render,now,schedule,unschedule,makeId});this.epoch=0;this.reset();
   }
-  reset(){this.epoch++;this.unschedule(this.timer);this.session=null;this.expiresAt=null;this.pending=false;this.error=null;}
+  reset(){this.epoch++;this.unschedule(this.timer);this.session=null;this.expiresAt=null;this.pending=false;this.error=null;this.attempt=null;}
   bind(session,expiresAt,supported){
     if(typeof session!=='string'||!session||!Number.isSafeInteger(expiresAt))return;
     if(this.session!==session){this.reset();this.session=session;}
@@ -20,7 +20,8 @@ export class SessionRenewal {
   }
   async renew(){
     if(!this.session||!this.supported||this.pending||this.now()>=this.expiresAt)return false;
-    const epoch=this.epoch,session=this.session,previousExpiresAt=this.expiresAt,requestId=this.makeId();
+    const epoch=this.epoch;
+    const {sessionId:session,previousExpiresAt,requestId}=this.attempt??={sessionId:this.session,previousExpiresAt:this.expiresAt,requestId:this.makeId()};
     this.pending=true;this.error=null;this.publish();
     let timeout;
     try{
@@ -30,7 +31,7 @@ export class SessionRenewal {
       if(this.now()>=previousExpiresAt||result?.sessionId!==session||result.requestId!==requestId||
         result.status!=='committed'||!Number.isSafeInteger(result.expiresAt)||result.expiresAt<=previousExpiresAt||
         result.expiresAt>this.now()+3600000)throw Error('renewal_not_confirmed');
-      this.expiresAt=result.expiresAt;return true;
+      this.expiresAt=result.expiresAt;this.attempt=null;return true;
     }catch{
       if(epoch===this.epoch)this.error='Renewal was not confirmed.';
       return false;

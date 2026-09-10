@@ -19,3 +19,12 @@ test('late response after expiry does not revive session',async()=>{
  const pending=h.c.renew();h.advance(1000);resolve({sessionId:'session',requestId:'request',status:'committed',expiresAt:3601000});
  assert.equal(await pending,false);assert.equal(h.state.expired,true);
 });
+
+test('retry after uncertain confirmation retains the exact request and previous deadline',async()=>{
+ const requests=[];let count=0;
+ const h=harness(async r=>{requests.push(r);if(count++===0)throw Error('network');return {...r,status:'committed',expiresAt:3601000};});
+ let ids=0;h.c.makeId=()=>String(++ids);h.c.bind('session',301000,true);
+ assert.equal(await h.c.renew(),false);assert.equal(await h.c.renew(),true);
+ assert.deepEqual(requests[1],requests[0]);assert.equal(ids,1);
+ h.c.reset();assert.equal(h.c.attempt,null);
+});

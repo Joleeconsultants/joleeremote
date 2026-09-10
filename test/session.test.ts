@@ -406,31 +406,48 @@ describe("session hop", () => {
     agent.close(1000, "done");
   });
 
-  it("tears down when the agent disconnects and rejects later browser joins", async () => {
-    const minted = await mint();
-    const browser = await openWs(browserJoinPath(minted.sessionId, minted.browserToken));
-    const agent = await openWs(minted.joins.agent);
-    await waitUntilState(minted.sessionId, "paired");
-
-    const browserEnded = new Promise<number>((resolve) => {
-      browser.addEventListener("close", (ev) => resolve(ev.code), { once: true });
+  it("agent loss preserves the browser and original deadline for recovery", async () => {
+    const minted=await mint();
+    const browser=await openWs(browserJoinPath(minted.sessionId,minted.browserToken));
+    const agent=await openWs(minted.joins.agent);
+    await waitUntilState(minted.sessionId,"paired");agent.close();
+    const waiting=await waitUntilState(minted.sessionId,"waiting");
+    expect(waiting.browserConnected).toBe(true);expect(waiting.expiresAt).toBe(minted.expiresAt);
+    const stub=env.Session.getByName(minted.sessionId);
+    await runInDurableObject(stub,async(instance:Session,state)=>{
+      expect(state.storage.sql.exec("SELECT * FROM browser_absence").toArray()).toHaveLength(0);
+      await instance.onAlarm();expect((await instance.status())?.browserConnected).toBe(true);
     });
-
-    agent.close(1000, "agent gone");
-    const browserCode = await browserEnded;
-    expect(browserCode).toBe(4000);
-
-    const statusRes = await SELF.fetch("https://example.com/sessions/" + minted.sessionId);
-    expect(statusRes.status).toBe(404);
-
-    const join = await SELF.fetch(
-      "https://example.com" + browserJoinPath(minted.sessionId, minted.browserToken),
-      { headers: { Upgrade: "websocket" } },
-    );
-    expect(join.status).toBe(404);
-    expect(join.webSocket).toBeNull();
+    const agent2=await openWs(minted.joins.agent);await waitUntilState(minted.sessionId,"paired");
+    browser.close();agent2.close();
   });
 
+  it("browser absence expires after persisted grace and rejects a late refresh",async()=>{
+    const minted=await mint();const browser=await openWs(browserJoinPath(minted.sessionId,minted.browserToken));
+    browser.close();await waitUntilState(minted.sessionId,"waiting");
+    const stub=env.Session.getByName(minted.sessionId);
+    await runInDurableObject(stub,async(instance:Session,state)=>{
+      const rows=state.storage.sql.exec<{deadline:number}>("SELECT deadline FROM browser_absence").toArray();
+      expect(rows).toHaveLength(1);expect(rows[0].deadline-Date.now()).toBeGreaterThan(14000);
+      expect(await state.storage.getAlarm()).toBe(rows[0].deadline);
+      state.storage.sql.exec("UPDATE browser_absence SET deadline=?",Date.now()-1);
+      await instance.onAlarm();expect(await instance.status()).toBeNull();
+    });
+    expect((await SELF.fetch("https://example.com"+browserJoinPath(minted.sessionId,minted.browserToken),{headers:{Upgrade:"websocket"}})).status).toBe(404);
+  });
+
+  it("refresh cancels persisted grace without extending original expiry",async()=>{
+    const minted=await mint();const browser=await openWs(browserJoinPath(minted.sessionId,minted.browserToken));browser.close();
+    await waitUntilState(minted.sessionId,"waiting");
+    const stub=env.Session.getByName(minted.sessionId);
+    await evictDurableObject(stub);
+    const next=await openWs(browserJoinPath(minted.sessionId,minted.browserToken));
+    await runInDurableObject(stub,async(instance:Session,state)=>{
+      expect(state.storage.sql.exec("SELECT * FROM browser_absence").toArray()).toHaveLength(0);
+      expect(await state.storage.getAlarm()).toBe(minted.expiresAt);
+      await instance.onAlarm();expect((await instance.status())?.expiresAt).toBe(minted.expiresAt);
+    });next.close();
+  });
 
   it("askAgentFilesList talks to agent without a browser and resolves the frame reply", async () => {
     const minted = await mint();

@@ -85,6 +85,7 @@ export class Session extends Server<Env> {
         session_id TEXT PRIMARY KEY,
         context TEXT
       )`);
+      this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS browser_absence (id INTEGER PRIMARY KEY, deadline INTEGER NOT NULL)`);
       this.ensureFilesTable();
       this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS session_renewal (
         session_id TEXT PRIMARY KEY, revision INTEGER NOT NULL,
@@ -135,7 +136,7 @@ export class Session extends Server<Env> {
   /** Worker RPC only: this context is deliberately absent from HTTP/WebSocket status. */
   async readMintContext(): Promise<{ sessionId: string; expiresAt: number; context: string | null } | null> {
     const row = this.loadRow();
-    if (!row || row.state === "ended" || Date.now() >= row.expires_at) return null;
+    if (!row || row.state === "ended" || Date.now() >= this.sessionDeadline(row)) return null;
     const sealed = this.ctx.storage.sql.exec<{ context: string | null }>(
       "SELECT context FROM session_mint_context WHERE session_id = ?", row.id).toArray();
     return { sessionId: row.id, expiresAt: row.expires_at, context: sealed[0]?.context ?? null };
@@ -161,7 +162,7 @@ export class Session extends Server<Env> {
   async status(): Promise<PublicStatus | null> {
     const row = this.loadRow();
     if (!row || row.state === "ended") return null;
-    const expired = Date.now() >= row.expires_at;
+    const expired = Date.now() >= this.sessionDeadline(row);
     const browserConnected = this.hasRole("browser");
     const agentConnected = this.hasRole("agent");
     return {
@@ -201,7 +202,7 @@ export class Session extends Server<Env> {
           row.id,input.revision,input.requestId,input.previousExpiresAt,input.expiresAt,input.issuedAt,prior?.original_expiry ?? row.expires_at);
       });
     }
-    await this.ctx.storage.setAlarm(input.expiresAt);
+    await this.ctx.storage.setAlarm(this.sessionDeadline(this.loadRow()!));
     this.broadcastStatus();
     return true;
   }
@@ -239,7 +240,7 @@ export class Session extends Server<Env> {
       connection.close(4004, "session not found");
       return;
     }
-    if (Date.now() >= row.expires_at) {
+    if (Date.now() >= this.sessionDeadline(row)) {
       connection.serializeAttachment({ role, joined: false });
       connection.close(4010, "session expired");
       return;
@@ -251,13 +252,13 @@ export class Session extends Server<Env> {
       return;
     }
     connection.serializeAttachment({ role, joined: true });
-    this.persistPairState();
+    await this.persistPairState();
     this.broadcastStatus();
   }
 
   async onMessage(connection: Connection<ConnState>, message: WSMessage): Promise<void> {
     if (typeof message === "string") {
-      this.handleJoin(connection, message);
+      await this.handleJoin(connection, message);
       return;
     }
     if (!this.isJoined(connection)) return;
@@ -265,7 +266,7 @@ export class Session extends Server<Env> {
     const decoded = decodeEnvelope(message as ArrayBuffer | ArrayBufferView);
     if (!decoded) return;
     const row = this.loadRow();
-    if (!row || row.state === "ended" || Date.now() >= row.expires_at) return;
+    if (!row || row.state === "ended" || Date.now() >= this.sessionDeadline(row)) return;
 
     const sender = this.roleOf(connection);
     // Frames and audio are agent → browser only. Input is browser → agent.
@@ -303,36 +304,30 @@ export class Session extends Server<Env> {
     await this.handlePeerDisconnect(connection);
   }
 
-  /**
-   * Role-aware disconnect (noVNC-like):
-   * - browser refresh/leave: keep Session DO alive until TTL alarm or agent leave
-   * - agent leave: teardown (session is useless without the agent)
-   */
+  /** Browser absence gets a durable grace deadline; PC interruption remains recoverable. */
   private async handlePeerDisconnect(connection: Connection<ConnState>): Promise<void> {
-    if (this.tearingDown) return;
-    const row = this.loadRow();
-    if (!row) return;
-    if (!this.isJoined(connection)) return;
+    if (this.tearingDown || !this.loadRow() || !this.isJoined(connection)) return;
     const role = this.roleOf(connection);
-    if (role === "agent") {
-      this.rejectAllFilesAsks({ ok: false, error: "agent_unavailable" });
-      await this.teardown();
-      return;
+    connection.serializeAttachment({ role, joined: false });
+    if (role === "agent") this.rejectAllFilesAsks({ ok: false, error: "agent_unavailable" });
+    if (role === "browser" && !this.hasRole("browser")) {
+      this.ctx.storage.sql.exec("INSERT OR IGNORE INTO browser_absence (id,deadline) VALUES (1,?)", Date.now()+15000);
     }
-    // Mark this socket unjoined so hasRole/status ignore it during onClose.
-    if (role === "browser") {
-      connection.serializeAttachment({ role, joined: false });
-    }
-    this.persistPairState();
+    await this.persistPairState();
     this.broadcastStatus();
+  }
+
+  private sessionDeadline(row: SessionRow): number {
+    const absence=this.ctx.storage.sql.exec<{deadline:number}>("SELECT deadline FROM browser_absence WHERE id=1").toArray()[0];
+    return Math.min(row.expires_at,absence?.deadline ?? row.expires_at);
   }
 
   async onAlarm(): Promise<void> {
     const row = this.loadRow();
     if (!row) return;
     // A queued/retried old alarm must not end a successfully renewed session.
-    if (row.expires_at > Date.now()) {
-      await this.ctx.storage.setAlarm(row.expires_at);
+    if (this.sessionDeadline(row) > Date.now()) {
+      await this.ctx.storage.setAlarm(this.sessionDeadline(row));
       return;
     }
     await this.teardown();
@@ -343,7 +338,7 @@ export class Session extends Server<Env> {
   async authorizeSessionToken(token: string): Promise<Role | null> {
     const row = this.loadRow();
     if (!row || row.state === "ended") return null;
-    if (Date.now() >= row.expires_at) return null;
+    if (Date.now() >= this.sessionDeadline(row)) return null;
     if (timingSafeEqual(token, row.browser_token)) return "browser";
     if (timingSafeEqual(token, row.agent_token)) return "agent";
     return null;
@@ -462,7 +457,7 @@ export class Session extends Server<Env> {
     };
   }
 
-  private handleJoin(connection: Connection<ConnState>, message: string): void {
+  private async handleJoin(connection: Connection<ConnState>, message: string): Promise<void> {
     if (this.isJoined(connection)) return;
     let parsed: { type?: unknown; token?: unknown };
     try {
@@ -485,7 +480,7 @@ export class Session extends Server<Env> {
       connection.close(4004, "session not found");
       return;
     }
-    if (Date.now() >= row.expires_at) {
+    if (Date.now() >= this.sessionDeadline(row)) {
       connection.close(4010, "session expired");
       return;
     }
@@ -499,7 +494,7 @@ export class Session extends Server<Env> {
       return;
     }
     connection.serializeAttachment({ role, joined: true });
-    this.persistPairState();
+    await this.persistPairState();
     this.broadcastStatus();
   }
 
@@ -508,7 +503,7 @@ export class Session extends Server<Env> {
     if (!row || row.state === "ended") {
       return jsonError("session not found", 404);
     }
-    if (Date.now() >= row.expires_at) {
+    if (Date.now() >= this.sessionDeadline(row)) {
       return jsonError("session expired", 410);
     }
     const role = roleFromRequest(request);
@@ -561,9 +556,11 @@ export class Session extends Server<Env> {
     return false;
   }
 
-  private persistPairState(): void {
+  private async persistPairState(): Promise<void> {
     const row = this.loadRow();
     if (!row || row.state === "ended") return;
+    if(this.hasRole("browser")) this.ctx.storage.sql.exec("DELETE FROM browser_absence WHERE id=1");
+    await this.ctx.storage.setAlarm(this.sessionDeadline(row));
     const paired = this.hasRole("browser") && this.hasRole("agent");
     const next = paired ? "paired" : "waiting";
     if (row.state !== next) {
@@ -582,7 +579,7 @@ export class Session extends Server<Env> {
     if (!row || row.state === "ended") return null;
     const browserConnected = this.hasRole("browser");
     const agentConnected = this.hasRole("agent");
-    const expired = Date.now() >= row.expires_at;
+    const expired = Date.now() >= this.sessionDeadline(row);
     return {
       sessionId: row.id,
       state: expired ? "expired" : browserConnected && agentConnected ? "paired" : "waiting",

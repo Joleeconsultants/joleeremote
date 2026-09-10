@@ -133,3 +133,17 @@ test('fallback preserves a bounded diagnostic reason and never reports a stale g
   const timer=harness(()=>new Promise(()=>{}));timer.consumer.configure(config());[...timer.timers.values()][0]();
   assert.deepEqual(timer.fallback,['decoder_timeout']);
 });
+
+
+test('unhandled JSON control frames never enter the video decoder', async()=>{
+  const parser=html.slice(html.indexOf('function parseJsonFrameObject('),html.indexOf('function fileFromFrame('));
+  const painter=html.slice(html.indexOf('async function paintFrame('),html.indexOf('// One decoded stream'));
+  const decoded=[];
+  const c=vm.createContext({TextDecoder,videoGeneration:1,receivedFrameSequence:0,videoEnabled:true,
+    negotiatedVideo:{config:{encoder:'h264enc'}},paintH264:p=>decoded.push(p)});
+  vm.runInContext(parser+painter,c);
+  for(const message of [{t:'filesList',files:[]},{t:'filesGet',name:'missing',error:'not_found'},{t:'future_control',v:2}])
+    await c.paintFrame(new TextEncoder().encode(JSON.stringify(message)));
+  assert.equal(decoded.length,0,'metadata must not trigger H264 fallback');
+  await c.paintFrame(key);assert.equal(decoded.length,1,'actual Annex B must still reach decoder');
+});

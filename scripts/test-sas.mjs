@@ -76,7 +76,6 @@ test('timeout and late results never replay or claim completion', () => {
 test('disconnect, generation change, malformed/lost capability and expiry retire pending state', () => {
   for (const transition of [h => h.control.bind(null, 'session'),
     h => h.control.consume(capability({ generation: otherGen }), h.connection),
-    h => h.control.consume(capability({ sas: { available: false, reason: 'unpaired' } }), h.connection),
     h => h.control.consume(capability({ extra: true }), h.connection), h => h.advance(9000)]) {
     const h = harness(); h.control.consume(capability(), h.connection); h.control.request(); transition(h);
     assert.deepEqual(h.reports, ['uncertain']); h.control.consume(result(), h.connection);
@@ -111,4 +110,24 @@ test('uncertain native result or send failure never retries automatically', () =
   const failed = harness(); failed.control.consume(capability(), failed.connection);
   failed.control.send = () => { throw Error('transport failed'); }; failed.control.request();
   assert.deepEqual(failed.reports, ['uncertain']); assert.equal(failed.control.pending, null);
+});
+
+
+test('same-generation readiness loss waits for the correlated result without permitting another command', () => {
+  const h = harness(); h.control.consume(capability(), h.connection); h.control.request();
+  h.control.consume(capability({ sas: { available: false, reason: 'session_unavailable' } }), h.connection);
+  assert.deepEqual(h.reports, []);
+  assert.equal(h.control.request(), false);
+  h.control.consume(result(), h.connection);
+  assert.deepEqual(h.reports, ['invoked']);
+  assert.equal(h.states.at(-1).available, false);
+  assert.equal(h.sent.length, 1);
+});
+
+test('readiness loss without a result still times out without replay', () => {
+  const h = harness(); h.control.consume(capability(), h.connection); h.control.request();
+  h.control.consume(capability({ sas: { available: false, reason: 'session_unavailable' } }), h.connection);
+  h.advance(5000);
+  assert.deepEqual(h.reports, ['uncertain']);
+  assert.equal(h.sent.length, 1);
 });

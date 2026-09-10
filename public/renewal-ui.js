@@ -4,7 +4,7 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
  const connectionBox=document.getElementById('connection-status');
  const box=connectionBox||document.createElement('div');if(!connectionBox)box.hidden=true;box.setAttribute('role','status');
  if(!connectionBox)box.style.cssText='position:absolute;top:16px;left:50%;transform:translateX(-50%);max-width:calc(100% - 48px);padding:12px 16px;border:1px solid #75839a;border-radius:8px;background:#222833;color:#e6ebf3;font:16px system-ui;z-index:5;text-align:center';
- const text=document.createElement('span'),button=document.createElement('button');button.type='button';button.hidden=true;button.style.marginLeft='12px';text.dataset.renewalText='';box.append(text,button);if(!connectionBox)root.append(box);
+ const text=document.createElement('span'),button=document.createElement('button');button.type='button';button.className='session-action';button.hidden=true;text.dataset.renewalText='';box.append(text,button);if(!connectionBox)root.append(box);
  box.style.pointerEvents='auto';
  let supported=false,checked=false,checking=false,restartPath=null,lastState='',expiredNotified=false,inspectAttempts=0,retryTimer,identityGeneration=0;
  async function call(payload){

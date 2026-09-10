@@ -76,7 +76,10 @@ let useBrowserCursors=false, pointerOver=false, agentCursorVisible=true;
 let nativeCursor='default';
 const sessionState=new SessionState(({text,visible,state})=>{
   const notice=document.getElementById('connection-status');
-  notice.textContent=text;notice.hidden=!visible;notice.dataset.state=state;
+  notice.dataset.connectionVisible=String(visible);
+  const label=notice.querySelector('[data-connection-text]');label.textContent=text;
+  label.hidden=notice.dataset.renewalActive==='true';
+  notice.hidden=!visible&&notice.dataset.renewalActive!=='true';notice.dataset.state=state;
 });
 const renewalUi=mountRenewalUi({sessionId:session,browserToken:token,onExpired:()=>queueMicrotask(()=>setStatus('expired'))});
 let cursorHx=DEFAULT_CURSOR_HX, cursorHy=DEFAULT_CURSOR_HY, cursorPosition=null;

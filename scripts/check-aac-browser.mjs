@@ -4,6 +4,14 @@ import {createServer} from 'node:http';
 import {chromium} from 'playwright';
 if (!process.argv[2]) throw Error('Provide the synthetic AAC fixture JSON path');
 const fixture=JSON.parse(await readFile(process.argv[2],'utf8'));
+if(fixture.packets){
+  const parsed=fixture.packets.map(value=>{const b=Buffer.from(value,'base64'),n=b.readUInt32LE(4);
+    return {header:JSON.parse(b.subarray(8,8+n).toString('utf8')),data:b.subarray(8+n).toString('base64')};});
+  const h=parsed[0].header;
+  Object.assign(fixture,{codec:h.codec,sampleRate:h.sampleRate,numberOfChannels:h.channels,description:h.description,
+    frames:parsed.map(p=>({data:p.data,timestampUs:p.header.timestampUs,durationUs:p.header.durationUs})),
+    acknowledgement:JSON.parse(fixture.controls.find(c=>JSON.parse(c).status==='applied'))});
+}
 const modules=new Map(await Promise.all(['audio-decoder.js','audio-packet.js'].map(async name=>
   ['/'+name,await readFile(new URL('../public/'+name,import.meta.url),'utf8')])));
 const server=createServer((req,res)=>{
@@ -35,9 +43,10 @@ try {
     let frames=0,fallbacks=0;
     const player=new NegotiatedAudioDecoder({output:()=>frames++,fallback:()=>fallbacks++});
     const generation='a'.repeat(32);
-    const ack={status:'applied',codec:fixture.codec,generation,sampleRate:fixture.sampleRate,
+    const ack=fixture.acknowledgement||{status:'applied',codec:fixture.codec,generation,sampleRate:fixture.sampleRate,
       channels:fixture.numberOfChannels,targetBitrate:128000};
     const packet=(frame,sequence)=>{
+      if(fixture.packets)return Uint8Array.from(atob(fixture.packets[sequence]),c=>c.charCodeAt(0));
       const h=new TextEncoder().encode(JSON.stringify({v:1,...ack,description:fixture.description,
         sequence,timestampUs:frame.timestampUs,durationUs:frame.durationUs}));
       const data=Uint8Array.from(atob(frame.data),c=>c.charCodeAt(0));
@@ -53,10 +62,17 @@ try {
       const decoded=frames;
       await player.push(packet(fixture.frames[0],0)); // sequence regression must request PCM once
       await player.push(packet(fixture.frames[0],0));
-      return {decoded,fallbacks};
+      player.reset();
+      await player.push(packet(fixture.frames[0],0));
+      const afterReset=frames;
+      player.acknowledge(ack);
+      await player.push(packet(fixture.frames[0],0));
+      await player.decoder.flush();
+      return {decoded,fallbacks,afterReset,restarted:frames-afterReset};
     }finally{player.reset();}
   },fixture);
   assert.equal(receiver.decoded,fixture.frames.length);assert.equal(receiver.fallbacks,1);
+  assert.equal(receiver.afterReset,receiver.decoded);assert.equal(receiver.restarted,1);
   console.log(JSON.stringify({receiver}));
   console.log(JSON.stringify({result,output:'Decoded and discarded; no AudioContext, playback or devices.'}));
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

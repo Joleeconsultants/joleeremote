@@ -16,20 +16,21 @@ try{
    return route.fulfill({json:{...body,status:'committed',expiresAt:Date.now()+3600000}});
   }
   if(path.endsWith('.js'))return route.fulfill({contentType:'text/javascript',body:readFileSync(new URL('../public'+path,import.meta.url),'utf8')});
-  return route.fulfill({contentType:'text/html',body:`<script type="module">import {mountRenewalUi} from '/renewal-ui.js';sessionStorage.setItem('jolee_tab_device',JSON.stringify({session:'session',name:'QBOOKS-HOST'}));window.ui=mountRenewalUi({sessionId:'session',browserToken:'browser',onExpired:()=>window.expired=true});ui.bind('paired',Date.now()+60000);</script>`});
+  return route.fulfill({contentType:'text/html',body:`<div id="connection-status" role="status" data-connection-visible="false" style="position:absolute;top:16px"><span data-connection-text>Session expired. The last screen is not live.</span></div><script type="module">import {mountRenewalUi} from '/renewal-ui.js';sessionStorage.setItem('jolee_tab_device',JSON.stringify({session:'session',name:'QBOOKS-HOST'}));window.ui=mountRenewalUi({sessionId:'session',browserToken:'browser',onExpired:()=>window.expired=true});ui.bind('paired',Date.now()+60000);</script>`});
  });
  await page.goto('https://renewal.test/');
- const keep=page.getByRole('button',{name:'Keep Session Active'});
+ const keep=page.getByRole('button',{name:'Keep session active'});
  await page.waitForFunction(()=>!!window.ui);
  await keep.waitFor({state:'visible',timeout:10000});assert.equal(starts,0);assert.equal(inspections,2);
  await keep.click();await page.waitForFunction(()=>document.querySelector('[role=status]').hidden);
- assert.equal(starts,1);
+ assert.equal(starts,1);assert.equal(new URL(page.url()).pathname,'/');assert.equal(await page.locator('[role=status]').count(),1);assert.equal(await page.locator('#connection-status').evaluate(el=>getComputedStyle(el).top),'16px');
  await page.evaluate(()=>window.ui.bind('expired',Date.now()-1));
- await page.getByRole('button',{name:'Start New Session'}).waitFor({state:'visible'});
+ await page.getByRole('button',{name:'Restart session'}).waitFor({state:'visible'});
  assert.equal(await page.evaluate(()=>sessionStorage.getItem('jolee-restart:session')),'/?clientId=client&agentId=device&machineName=QBOOKS-HOST');
  await page.evaluate(()=>window.ui.bind('paired',Date.now()+60000,{sessionId:'new-session',browserToken:'new-browser'}));
  await keep.waitFor({state:'visible'});await keep.click();await page.waitForFunction(()=>document.querySelector('[role=status]').hidden);
  assert.equal(request.sessionId,'new-session');assert.equal(request.browserToken,'new-browser');
+ await page.reload();await page.waitForFunction(()=>!!window.ui);await page.evaluate(()=>window.ui.bind('expired'));await page.getByRole('button',{name:'Restart session'}).waitFor({state:'visible'});
  unsupported=true;await page.reload();await page.waitForFunction(()=>!!window.ui);
  assert.equal(await keep.isVisible(),false);
  console.log('Edge explicit renewal, committed confirmation, expiry/restart and unsupported-agent hiding PASS.');

@@ -85,7 +85,9 @@ const sessionState=new SessionState(({text,visible,state})=>{
   const notice=document.getElementById('connection-status');
   notice.dataset.connectionVisible=String(visible);
   const label=notice.querySelector('[data-connection-text]');label.textContent=text;
-  label.hidden=notice.dataset.renewalActive==='true';
+  const connectionPriority=visible&&!['ended','expired','unavailable'].includes(state);
+  label.hidden=!connectionPriority&&notice.dataset.renewalActive==='true';
+  const renewalText=notice.querySelector('[data-renewal-text]');if(renewalText)renewalText.hidden=connectionPriority;
   notice.hidden=!visible&&notice.dataset.renewalActive!=='true';notice.dataset.state=state;
 });
 const renewalUi=mountRenewalUi({sessionId:session,browserToken:token,onExpired:()=>queueMicrotask(()=>setStatus('expired'))});

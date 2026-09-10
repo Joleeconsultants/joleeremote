@@ -19,12 +19,21 @@ try{
    return route.fulfill({json:{...body,status:'committed',expiresAt:Date.now()+3600000}});
   }
   if(path.endsWith('.js'))return route.fulfill({contentType:'text/javascript',body:readFileSync(new URL('../public'+path,import.meta.url),'utf8')});
-  return route.fulfill({contentType:'text/html',body:`${notice}<script type="module">import {mountRenewalUi} from '/renewal-ui.js';import {SessionState} from '/session-state.js';${stateInit}sessionState.set('paired');sessionState.frame();sessionStorage.setItem('jolee_tab_device',JSON.stringify({session:'session',name:'QBOOKS-HOST'}));window.ui=mountRenewalUi({sessionId:'session',browserToken:'browser',onExpired:()=>window.expired=true});ui.bind('paired',Date.now()+60000);</script>`});
+  return route.fulfill({contentType:'text/html',body:`${notice}<script type="module">import {mountRenewalUi} from '/renewal-ui.js';import {SessionState} from '/session-state.js';${stateInit}window.sessionState=sessionState;sessionState.set('paired');sessionState.frame();sessionStorage.setItem('jolee_tab_device',JSON.stringify({session:'session',name:'QBOOKS-HOST'}));window.ui=mountRenewalUi({sessionId:'session',browserToken:'browser',onExpired:()=>window.expired=true});ui.bind('paired',Date.now()+60000);</script>`});
  });
  await page.goto('https://renewal.test/');
  const keep=page.getByRole('button',{name:'Keep session active'});
  await page.waitForFunction(()=>!!window.ui);
  await keep.waitFor({state:'visible',timeout:10000});assert.equal(starts,0);assert.equal(inspections,2);
+ await page.evaluate(()=>window.sessionState.stale('The screen has stopped updating.'));
+ assert.equal(await page.locator('[data-connection-text]').isVisible(),true);
+ assert.equal(await page.locator('[data-renewal-text]').isVisible(),false);
+ await page.evaluate(()=>window.ui.bind('paired',Date.now()+60000));
+ assert.equal(await page.locator('[data-connection-text]').isVisible(),true);
+ await page.evaluate(()=>{window.sessionState.set('disconnected');window.ui.bind('disconnected');});
+ assert.match(await page.locator('[data-connection-text]').innerText(),/Connection lost/);
+ assert.equal(await page.locator('[data-renewal-text]').isVisible(),false);
+ await page.evaluate(()=>{window.sessionState.set('paired');window.sessionState.frame();window.ui.bind('paired',Date.now()+60000);});
  await keep.click();await page.waitForFunction(()=>document.querySelector('[role=status]').hidden);
  assert.equal(starts,1);assert.equal(new URL(page.url()).pathname,'/');assert.equal(await page.locator('[role=status]').count(),1);assert.equal(await page.locator('#connection-status').evaluate(el=>el.style.bottom),'');
  await page.evaluate(()=>window.ui.bind('expired',Date.now()-1));

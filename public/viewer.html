@@ -90,7 +90,7 @@ const sessionState=new SessionState(({text,visible,state})=>{
   const renewalText=notice.querySelector('[data-renewal-text]');if(renewalText)renewalText.hidden=connectionPriority;
   notice.hidden=!visible&&notice.dataset.renewalActive!=='true';notice.dataset.state=state;
 });
-const renewalUi=mountRenewalUi({sessionId:session,browserToken:token,onExpired:()=>queueMicrotask(()=>setStatus('expired'))});
+const renewalUi=mountRenewalUi({sessionId:session,browserToken:token,onExpired:()=>queueMicrotask(()=>{disconnect();setStatus('expired');})});
 let cursorHx=DEFAULT_CURSOR_HX, cursorHy=DEFAULT_CURSOR_HY, cursorPosition=null;
 cursorEl.src=DEFAULT_CURSOR_SVG;
 function applyScale(){
@@ -1001,16 +1001,16 @@ function connect(opts){
   if(hop)url.searchParams.set("hop",hop);else url.searchParams.delete("hop");
   url.hash=token?"token="+encodeURIComponent(token):"";
   history.replaceState(null,"",url);
-  socket=new PartySocket({host:host,party:"session",room:session,query:{token:token,role:"browser"},maxRetries:3});
+  socket=new PartySocket({host:host,party:"session",room:session,query:{token:token,role:"browser"},maxRetries:Infinity,minReconnectionDelay:5000,maxReconnectionDelay:5000});
   const currentSocket=socket;
   currentSocket.binaryType="arraybuffer";
   currentSocket.addEventListener("open",()=>{if(socket===currentSocket)setStatus("waiting");});
   currentSocket.addEventListener("close",(ev)=>{
     if(socket!==currentSocket)return;
-    if(ev&&(ev.code===4000||ev.code===4004||ev.code===4010)){
+    if(ev&&([4000,4001,4002,4003,4004,4009,4010].includes(ev.code))){
       try{if(socket)socket.maxRetries=0;}catch(e){}
       disconnect();
-      setStatus(ev.code===4010?'expired':ev.code===4004?'unavailable':'ended');
+      setStatus(ev.code===4010?'expired':ev.code===4000?'ended':'unavailable');
       return;
     }
     setStatus("disconnected");

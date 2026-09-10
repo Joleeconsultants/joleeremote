@@ -38,10 +38,10 @@ test('native mode uses local cursor types while drawn mode retains remote shape 
   f.useBrowserCursors=false;f.applyCursorMode();assert.equal(f.cursorEl.style.display,'none');
 });
 
-test('unknown or missing native type falls back to local arrow and never remote CSS',()=>{
+test('unknown or missing native type uses bounded PNG and never remote CSS',()=>{
   const f=fixture();f.useBrowserCursors=true;
   for(const css of [undefined,'url(https://example.invalid/cursor), auto','inherit',{},'']){
-    f.applyCursorFrame(f.cursorFromFrame({...cursor(),css}));assert.equal(f.canvas.style.cursor,'default');
+    f.applyCursorFrame(f.cursorFromFrame({...cursor(),css}));assert.equal(f.canvas.style.cursor,'url("data:image/png;base64,'+cursor().data+'") 2 3, default');
   }
   for(const css of ['pointer','wait','progress','crosshair','move','not-allowed','help','ew-resize','ns-resize','nesw-resize','nwse-resize']){
     f.applyCursorFrame(f.cursorFromFrame({...cursor(),css}));assert.equal(f.canvas.style.cursor,css);

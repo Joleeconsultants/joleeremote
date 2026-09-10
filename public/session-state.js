@@ -6,7 +6,7 @@ export class SessionState {
     if(state!=='paired'){this.paired=false;this.fresh=false;}
     else if(!this.paired){this.paired=true;this.fresh=false;}
     const text={connecting:'Connecting…',waiting:'Waiting for the PC to connect. The last screen is not live.',
-      disconnected:'Connection lost. The last screen is not live. Refresh to retry if it does not reconnect.',
+      disconnected:'Connection lost. Reconnecting. The last screen is not live.',
       ended:'Session ended. The last screen is not live.',
       expired:'Session expired. The last screen is not live.',
       unavailable:'Session unavailable. Open a new session to connect again.',

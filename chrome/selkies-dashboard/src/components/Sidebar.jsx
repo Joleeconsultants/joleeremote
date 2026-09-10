@@ -1332,7 +1332,9 @@ function Sidebar() {
         webcam_supported: message.webcam_supported,
         webcam_capture: message.webcam_capture,
         dpi_scaling_supported: message.dpi_scaling_supported,
-        audio_bitrate_supported: message.audio_bitrate_supported });
+        audio_bitrate_supported: message.audio_bitrate_supported,
+        audio_bitrate_choices: Array.isArray(message.audio_bitrate_choices) ? message.audio_bitrate_choices.filter(v=>[96000,128000,160000,192000].includes(v)) : [] });
+      if ([96000,128000,160000,192000].includes(message.audio_bitrate_effective)) setAudioBitrate(message.audio_bitrate_effective);
     };
     window.addEventListener('message', receive);
     return () => window.removeEventListener('message', receive);
@@ -1569,7 +1571,7 @@ function Sidebar() {
   const [dynamicEncoderOptions, setDynamicEncoderOptions] = useState(
     () => offeredEncoders(isWebrtc ? encoderOptionsWR : encoderOptions));
   /** Audio bitrate stops the slider indexes into: the server's allowed enum, else the local list. */
-  const audioBitrateChoices = (serverSettings?.audio_bitrate?.allowed?.map((v) => parseInt(v, 10))) || audioBitrateOptions;
+  const audioBitrateChoices = agentCapabilities.audio_bitrate_choices?.length ? agentCapabilities.audio_bitrate_choices : audioBitrateOptions;
 
   const DEBOUNCE_DELAY = 500;
   const dpiPolicyRef = useRef({});
@@ -2193,7 +2195,6 @@ function Sidebar() {
   };
   const handleAudioBitrateChange = (selectedAudioBitrate) => {
     if (Number.isNaN(selectedAudioBitrate)) selectedAudioBitrate = DEFAULT_AUDIO_BITRATE;
-    setAudioBitrate(selectedAudioBitrate)
     debouncedPostSetting({ audio_bitrate: selectedAudioBitrate})
   }
   const handleJpegQualityChange = (event) => {
@@ -4188,7 +4189,7 @@ function Sidebar() {
                           step={1}
                           value={Math.max(0, audioBitrateChoices.indexOf(audioBitrate))}
                           onChange={(e) => handleAudioBitrateChange(audioBitrateChoices[parseInt(e.target.value, 10)])}
-                          disabled={agentCapabilities.audio_bitrate_supported === false || !serverSettings || (serverSettings.audio_bitrate?.allowed?.length ?? 0) <= 1}
+                          disabled={agentCapabilities.audio_bitrate_supported !== true || (agentCapabilities.audio_bitrate_choices?.length ?? 0) <= 1}
                         />
                       </div>
                     )}

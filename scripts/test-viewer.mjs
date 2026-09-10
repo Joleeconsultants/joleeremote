@@ -8,8 +8,10 @@ import { SasControl } from '../public/sas-control.js';
 import { ClipboardPasteGate } from '../public/clipboard-paste.js';
 import { UploadControl } from '../public/upload-control.js';
 import { DisplayTransition } from '../public/display-transition.js';
+import { NegotiatedAudioDecoder } from '../public/audio-decoder.js';
+import { AudioControl } from '../public/audio-control.js';
 function viewerContext(globals) {
-  globals={DisplayTransition,displayTransition:new DisplayTransition(),heldViewerKeys:new Map(),printJobChunks:new Map(),stage:{classList:{toggle(){}},scrollLeft:0,scrollTop:0},sessionState:{set(){},frame(){},stale(){}},...globals};
+  globals={audioEnabled:true,audioCodecState:{choices:[],effective:null},DisplayTransition,displayTransition:new DisplayTransition(),heldViewerKeys:new Map(),printJobChunks:new Map(),stage:{classList:{toggle(){}},scrollLeft:0,scrollTop:0},sessionState:{set(){},frame(){},stale(){}},...globals};
   return vm.createContext({ canvas:{dataset:{}},setMicrophoneForwarding:()=>{},resetRemoteCursor:()=>{},pointerInput:{reset(){}},clearTimeout:()=>{},session:'fixture-session', SasControl, structuredClone, sasControl:{consume:()=>false,request:()=>{},publish:()=>{}}, ClipboardPasteGate, clipboardPaste: new ClipboardPasteGate({ send() {}, report() {}, supported: () => false, connection: () => null }), ...globals,
     UploadControl,uploadControl:{bind(){},capability(){},consume(){return false;}},crypto:{subtle:webcrypto.subtle,...globals.crypto} });
 }
@@ -349,7 +351,7 @@ test('telemetry updates and dashboard polls do not consume partial FPS/bandwidth
   assert.equal(sent.at(-1).active_encoder, 'jpeg');
   assert.deepEqual(Array.from(sent.at(-1).supported_encoders), ['jpeg']);
   assert.equal(sent.at(-1).microphone_supported, false);
-  assert.equal(sent.at(-1).audio_bitrate_supported, null);
+  assert.equal(sent.at(-1).audio_bitrate_supported, false);
   for(const state of ['off','waiting','forwarding','unavailable']){
     Object.assign(c.agentStats,{webcam_supported:true,webcam_capture:{supported:true,state}});
     c.postStats();assert.equal(sent.at(-1).webcam_capture.state,state);
@@ -469,7 +471,7 @@ function audioHarness() {
     createBufferSource(){const source={connect(){},disconnect(){},start(time){this.time=time;},stop(){this.stopped=true;}};sources.push(source);return source;}
   }
   class Audio {paused=true;play(){this.paused=false;return Promise.resolve();}pause(){this.paused=true;}setSinkId(id){this.sink=id;return Promise.resolve();}}
-  const c=viewerContext({window:{AudioContext:Context},Audio,Float32Array});
+  const c=viewerContext({window:{AudioContext:Context},Audio,Float32Array,NegotiatedAudioDecoder,AudioControl});
   vm.runInContext(html.slice(html.indexOf('class RemoteAudioPlayer'),html.indexOf('function stopAudioPlayback('))+'\nglobalThis.player=remoteAudio;',c);
   return {player:c.player,sources,resolve:()=>decodeResolve({duration:0.25})};
 }

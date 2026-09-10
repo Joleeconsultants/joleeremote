@@ -57,3 +57,19 @@ test('observer storage is bounded and rejects UUID reuse before expiry',()=>{
   assert.equal(h.control.observations.size,128);assert.equal(h.control.request(),false);assert.equal(h.sent.length,128);
   h.advance(45000);assert.equal(h.control.request(),true);assert.equal(h.control.observations.size,1);
 });
+
+test('prepared secure expiry survives legacy cutoff and reports expiry without final packet',()=>{
+  const h=harness();h.control.request();
+  h.consume(message({status:'observing',code:'helper_ready',secureExpiresAt:80000}));
+  h.advance(46000);assert.equal(h.control.observations.size,1);assert.equal(h.reports.length,0);
+  h.advance(33000);assert.deepEqual(h.reports,[{status:'failed',code:'deadline_reached'}]);
+  h.advance(1000);assert.equal(h.reports.length,1);
+});
+test('prepared deadline cannot widen and completed return does not later report failure',()=>{
+  const h=harness();h.control.request();
+  h.consume(message({status:'observing',code:'helper_ready',secureExpiresAt:80000}));
+  h.consume(message({sequence:2,status:'active',code:'secure_frame_received',secureExpiresAt:90000}));
+  assert.equal(h.control.observations.get(id).deadline,80000);
+  h.consume(message({sequence:3,status:'returned',code:'normal_frame_received',secureExpiresAt:80000}));
+  h.advance(80000);assert.deepEqual(h.reports,[{status:'returned',code:'normal_frame_received'}]);
+});

@@ -86,6 +86,11 @@ export class Session extends Server<Env> {
         context TEXT
       )`);
       this.ensureFilesTable();
+      this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS session_renewal (
+        session_id TEXT PRIMARY KEY, revision INTEGER NOT NULL,
+        request_id TEXT NOT NULL, previous_expiry INTEGER NOT NULL,
+        expiry INTEGER NOT NULL, issued_at INTEGER NOT NULL, original_expiry INTEGER NOT NULL
+      )`);
     });
   }
 
@@ -136,6 +141,23 @@ export class Session extends Server<Env> {
     return { sessionId: row.id, expiresAt: row.expires_at, context: sealed[0]?.context ?? null };
   }
 
+  /** Internal RPC: private integration must also verify fresh operator identity. */
+  async readOwnedMintContext(browserToken:string):Promise<{sessionId:string;expiresAt:number;context:string|null}|null>{
+    const row=this.loadRow();
+    if(!row||typeof browserToken!=='string'||!timingSafeEqual(browserToken,row.browser_token))return null;
+    return this.readMintContext();
+  }
+
+  /** Immutable privileged authorization deadline; ordinary renewal must never extend it. */
+  async readOriginalAuthorizationContext(): Promise<{sessionId:string;expiresAt:number;context:string|null}|null> {
+    const context=await this.readMintContext();
+    if(!context)return null;
+    const renewal=this.ctx.storage.sql.exec<{original_expiry:number}>(
+      'SELECT original_expiry FROM session_renewal WHERE session_id = ?',context.sessionId).toArray()[0];
+    const expiresAt=renewal?.original_expiry ?? context.expiresAt;
+    return expiresAt>Date.now()?{...context,expiresAt}:null;
+  }
+
   async status(): Promise<PublicStatus | null> {
     const row = this.loadRow();
     if (!row || row.state === "ended") return null;
@@ -149,6 +171,39 @@ export class Session extends Server<Env> {
       browserConnected,
       agentConnected,
     };
+  }
+
+  /** Internal RPC only. Caller must verify current authorization and native applied ack.
+   * No HTTP or websocket route exposes this operation to a browser or agent token.
+   */
+  async commitRenewal(input: { sessionId: string; requestId: string; revision: number;
+    previousExpiresAt: number; expiresAt: number; issuedAt: number }): Promise<boolean> {
+    const row = this.loadRow(), now = Date.now();
+    if (!row || row.state === 'ended' || row.id !== input.sessionId || row.expires_at <= now ||
+        !this.hasRole('browser') || !this.hasRole('agent')) return false;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.requestId) ||
+        ![input.revision,input.previousExpiresAt,input.expiresAt,input.issuedAt].every(Number.isSafeInteger) ||
+        input.revision < 1 || input.issuedAt > now || input.expiresAt <= input.previousExpiresAt ||
+        input.expiresAt > input.issuedAt + 3_600_000) return false;
+    const prior = this.ctx.storage.sql.exec<{ revision:number; request_id:string;
+      previous_expiry:number; expiry:number; issued_at:number; original_expiry:number }>(
+      'SELECT * FROM session_renewal WHERE session_id = ?',row.id).toArray()[0];
+    const replay = prior?.request_id === input.requestId && prior.revision === input.revision &&
+      prior.previous_expiry === input.previousExpiresAt && prior.expiry === input.expiresAt &&
+      prior.issued_at === input.issuedAt && row.expires_at === input.expiresAt;
+    if (!replay) {
+      if (row.expires_at !== input.previousExpiresAt || input.revision !== (prior?.revision ?? 0) + 1 ||
+          prior?.request_id === input.requestId) return false;
+      this.ctx.storage.transactionSync(() => {
+        this.ctx.storage.sql.exec('UPDATE session SET expires_at = ? WHERE id = ?',input.expiresAt,row.id);
+        this.ctx.storage.sql.exec(`INSERT OR REPLACE INTO session_renewal
+          (session_id, revision, request_id, previous_expiry, expiry, issued_at, original_expiry) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          row.id,input.revision,input.requestId,input.previousExpiresAt,input.expiresAt,input.issuedAt,prior?.original_expiry ?? row.expires_at);
+      });
+    }
+    await this.ctx.storage.setAlarm(input.expiresAt);
+    this.broadcastStatus();
+    return true;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -275,6 +330,11 @@ export class Session extends Server<Env> {
   async onAlarm(): Promise<void> {
     const row = this.loadRow();
     if (!row) return;
+    // A queued/retried old alarm must not end a successfully renewed session.
+    if (row.expires_at > Date.now()) {
+      await this.ctx.storage.setAlarm(row.expires_at);
+      return;
+    }
     await this.teardown();
   }
 

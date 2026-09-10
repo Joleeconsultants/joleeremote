@@ -18,7 +18,12 @@ const continuityCodes = {
     'capture_unavailable', 'return_unobserved', 'cancelled'],
 };
 export function validSecureDesktopStatus(value) {
-  return exact(value, ['t', 'v', 'session_id', 'generation', 'id', 'sequence', 'status', 'code']) &&
+  const keys=['t', 'v', 'session_id', 'generation', 'id', 'sequence', 'status', 'code'];
+  if (value && Object.hasOwn(value,'secureExpiresAt')) {
+    keys.push('secureExpiresAt');
+    if (!Number.isSafeInteger(value.secureExpiresAt) || value.secureExpiresAt<=0) return false;
+  }
+  return exact(value, keys) &&
     value.t === 'secure_desktop_status' && value.v === 1 && sessionId(value.session_id) &&
     generation(value.generation) && uuid(value.id) && Number.isSafeInteger(value.sequence) &&
     value.sequence >= 1 && value.sequence <= 64 && typeof value.status === 'string' && typeof value.code === 'string' && Object.hasOwn(continuityCodes, value.status) &&
@@ -61,12 +66,24 @@ export class SasControl {
     this.publish();
   }
   invalidate() {
+    this.pruneObservations();
+    this.unschedule(this.observationTimer); this.observationTimer=null;
     this.unschedule(this.expiryTimer); this.expiryTimer = null; this.capability = null;
     this.observations.clear();
     this.finish('uncertain');
   }
   pruneObservations() {
-    for (const [id, entry] of this.observations) if (entry.deadline <= this.now()) this.observations.delete(id);
+    for (const [id, entry] of this.observations) if (entry.deadline <= this.now()) {
+      this.observations.delete(id);
+      if (entry.secureExpiry && !entry.terminal) this.secureReport({status:'failed',code:'deadline_reached'});
+    }
+  }
+  armObservationExpiry() {
+    this.unschedule(this.observationTimer);
+    const deadlines=[...this.observations.values()].filter(e=>!e.terminal).map(e=>e.deadline);
+    if (!deadlines.length) return;
+    this.observationTimer=this.schedule(()=>{this.pruneObservations();this.armObservationExpiry();},
+      Math.max(1,Math.min(...deadlines)-this.now()));
   }
   finish(status) {
     if (!this.pending) return;
@@ -97,9 +114,17 @@ export class SasControl {
       if (!entry || entry.terminal || entry.connection !== connection || message.session_id !== this.session ||
           entry.generation !== message.generation || this.capability?.generation !== message.generation ||
           message.sequence <= entry.sequence || message.status === 'observing' && entry.active) return true;
+      if (Object.hasOwn(message,'secureExpiresAt')) {
+        if (message.secureExpiresAt>entry.grantDeadline || message.secureExpiresAt>entry.startedAt+3600000 ||
+            entry.secureExpiry && entry.secureExpiry!==message.secureExpiresAt) return true;
+        entry.secureExpiry=message.secureExpiresAt;entry.deadline=message.secureExpiresAt;
+        this.pruneObservations();this.armObservationExpiry();
+        if (!this.observations.has(message.id)) return true;
+      }
       entry.sequence = message.sequence;
       if (message.status === 'active') entry.active = true;
       if (message.status === 'returned' || message.status === 'failed') entry.terminal = true;
+      this.armObservationExpiry();
       if (['warning', 'returned', 'failed'].includes(message.status) && !entry.reported.has(message.code)) {
         entry.reported.add(message.code);
         this.secureReport({ status: message.status, code: message.code });
@@ -135,7 +160,9 @@ export class SasControl {
     const id = this.makeId(); if (!uuid(id) || this.observations.has(id)) return false;
     const p = { id, generation: cap.generation, connection: this.connection, deadline: this.now() + 5000 };
     this.observations.set(id, { connection: this.connection, generation: cap.generation,
+      startedAt:this.now(),grantDeadline:cap.expires_at,secureExpiry:null,
       deadline: Math.min(this.now() + 45000, cap.expires_at), sequence: 0, active: false, terminal: false, reported: new Set() });
+    this.armObservationExpiry();
     this.pending = p;
     p.timer = this.schedule(() => { if (this.pending === p) this.finish('uncertain'); }, 5000);
     this.publish();

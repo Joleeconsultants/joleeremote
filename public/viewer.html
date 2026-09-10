@@ -38,8 +38,11 @@ import { ClipboardPasteGate } from './clipboard-paste.js?v=jo-ui-41';
 import { SasControl } from './sas-control.js?v=jo-ui-47';
 import { UploadControl } from './upload-control.js?v=jo-ui-49';
 import { SessionState } from './session-state.js';
+import { mountRenewalUi } from './renewal-ui.js';
 import { readDisplayCatalog } from './display-catalog.js';
 import { DisplayTransition } from './display-transition.js';
+import { NegotiatedAudioDecoder } from './audio-decoder.js';
+import { AudioControl } from './audio-control.js';
 const VERSION=1, KIND_FRAME=1, KIND_INPUT=2, KIND_AUDIO=3;
 const DEFAULT_CURSOR_SVG="data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round" d="M1 1v16.5l4.2-4.3 3.3 8 2.5-1-3.3-7.9H15z"/></svg>');
 const DEFAULT_CURSOR_HX=1, DEFAULT_CURSOR_HY=1;
@@ -72,6 +75,7 @@ const sessionState=new SessionState(({text,visible,state})=>{
   const notice=document.getElementById('connection-status');
   notice.textContent=text;notice.hidden=!visible;notice.dataset.state=state;
 });
+const renewalUi=mountRenewalUi({sessionId:session,browserToken:token,onExpired:()=>queueMicrotask(()=>setStatus('expired'))});
 let cursorHx=DEFAULT_CURSOR_HX, cursorHy=DEFAULT_CURSOR_HY, cursorPosition=null;
 cursorEl.src=DEFAULT_CURSOR_SVG;
 function applyScale(){
@@ -250,6 +254,7 @@ function consumeLatencyReply(payload){
 }
 function setStatus(state,expiresAt=null){
   sessionState.set(state);
+  if(typeof renewalUi!=='undefined')renewalUi.bind(state,expiresAt);
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
   uploadControl.bind(sessionPaired?socket:null,expiresAt);
@@ -364,10 +369,10 @@ function cursorFromFrame(payload){
     const width=view.getUint32(16),height=view.getUint32(20);
     if(width<1||height<1||width>128||height>128||!Number.isSafeInteger(obj.hx)||!Number.isSafeInteger(obj.hy)||
         obj.hx<0||obj.hy<0||obj.hx>=width||obj.hy>=height) return null;
-    // Never apply arbitrary remote CSS or URLs. Older agents have no semantic
-    // type: retain a genuine local arrow instead of substituting a remote PNG.
+    // Only allow stock semantic types. Unknown/custom shapes use the validated
+    // bounded PNG and hotspot; never apply remote CSS or external URLs.
     const types=['default','text','pointer','wait','progress','crosshair','move','not-allowed','help','ew-resize','ns-resize','nesw-resize','nwse-resize'];
-    return {visible:true,mime:obj.mime,data:obj.data,hx:obj.hx,hy:obj.hy,css:types.includes(obj.css)?obj.css:'default'};
+    return {visible:true,mime:obj.mime,data:obj.data,hx:obj.hx,hy:obj.hy,css:types.includes(obj.css)?obj.css:null};
   }catch{return null;}
 }
 function resetRemoteCursor(){
@@ -379,6 +384,7 @@ function applyCursorFrame(cur){
   if(cur.visible&&cur.css)nativeCursor=cur.css;
   if(cur.visible && cur.mime && cur.data){
     cursorEl.src="data:image/png;base64,"+cur.data;
+    nativeCursor=cur.css||'url("data:image/png;base64,'+cur.data+'") '+cur.hx+' '+cur.hy+', default';
     cursorHx=cur.hx;cursorHy=cur.hy;
     if(cursorPosition) moveOverlay(cursorPosition);
   }
@@ -585,18 +591,27 @@ class RemoteAudioPlayer {
         const bytes=this.queue.shift();
         const buffer=await this.context.decodeAudioData(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
         if(generation!==this.generation||!this.enabled)return;
-        const now=this.context.currentTime;
-        if(buffer.duration<=0||buffer.duration>1)continue;
-        if(Math.max(now+0.02,this.nextTime)+buffer.duration-now>1.25)continue;
-        const source=this.context.createBufferSource();source.buffer=buffer;source.connect(this.analyser);
-        const start=Math.max(now+0.02,this.nextTime);
-        this.sources.add(source);
-        source.onended=()=>{source.disconnect();this.sources.delete(source);};
-        source.start(start);this.nextTime=start+buffer.duration;this.lastScheduled=this.nextTime;
-        this.state='playing';
+        this.scheduleBuffer(buffer);
       }
     }catch{if(generation===this.generation)this.state='error';}
     finally{this.draining=false;if(this.queue.length&&this.enabled&&this.context?.state==='running')this.drain();}
+  }
+  scheduleBuffer(buffer){
+    if(!this.enabled||this.context?.state!=='running'||this.element?.paused)return;
+    const now=this.context.currentTime;
+    if(buffer.duration<=0||buffer.duration>1||Math.max(now+0.02,this.nextTime)+buffer.duration-now>1.25)return;
+    const source=this.context.createBufferSource();source.buffer=buffer;source.connect(this.analyser);
+    const start=Math.max(now+0.02,this.nextTime);this.sources.add(source);
+    source.onended=()=>{source.disconnect();this.sources.delete(source);};
+    source.start(start);this.nextTime=start+buffer.duration;this.lastScheduled=this.nextTime;this.state='playing';
+  }
+  decodedAudio(data){
+    if(!this.enabled)return;
+    this.ensure();
+    if(data.numberOfChannels<1||data.numberOfChannels>2||data.numberOfFrames>4096)return;
+    const buffer=this.context.createBuffer(data.numberOfChannels,data.numberOfFrames,data.sampleRate);
+    for(let channel=0;channel<data.numberOfChannels;channel++)data.copyTo(buffer.getChannelData(channel),{planeIndex:channel,format:'f32-planar'});
+    this.scheduleBuffer(buffer);
   }
   reading(){
     if(!this.enabled)return {level:null,state:'disabled'};
@@ -616,7 +631,15 @@ class RemoteAudioPlayer {
   }
 }
 const remoteAudio=new RemoteAudioPlayer();
-function stopAudioPlayback(){remoteAudio.stop();}
+let audioCodecState={choices:[],effective:null};
+const negotiatedAudio=new NegotiatedAudioDecoder({output:data=>remoteAudio.decodedAudio(data),fallback:()=>audioControl.pcm()});
+const audioControl=new AudioControl({send:message=>sendInput(message),
+  applied:message=>{remoteAudio.stop();negotiatedAudio.acknowledge(message);if(audioEnabled)remoteAudio.unlock();},
+  changed:state=>{
+    audioCodecState=state;
+    if(state.error)postPipelineStatus('audio',audioEnabled,'Audio setting was not confirmed.');
+  }});
+function stopAudioPlayback(){remoteAudio.stop();negotiatedAudio.reset();audioControl.reset();}
 let audioOutputRequest=0;
 async function selectAudioOutput(id){
   const request=++audioOutputRequest;
@@ -934,7 +957,11 @@ function setAudioEnabled(enabled){
   if(audioEnabled)remoteAudio.unlock();else stopAudioPlayback();
   postPipelineStatus('audio',audioEnabled);
 }
-function playAudioChunk(payload){remoteAudio.push(payload);}
+function playAudioChunk(payload){
+  if(payload[0]===74&&payload[1]===82&&payload[2]===65&&payload[3]===49){if(audioEnabled)void negotiatedAudio.push(payload);return;}
+  if(audioCodecState.effective?.codec==='mp4a.40.2')return;
+  remoteAudio.push(payload);
+}
 function unlockAudioFromGesture(){remoteAudio.unlock();}
 function disconnect(){const previous=socket;socket=null;if(previous)previous.close();stopAudioPlayback();stopMicrophone();stopWebcam();setStatus("disconnected");}
 function connect(opts){
@@ -980,6 +1007,8 @@ function connect(opts){
     bytesSinceStats+=env.payload.length+2;
     if(env.kind==="audio"){playAudioChunk(env.payload);return;}
     if(env.kind!=="frame") return;
+    const audioMessage=parseJsonFrameObject(env.payload);
+    if(audioMessage?.t==='audio_capabilities'||audioMessage?.t==='audio_config_result'){void audioControl.consume(audioMessage);return;}
     if(uploadControl.consume(parseJsonFrameObject(env.payload),currentSocket))return;
     if(sasControl.consume(parseJsonFrameObject(env.payload),currentSocket))return;
     if(consumeLatencyReply(env.payload))return;
@@ -1048,6 +1077,7 @@ function sendInput(payload){
     const identity=payload.code||payload.key;
     if(payload.e==='down')heldViewerKeys.set(identity,payload);else heldViewerKeys.delete(identity);
   }
+
 }
 function requestFullscreen(){
   const el=stage;
@@ -1277,7 +1307,9 @@ function postStats(){
   stats.webcam_capture=cameraCapture&&typeof cameraCapture.supported==='boolean'&&['off','waiting','forwarding','unavailable'].includes(cameraCapture.state)
     ? {supported:cameraCapture.supported,state:cameraCapture.state}:null;
   stats.dpi_scaling_supported=typeof agentStats.dpi_scaling_supported==='boolean'?agentStats.dpi_scaling_supported:null;
-  stats.audio_bitrate_supported=typeof agentStats.audio_bitrate_supported==='boolean'?agentStats.audio_bitrate_supported:null;
+  stats.audio_bitrate_supported=sessionPaired&&audioEnabled&&audioCodecState.choices.length>0;
+  stats.audio_bitrate_choices=audioCodecState.choices;
+  stats.audio_bitrate_effective=audioCodecState.effective?.codec==='mp4a.40.2'?audioCodecState.effective.targetBitrate:null;
   stats.capture_backend=['gdi','gdi-bootstrap','dxgi','paused'].includes(agentStats.capture_backend)?agentStats.capture_backend:null;
   stats.capture_max_edge=Number.isInteger(agentStats.capture_max_edge)&&agentStats.capture_max_edge>=320&&agentStats.capture_max_edge<=3840?agentStats.capture_max_edge:null;
   stats.jpeg_quality_effective=stats.active_encoder==='jpeg'&&Number.isInteger(agentStats.jpeg_quality_effective)&&agentStats.jpeg_quality_effective>=1&&agentStats.jpeg_quality_effective<=100?agentStats.jpeg_quality_effective:null;
@@ -1383,7 +1415,7 @@ for(const target of [canvas,vk,window])target.addEventListener('blur',()=>clipbo
 window.addEventListener("message",(event)=>{
   if(event.origin!==window.location.origin) return;
   if(window.parent!==window && event.source!==window.parent) return;
-  const msg=event.data;
+  let msg=event.data;
   if(!msg||typeof msg!=="object") return;
   switch(msg.type){
     case "connect": connect(msg); break;
@@ -1464,6 +1496,10 @@ window.addEventListener("message",(event)=>{
       break;
     case "settings":
       if(msg.settings){
+        if(Object.hasOwn(msg.settings,'audio_bitrate')){
+          if(audioEnabled&&sessionPaired)audioControl.select(Number(msg.settings.audio_bitrate));
+          msg={...msg,settings:{...msg.settings}};delete msg.settings.audio_bitrate;
+        }
         if(typeof msg.settings.force_aligned_resolution==='boolean'&&screenAligned!==msg.settings.force_aligned_resolution){
           screenAligned=msg.settings.force_aligned_resolution;
           scheduleScreenResize();

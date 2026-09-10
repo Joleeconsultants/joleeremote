@@ -254,7 +254,7 @@ function consumeLatencyReply(payload){
 }
 function setStatus(state,expiresAt=null){
   sessionState.set(state);
-  if(typeof renewalUi!=='undefined')renewalUi.bind(state,expiresAt);
+  if(typeof renewalUi!=='undefined')renewalUi.bind(state,expiresAt,{sessionId:session,browserToken:token});
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
   uploadControl.bind(sessionPaired?socket:null,expiresAt);

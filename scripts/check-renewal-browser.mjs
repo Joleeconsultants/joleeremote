@@ -27,6 +27,9 @@ try{
  await page.evaluate(()=>window.ui.bind('expired',Date.now()-1));
  await page.getByRole('button',{name:'Start New Session'}).waitFor({state:'visible'});
  assert.equal(await page.evaluate(()=>sessionStorage.getItem('jolee-restart:session')),'/?clientId=client&agentId=device');
+ await page.evaluate(()=>window.ui.bind('paired',Date.now()+60000,{sessionId:'new-session',browserToken:'new-browser'}));
+ await keep.waitFor({state:'visible'});await keep.click();await page.waitForFunction(()=>document.querySelector('[role=status]').hidden);
+ assert.equal(request.sessionId,'new-session');assert.equal(request.browserToken,'new-browser');
  unsupported=true;await page.reload();await page.waitForFunction(()=>!!window.ui);
  assert.equal(await keep.isVisible(),false);
  console.log('Edge explicit renewal, committed confirmation, expiry/restart and unsupported-agent hiding PASS.');

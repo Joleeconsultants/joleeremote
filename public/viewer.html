@@ -377,7 +377,7 @@ function cursorFromFrame(payload){
     if(width<1||height<1||width>128||height>128||!Number.isSafeInteger(obj.hx)||!Number.isSafeInteger(obj.hy)||
         obj.hx<0||obj.hy<0||obj.hx>=width||obj.hy>=height) return null;
     // Only allow stock semantic types. Unknown/custom shapes use the validated
-    // bounded PNG and hotspot; never apply remote CSS or external URLs.
+    // bounded PNG in drawn mode; native mode falls back to the local arrow.
     const types=['default','text','pointer','wait','progress','crosshair','move','not-allowed','help','ew-resize','ns-resize','nesw-resize','nwse-resize'];
     return {visible:true,mime:obj.mime,data:obj.data,hx:obj.hx,hy:obj.hy,css:types.includes(obj.css)?obj.css:null};
   }catch{return null;}
@@ -391,7 +391,7 @@ function applyCursorFrame(cur){
   if(cur.visible&&cur.css)nativeCursor=cur.css;
   if(cur.visible && cur.mime && cur.data){
     cursorEl.src="data:image/png;base64,"+cur.data;
-    nativeCursor=cur.css||'url("data:image/png;base64,'+cur.data+'") '+cur.hx+' '+cur.hy+', default';
+    nativeCursor=cur.css||'default';
     cursorHx=cur.hx;cursorHy=cur.hy;
     if(cursorPosition) moveOverlay(cursorPosition);
   }

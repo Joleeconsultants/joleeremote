@@ -16,7 +16,7 @@ try{
    return route.fulfill({json:{...body,status:'committed',expiresAt:Date.now()+3600000}});
   }
   if(path.endsWith('.js'))return route.fulfill({contentType:'text/javascript',body:readFileSync(new URL('../public'+path,import.meta.url),'utf8')});
-  return route.fulfill({contentType:'text/html',body:`<script type="module">import {mountRenewalUi} from '/renewal-ui.js';window.ui=mountRenewalUi({sessionId:'session',browserToken:'browser',onExpired:()=>window.expired=true});ui.bind('paired',Date.now()+60000);</script>`});
+  return route.fulfill({contentType:'text/html',body:`<script type="module">import {mountRenewalUi} from '/renewal-ui.js';sessionStorage.setItem('jolee_tab_device',JSON.stringify({session:'session',name:'QBOOKS-HOST'}));window.ui=mountRenewalUi({sessionId:'session',browserToken:'browser',onExpired:()=>window.expired=true});ui.bind('paired',Date.now()+60000);</script>`});
  });
  await page.goto('https://renewal.test/');
  const keep=page.getByRole('button',{name:'Keep Session Active'});
@@ -26,7 +26,7 @@ try{
  assert.equal(starts,1);
  await page.evaluate(()=>window.ui.bind('expired',Date.now()-1));
  await page.getByRole('button',{name:'Start New Session'}).waitFor({state:'visible'});
- assert.equal(await page.evaluate(()=>sessionStorage.getItem('jolee-restart:session')),'/?clientId=client&agentId=device');
+ assert.equal(await page.evaluate(()=>sessionStorage.getItem('jolee-restart:session')),'/?clientId=client&agentId=device&machineName=QBOOKS-HOST');
  await page.evaluate(()=>window.ui.bind('paired',Date.now()+60000,{sessionId:'new-session',browserToken:'new-browser'}));
  await keep.waitFor({state:'visible'});await keep.click();await page.waitForFunction(()=>document.querySelector('[role=status]').hidden);
  assert.equal(request.sessionId,'new-session');assert.equal(request.browserToken,'new-browser');

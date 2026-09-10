@@ -1262,6 +1262,7 @@ function Sidebar() {
   const [audioBitrate, setAudioBitrate] = useState(
     parseInt(localStorage.getItem(getPrefixedKey("audio_bitrate")), 10) || DEFAULT_AUDIO_BITRATE
   );
+  const pendingAudioBitrate = useRef(null);
   const [videoBitrate, setVideoBitrate] = useState(
     parseInt(localStorage.getItem(getPrefixedKey("video_bitrate")), 10) || DEFAULT_VIDEO_BITRATE
   );
@@ -1293,6 +1294,7 @@ function Sidebar() {
       if (event.origin !== window.location.origin || event.source !== core?.contentWindow) return;
       if (event.data?.type === 'status' && event.data.state !== 'paired') {
         setAgentCapabilities({});
+        pendingAudioBitrate.current = null;
         setCurrentResolution('');
         setManualWidth('');
         setManualHeight('');
@@ -1334,7 +1336,11 @@ function Sidebar() {
         dpi_scaling_supported: message.dpi_scaling_supported,
         audio_bitrate_supported: message.audio_bitrate_supported,
         audio_bitrate_choices: Array.isArray(message.audio_bitrate_choices) ? message.audio_bitrate_choices.filter(v=>[96000,128000,160000,192000].includes(v)) : [] });
-      if ([96000,128000,160000,192000].includes(message.audio_bitrate_effective)) setAudioBitrate(message.audio_bitrate_effective);
+      const pendingBitrate = pendingAudioBitrate.current;
+      if (!pendingBitrate || message.audio_bitrate_effective === pendingBitrate.value || Date.now() >= pendingBitrate.until || message.audio_bitrate_supported !== true) {
+        pendingAudioBitrate.current = null;
+        if ([96000,128000,160000,192000].includes(message.audio_bitrate_effective)) setAudioBitrate(message.audio_bitrate_effective);
+      }
     };
     window.addEventListener('message', receive);
     return () => window.removeEventListener('message', receive);
@@ -2196,7 +2202,9 @@ function Sidebar() {
     debouncedPostSetting({ video_bitrate: selectedVideoBitrate})
   };
   const handleAudioBitrateChange = (selectedAudioBitrate) => {
-    if (Number.isNaN(selectedAudioBitrate)) selectedAudioBitrate = DEFAULT_AUDIO_BITRATE;
+    if (agentCapabilities.audio_bitrate_supported !== true || !audioBitrateChoices.includes(selectedAudioBitrate)) return;
+    pendingAudioBitrate.current = { value: selectedAudioBitrate, until: Date.now() + 6000 };
+    setAudioBitrate(selectedAudioBitrate);
     debouncedPostSetting({ audio_bitrate: selectedAudioBitrate})
   }
   const handleJpegQualityChange = (event) => {
@@ -3448,6 +3456,7 @@ function Sidebar() {
               <button
                 className={`action-button ${isMicrophoneActive ? "active" : ""}`}
                 onClick={handleMicrophoneToggle}
+                disabled={!microphoneReady && !isMicrophoneActive}
                 title={!microphoneReady ? 'Microphone forwarding requires a connected PC with confirmed support.' : t(
                   isMicrophoneActive
                     ? "buttons.microphoneDisableTitle"

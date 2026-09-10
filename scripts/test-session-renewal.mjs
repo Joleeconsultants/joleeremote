@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {SessionRenewal} from '../public/session-renewal.js';
+import {SessionRenewal,preserveRestartName} from '../public/session-renewal.js';
 function harness(request){let time=1000,state;const c=new SessionRenewal({request,render:s=>state=s,now:()=>time,schedule:()=>1,unschedule(){},makeId:()=> 'request'});
  return {c,get state(){return state;},advance(ms){time+=ms;c.publish();}};}
 test('warns five minutes before server expiry and never renews due to activity or timers',()=>{
@@ -40,4 +40,14 @@ test('matching late confirmation never regresses a newer server-bound expiry',as
  const pending=h.c.renew();h.c.bind('session',3601001,true);
  resolve({sessionId:'session',requestId:'request',status:'committed',expiresAt:3601000});
  assert.equal(await pending,true);assert.equal(h.state.expiresAt,3601001);
+});
+
+
+test('restart preserves only the matching session display label and leaves target IDs intact',()=>{
+ const make=()=>new URL('https://example.test/?clientId=client&agentId=device');
+ const url=preserveRestartName(make(),'one',JSON.stringify({session:'one',name:'QBOOKS-HOST'}));
+ assert.equal(url.searchParams.get('machineName'),'QBOOKS-HOST');
+ assert.equal(url.searchParams.get('agentId'),'device');
+ for(const cached of ['invalid',null,JSON.stringify({session:'two',name:'Wrong PC'})])
+  assert.equal(preserveRestartName(make(),'one',cached).searchParams.has('machineName'),false);
 });

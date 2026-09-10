@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
-import {readDisplayCatalog,resolutionChoices} from '../public/display-catalog.js';
+import {readDisplayCatalog,resolutionChoices,publishScreenDiagnostic} from '../public/display-catalog.js';
 import {DisplayTransition} from '../public/display-transition.js';
 const id = n => n.toString(16).padStart(32,'0');
 const mode=(n,width,height,refresh_hz=60,selectable=true)=>({id:id(n),width,height,refresh_hz,selectable,reason:selectable?null:'capture_limit'});
@@ -78,4 +78,38 @@ test('actual viewer input boundary blocks queued physical input during display t
   guard.acknowledge('change');c.sendInput({t:'key',e:'down',key:'a',code:'KeyA'});
   assert.equal(sent.length,2);
   guard.painted();c.sendInput({t:'key',e:'down',key:'a',code:'KeyA'});assert.equal(sent.length,3);
+});
+
+test('screen diagnostics distinguish received catalog from expired forwarding without leaking content',()=>{
+  const screen={status:'idle',mode:'auto',effective:{width:1920,height:1200},catalog,
+    token:'secret',clipboard:'private',request_id:'private',reason:'private'};
+  const dataset={};
+  publishScreenDiagnostic(dataset,screen,screen,true,12);
+  const fresh=JSON.parse(dataset.screenDiagnostic);
+  assert.equal(fresh.received.catalog_valid,true);
+  assert.deepEqual(fresh.received,fresh.forwarded);
+  assert.equal(fresh.received.selected.mode_count,display.modes.length);
+  assert.ok(!dataset.screenDiagnostic.includes('private'));
+  assert.ok(!dataset.screenDiagnostic.includes('secret'));
+  assert.ok(!dataset.screenDiagnostic.includes(display.label));
+  publishScreenDiagnostic(dataset,screen,null,true,5100);
+  assert.equal(JSON.parse(dataset.screenDiagnostic).forwarded,null);
+  assert.equal(JSON.parse(dataset.screenDiagnostic).received.catalog_valid,true);
+  assert.equal(dataset.screenReceiptAgeMs,'5100');
+  publishScreenDiagnostic(dataset,{...screen,catalog:{}},null,false,Infinity);
+  const invalid=JSON.parse(dataset.screenDiagnostic);
+  assert.equal(invalid.received.catalog_present,true);
+  assert.equal(invalid.received.catalog_valid,false);
+  assert.equal(dataset.screenReceiptAgeMs,'unknown');
+  assert.ok(dataset.screenDiagnostic.length<2048);
+});
+test('unchanged screen diagnostics do not rewrite the snapshot on telemetry ticks',()=>{
+  let writes=0;const dataset=new Proxy({}, {set(target,key,value){if(key==='screenDiagnostic')writes++;target[key]=value;return true;}});
+  const screen={status:'idle',mode:'auto',catalog};
+  publishScreenDiagnostic(dataset,screen,screen,true,0);
+  publishScreenDiagnostic(dataset,structuredClone(screen),structuredClone(screen),true,1500);
+  assert.equal(writes,1);
+  assert.equal(dataset.screenReceiptAgeMs,'1500');
+  publishScreenDiagnostic(dataset,null,null,false,60001);
+  assert.equal(writes,2);
 });

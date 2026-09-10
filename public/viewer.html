@@ -39,7 +39,7 @@ import { SasControl } from './sas-control.js?v=jo-ui-48';
 import { UploadControl } from './upload-control.js?v=jo-ui-49';
 import { SessionState } from './session-state.js';
 import { mountRenewalUi } from './renewal-ui.js';
-import { readDisplayCatalog } from './display-catalog.js';
+import { readDisplayCatalog, publishScreenDiagnostic } from './display-catalog.js';
 import { DisplayTransition } from './display-transition.js';
 import { NegotiatedAudioDecoder } from './audio-decoder.js';
 import { AudioControl } from './audio-control.js';
@@ -1325,6 +1325,7 @@ function postStats(){
   stats.capture_max_edge=Number.isInteger(agentStats.capture_max_edge)&&agentStats.capture_max_edge>=320&&agentStats.capture_max_edge<=3840?agentStats.capture_max_edge:null;
   stats.jpeg_quality_effective=stats.active_encoder==='jpeg'&&Number.isInteger(agentStats.jpeg_quality_effective)&&agentStats.jpeg_quality_effective>=1&&agentStats.jpeg_quality_effective<=100?agentStats.jpeg_quality_effective:null;
   stats.screen=sessionPaired && now-agentStatsReceivedAt<5000 ? agentScreen : null;
+  publishScreenDiagnostic(canvas.dataset,agentScreen,stats.screen,sessionPaired,now-agentStatsReceivedAt);
   if(window.parent!==window) window.parent.postMessage(stats,window.location.origin);
 }
 setInterval(postStats,1000);

@@ -80,10 +80,12 @@ The browser accepts a result only if all of active connection instance, active s
 - invoked/native_call_returned: show "Ctrl+Alt+Delete requested." Do not say the security screen is open.
 - rejected: show "Ctrl+Alt+Delete was not sent." Optionally append a fixed friendly explanation for its validated code; never render arbitrary server text.
 - uncertain: show "Ctrl+Alt+Delete outcome is unknown. Check the remote screen before trying again."
--5-second timeout, disconnect, generation change, or capability loss during a pending action: same local unknown-outcome wording. Do not synthesize an agent rejected result or resend. Clear the timer and pending record; a later unrelated/stale response cannot report success for another click.
+-5-second timeout, disconnect, generation change, or malformed capability during a pending action: same local unknown-outcome wording. Do not synthesize an agent rejected result or resend. Clear the timer and pending record; a later unrelated/stale response cannot report success for another click.
 
 A valid late result after the local pending record was cleared is ignored. A fresh explicit user click may create a new ID only if current capability/pairing are available; the agent's5-second device rate limit and session ledger remain authoritative. No background reconnect replay, persisted request queue, saved pending command, or auto-retry button action.
 
 ## Required fixtures
 
 Prove exact field/type/version validation; malformed/unavailable/missing/expired capability disabled; normal click sends exactly one command with current generation; repeated clicks while pending send none; successful result shows requested, not displayed; every status/effect mismatch rejects; timeout and uncertain never resend; expired/disconnected/new-generation connection discards pending state; stale or wrong session/ID/connection results cannot complete a fresh request; browser reload does not restore pending commands. Keep native invocation mocked and do not send a live SAS during browser development.
+
+A valid same-generation unavailable capability disables new requests but retains the pending result timer. Secure-desktop preparation can temporarily remove readiness; that does not establish failure of the admitted command. Its correlated result or the unchanged five-second timeout decides the request notification.

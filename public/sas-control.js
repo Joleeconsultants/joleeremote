@@ -138,7 +138,9 @@ export class SasControl {
         this.invalidate(); this.publish(); return true;
       }
       if (this.capability?.generation !== message.generation) this.observations.clear();
-      if (!message.sas.available || this.capability?.generation !== message.generation) this.finish('uncertain');
+      // Availability controls new requests, not the outcome of an already admitted request.
+      // Secure-desktop preparation temporarily makes the same generation unavailable.
+      if (this.capability?.generation !== message.generation) this.finish('uncertain');
       this.deadlines.set(message.generation, message.expires_at);
       this.capability = structuredClone(message);
       this.armExpiry(); this.publish(); return true;

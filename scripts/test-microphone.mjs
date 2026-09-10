@@ -62,3 +62,14 @@ test('already pending fallback cannot replace a newer stream after cancellation'
   assert.equal(stale.track.stopped, true); assert.equal(current.track.stopped, false);
   f.stop(); assert.equal(current.track.stopped, true);
 });
+
+
+test('deferred viewer refuses pilot microphone enable before acquiring resources',()=>{
+ const html=readFileSync(new URL('../public/viewer.html',import.meta.url),'utf8');
+ const source=html.slice(html.indexOf('function setMicrophoneForwarding('),html.indexOf('async function setMicrophoneEnabled('));
+ let cleared=0;
+ const c=vm.createContext({microphoneFeatureEnabled:false,microphoneForwarding:false,clearMicrophoneResources(){cleared++;}});
+ vm.runInContext(source,c);c.setMicrophoneForwarding(true);
+ assert.equal(c.microphoneForwarding,false);assert.equal(cleared,1);
+ assert.match(html,/const microphoneFeatureEnabled=false/);
+});

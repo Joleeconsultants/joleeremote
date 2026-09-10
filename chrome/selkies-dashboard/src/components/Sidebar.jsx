@@ -1531,6 +1531,7 @@ function Sidebar() {
   }, [microphoneSession]);
   const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
   const [filesIframeSrc, setFilesIframeSrc] = useState("");
+  const [isFilesModalLoading, setIsFilesModalLoading] = useState(true);
   const [isAppsModalOpen, setIsAppsModalOpen] = useState(false);
   const [keyboardButtonPosition, setKeyboardButtonPosition] = useState({ bottom: 20, right: 20 });
   const dragInfo = useRef({
@@ -1951,6 +1952,7 @@ function Sidebar() {
   const toggleFilesModal = () => {
     setIsFilesModalOpen((wasOpen) => {
       if (!wasOpen) {
+        setIsFilesModalLoading(true);
         // Recompute absolute session+token URL on every open (avoid stale/empty src).
         setFilesIframeSrc(
           withSessionToken(new URL("/api/files/", window.location.href).href),
@@ -5083,7 +5085,18 @@ function Sidebar() {
               &times;
             </button>
           </div>
-          <iframe src={filesIframeSrc} title={t("filesModal.iframeTitle")} />
+          {isFilesModalLoading && (
+            <div className="files-modal-loading">
+              <SpinnerIcon />
+              <p>{t("filesModal.loading", "Loading files...")}</p>
+            </div>
+          )}
+          <iframe
+            src={filesIframeSrc}
+            title={t("filesModal.iframeTitle")}
+            onLoad={() => setIsFilesModalLoading(false)}
+            style={{ opacity: isFilesModalLoading ? 0 : 1 }}
+          />
         </div>
       )}
       {isAppsModalOpen && (

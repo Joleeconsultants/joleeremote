@@ -36,6 +36,19 @@ try{
  await page.waitForTimeout(600);
  await page.locator('.toggle-handle').click();
  await page.getByText('Files',{exact:true}).click();
+ let releaseFiles;
+ let filesGate=new Promise(resolve=>releaseFiles=resolve);
+ await page.route('**/api/files/**',async route=>{await filesGate;await route.fulfill({contentType:'text/html',body:'<p>Files ready</p>'});});
+ for(let attempt=0;attempt<2;attempt++){
+  if(attempt)filesGate=new Promise(resolve=>releaseFiles=resolve);
+  await page.getByRole('button',{name:'Download Files',exact:true}).click();
+  await page.locator('.files-modal-loading').waitFor({state:'visible'});
+  releaseFiles();
+  await page.locator('.files-modal-loading').waitFor({state:'detached'});
+  await page.frameLocator('.files-modal iframe').getByText('Files ready').waitFor();
+  await page.locator('.files-modal-close').click();
+ }
+
  const chooserPromise=page.waitForEvent('filechooser');
  await page.getByRole('button',{name:'Upload Files',exact:true}).click();
  const chooser=await chooserPromise;

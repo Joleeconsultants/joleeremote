@@ -104,12 +104,19 @@ const en = {
             hidpiEnableTitle: "Enable HiDPI (Pixel Perfect)",
             hidpiDisableTitle: "Disable HiDPI (Use CSS Scaling)",
             hidpiDisabledNoResizeTitle: "Resolution changes are disabled by the server (enable_resize)",
+            hidpiDisabledManualTitle: "A manual resolution is streamed as exact pixels either way; UI scaling sizes its desktop",
             antiAliasingLabel: "Anti-aliasing",
             antiAliasingEnableTitle: "Enable anti-aliasing (smooth on scaling)",
             antiAliasingDisableTitle: "Disable anti-aliasing (force pixelated)",
             useNativeCursorStylesLabel: "Use CSS cursors",
             useNativeCursorStylesEnableTitle: "Use CSS cursor rendering (Replace system cursors)",
             useNativeCursorStylesDisableTitle: "Use canvas cursor rendering (Paint to canvas)",
+            rawPointerMotionLabel: "Raw pointer motion",
+            rawPointerMotionEnableTitle: "Ask the browser for unaccelerated movement under pointer lock (granted on Windows and macOS, refused on Linux and Android)",
+            macCmdAsCtrlLabel: "Command sends Control",
+            macCmdAsCtrlDisableTitle: "Send Command as the Super key the session's window manager may bind",
+            macCmdAsCtrlEnableTitle: "Send Command chords as their Control chords, so Cmd+C copies remotely",
+            rawPointerMotionDisableTitle: "Keep this device's pointer acceleration under pointer lock",
             addScreenTitle: "Add a second screen",
             addScreenButton: "Add Screen +",
             forceAlignedResolutionLabel: "Force Aligned Resolution",
@@ -234,6 +241,8 @@ const en = {
         clipboardSkipReadonly: "Viewers cannot set the clipboard",
         clipboardSkipNoImage: "Select an image to upload first",
         commandFailed: "Remote command failed: {detail}",
+        keyboardLockUnavailable: "This browser offers no keyboard lock, so a single Escape leaves gaming mode instead of reaching the session.",
+        keyboardLockBlockedByShields: "Brave's Shields block the keyboard lock, so a single Escape leaves gaming mode. Allow the keyboard API for this site under the Shields fingerprinting controls to hold Escape instead.",
         clipboardSkipBinaryDisabled: "The image clipboard is disabled on the server",
         clipboardSkipSendFailed: "The clipboard image could not be sent",
         clipboardSkipInDisabled: "Sending to the remote clipboard is disabled",
@@ -249,7 +258,8 @@ const en = {
     zeroBytes: "0 Bytes",
     filesModal: {
         closeAlt: "Close files modal",
-        iframeTitle: "Downloadable Files"
+        iframeTitle: "Downloadable Files",
+        loading: "Loading files..."
     }
 };
 
@@ -341,12 +351,19 @@ const es = {
              hidpiEnableTitle: "Activar HiDPI (Píxel Perfecto)",
              hidpiDisableTitle: "Desactivar HiDPI (Usar escalado CSS)",
              hidpiDisabledNoResizeTitle: "Los cambios de resolución están deshabilitados por el servidor (enable_resize)",
+             hidpiDisabledManualTitle: "Una resolución manual se transmite como píxeles exactos en cualquier caso; el escalado de la interfaz dimensiona su escritorio",
              antiAliasingLabel: "Antialiasing",
              antiAliasingEnableTitle: "Activar anti-aliasing (suavizar al escalar)",
              antiAliasingDisableTitle: "Desactivar anti-aliasing (forzar pixelado)",
              useNativeCursorStylesLabel: "Usar cursores CSS",
              useNativeCursorStylesEnableTitle: "Usar renderizado de cursor CSS (Reemplaza los cursores del sistema)",
              useNativeCursorStylesDisableTitle: "Usar renderizado de cursor en lienzo (Pintar en el lienzo)",
+             rawPointerMotionLabel: "Movimiento de puntero sin procesar",
+             rawPointerMotionEnableTitle: "Pedir al navegador movimiento sin aceleración bajo el bloqueo del puntero (concedido en Windows y macOS, rechazado en Linux y Android)",
+            macCmdAsCtrlLabel: "Comando envía Control",
+            macCmdAsCtrlDisableTitle: "Enviar Comando como la tecla Super que el gestor de ventanas de la sesión puede usar",
+            macCmdAsCtrlEnableTitle: "Enviar los atajos de Comando como sus atajos de Control, para que Cmd+C copie en remoto",
+             rawPointerMotionDisableTitle: "Mantener la aceleración del puntero de este dispositivo bajo el bloqueo del puntero",
              addScreenTitle: "Añadir una segunda pantalla",
              addScreenButton: "Añadir Pantalla +",
              forceAlignedResolutionLabel: "Forzar resolución alineada",
@@ -471,6 +488,8 @@ const es = {
         clipboardSkipReadonly: "Los espectadores no pueden cambiar el portapapeles",
         clipboardSkipNoImage: "Selecciona primero una imagen para subirla",
         commandFailed: "El comando remoto falló: {detail}",
+        keyboardLockUnavailable: "Este navegador no ofrece bloqueo de teclado, así que una sola pulsación de Escape sale del modo juego en lugar de llegar a la sesión.",
+        keyboardLockBlockedByShields: "Los Shields de Brave bloquean el bloqueo de teclado, así que una sola pulsación de Escape sale del modo juego. Permite la API de teclado para este sitio en los controles de huella digital de Shields para poder mantener Escape.",
         clipboardSkipBinaryDisabled: "El portapapeles de imágenes está desactivado en el servidor",
         clipboardSkipSendFailed: "No se pudo enviar la imagen del portapapeles",
         clipboardSkipInDisabled: "El envío al portapapeles remoto está desactivado",
@@ -486,7 +505,8 @@ const es = {
     zeroBytes: "0 Bytes",
     filesModal: {
         closeAlt: "Cerrar modal de archivos",
-        iframeTitle: "Archivos Descargables"
+        iframeTitle: "Archivos Descargables",
+        loading: "Cargando archivos..."
     }
 };
 
@@ -578,12 +598,19 @@ const zh = {
             hidpiEnableTitle: "启用 HiDPI (像素完美)",
             hidpiDisableTitle: "禁用 HiDPI (使用 CSS 缩放)",
             hidpiDisabledNoResizeTitle: "服务器已禁用分辨率更改（enable_resize）",
+            hidpiDisabledManualTitle: "手动分辨率无论如何都按精确像素传输；界面缩放决定其桌面大小",
             antiAliasingLabel: "抗锯齿",
             antiAliasingEnableTitle: "启用抗锯齿 (缩放时平滑)",
             antiAliasingDisableTitle: "禁用抗锯齿 (强制像素化)",
             useNativeCursorStylesLabel: "使用 CSS 光标",
             useNativeCursorStylesEnableTitle: "使用 CSS 光标渲染 (替换系统光标)",
             useNativeCursorStylesDisableTitle: "使用画布光标渲染 (绘制到画布)",
+            rawPointerMotionLabel: "原始指针移动",
+            rawPointerMotionEnableTitle: "在指针锁定时向浏览器请求无加速的移动（Windows 和 macOS 支持，Linux 和 Android 拒绝）",
+            macCmdAsCtrlLabel: "Command 发送 Control",
+            macCmdAsCtrlDisableTitle: "将 Command 作为会话窗口管理器可能绑定的 Super 键发送",
+            macCmdAsCtrlEnableTitle: "将 Command 组合键作为 Control 组合键发送，使 Cmd+C 在远程复制",
+            rawPointerMotionDisableTitle: "在指针锁定时保留本设备的指针加速",
             addScreenTitle: "添加第二个屏幕",
             addScreenButton: "添加屏幕 +",
             forceAlignedResolutionLabel: "强制对齐分辨率",
@@ -708,6 +735,8 @@ const zh = {
         clipboardSkipReadonly: "观看者无法更改剪贴板",
         clipboardSkipNoImage: "请先选择要上传的图片",
         commandFailed: "远程命令执行失败：{detail}",
+        keyboardLockUnavailable: "此浏览器不提供键盘锁定，因此按一次 Escape 就会退出游戏模式，而不会传到会话中。",
+        keyboardLockBlockedByShields: "Brave 的 Shields 屏蔽了键盘锁定，因此按一次 Escape 就会退出游戏模式。请在 Shields 的指纹识别控制中为此站点允许键盘 API，以便改为长按 Escape。",
         clipboardSkipBinaryDisabled: "服务器已禁用图片剪贴板",
         clipboardSkipSendFailed: "剪贴板图片发送失败",
         clipboardSkipInDisabled: "已禁用发送到远程剪贴板",
@@ -723,7 +752,8 @@ const zh = {
     zeroBytes: "0 字节",
     filesModal: {
         closeAlt: "关闭文件模态框",
-        iframeTitle: "可下载文件"
+        iframeTitle: "可下载文件",
+        loading: "正在加载文件..."
     }
 };
 
@@ -815,12 +845,19 @@ const hi = {
             hidpiEnableTitle: "HiDPI सक्षम करें (पिक्सेल परफेक्ट)",
             hidpiDisableTitle: "HiDPI अक्षम करें (CSS स्केलिंग का उपयोग करें)",
             hidpiDisabledNoResizeTitle: "सर्वर ने रिज़ॉल्यूशन में बदलाव अक्षम कर दिए हैं (enable_resize)",
+            hidpiDisabledManualTitle: "मैनुअल रिज़ॉल्यूशन दोनों स्थितियों में सटीक पिक्सेल में भेजा जाता है; UI स्केलिंग उसके डेस्कटॉप का आकार तय करती है",
             antiAliasingLabel: "एंटी-अलियासिंग",
             antiAliasingEnableTitle: "एंटी-अलियासिंग सक्षम करें (स्केलिंग पर स्मूथ)",
             antiAliasingDisableTitle: "एंटी-अलियासिंग अक्षम करें (पिक्सेलयुक्त करने के लिए बाध्य करें)",
             useNativeCursorStylesLabel: "CSS कर्सर का उपयोग करें",
             useNativeCursorStylesEnableTitle: "CSS कर्सर रेंडरिंग का उपयोग करें (सिस्टम कर्सर बदलें)",
             useNativeCursorStylesDisableTitle: "कैनवास कर्सर रेंडरिंग का उपयोग करें (कैनवास पर पेंट करें)",
+            rawPointerMotionLabel: "कच्ची पॉइंटर गति",
+            rawPointerMotionEnableTitle: "पॉइंटर लॉक के दौरान ब्राउज़र से बिना त्वरण वाली गति मांगें (Windows और macOS पर उपलब्ध, Linux और Android पर अस्वीकृत)",
+            macCmdAsCtrlLabel: "Command, Control भेजता है",
+            macCmdAsCtrlDisableTitle: "Command को Super कुंजी के रूप में भेजें जिसे सत्र का विंडो मैनेजर बाँध सकता है",
+            macCmdAsCtrlEnableTitle: "Command संयोजनों को Control संयोजनों के रूप में भेजें, ताकि Cmd+C दूरस्थ रूप से कॉपी करे",
+            rawPointerMotionDisableTitle: "पॉइंटर लॉक के दौरान इस डिवाइस का पॉइंटर त्वरण बनाए रखें",
             addScreenTitle: "एक दूसरी स्क्रीन जोड़ें",
             addScreenButton: "स्क्रीन जोड़ें +",
             forceAlignedResolutionLabel: "संरेखित रिज़ॉल्यूशन बाध्य करें",
@@ -945,6 +982,8 @@ const hi = {
         clipboardSkipReadonly: "दर्शक क्लिपबोर्ड नहीं बदल सकते",
         clipboardSkipNoImage: "पहले अपलोड करने के लिए कोई छवि चुनें",
         commandFailed: "रिमोट कमांड विफल रहा: {detail}",
+        keyboardLockUnavailable: "यह ब्राउज़र कीबोर्ड लॉक नहीं देता, इसलिए Escape की एक दबाव सत्र तक पहुँचने के बजाय गेमिंग मोड से बाहर कर देती है।",
+        keyboardLockBlockedByShields: "Brave के Shields कीबोर्ड लॉक को रोकते हैं, इसलिए Escape की एक दबाव गेमिंग मोड से बाहर कर देती है। Escape को दबाकर रखने के लिए Shields के फ़िंगरप्रिंटिंग नियंत्रणों में इस साइट के लिए कीबोर्ड API की अनुमति दें।",
         clipboardSkipBinaryDisabled: "सर्वर पर छवि क्लिपबोर्ड अक्षम है",
         clipboardSkipSendFailed: "क्लिपबोर्ड छवि भेजी नहीं जा सकी",
         clipboardSkipInDisabled: "दूरस्थ क्लिपबोर्ड पर भेजना अक्षम है",
@@ -960,7 +999,8 @@ const hi = {
     zeroBytes: "0 बाइट्स",
     filesModal: {
         closeAlt: "फ़ाइलें मोडल बंद करें",
-        iframeTitle: "डाउनलोड करने योग्य फ़ाइलें"
+        iframeTitle: "डाउनलोड करने योग्य फ़ाइलें",
+        loading: "फ़ाइलें लोड हो रही हैं..."
     }
 };
 
@@ -1052,12 +1092,19 @@ const pt = {
             hidpiEnableTitle: "Ativar HiDPI (Pixel Perfeito)",
             hidpiDisableTitle: "Desativar HiDPI (Usar dimensionamento CSS)",
             hidpiDisabledNoResizeTitle: "As alterações de resolução estão desativadas pelo servidor (enable_resize)",
+            hidpiDisabledManualTitle: "Uma resolução manual é transmitida como pixels exatos de qualquer forma; a escala da interface dimensiona o seu ambiente de trabalho",
             antiAliasingLabel: "Anti-aliasing",
             antiAliasingEnableTitle: "Ativar anti-aliasing (suavizar ao escalar)",
             antiAliasingDisableTitle: "Desativar anti-aliasing (forçar pixelização)",
             useNativeCursorStylesLabel: "Usar cursores CSS",
             useNativeCursorStylesEnableTitle: "Usar renderização de cursor CSS (Substituir cursores do sistema)",
             useNativeCursorStylesDisableTitle: "Usar renderização de cursor em canvas (Pintar no canvas)",
+            rawPointerMotionLabel: "Movimento bruto do ponteiro",
+            rawPointerMotionEnableTitle: "Pedir ao navegador movimento sem aceleração sob o bloqueio do ponteiro (concedido no Windows e macOS, recusado no Linux e Android)",
+            macCmdAsCtrlLabel: "Command envia Control",
+            macCmdAsCtrlDisableTitle: "Enviar Command como a tecla Super que o gerenciador de janelas da sessão pode usar",
+            macCmdAsCtrlEnableTitle: "Enviar os atalhos de Command como atalhos de Control, para que Cmd+C copie remotamente",
+            rawPointerMotionDisableTitle: "Manter a aceleração do ponteiro deste dispositivo sob o bloqueio do ponteiro",
             addScreenTitle: "Adicionar uma segunda tela",
             addScreenButton: "Adicionar Tela +",
             forceAlignedResolutionLabel: "Forçar Resolução Alinhada",
@@ -1182,6 +1229,8 @@ const pt = {
         clipboardSkipReadonly: "Os espectadores não podem alterar a área de transferência",
         clipboardSkipNoImage: "Selecione primeiro uma imagem para enviar",
         commandFailed: "O comando remoto falhou: {detail}",
+        keyboardLockUnavailable: "Este navegador não oferece bloqueio de teclado, por isso um único Escape sai do modo de jogo em vez de chegar à sessão.",
+        keyboardLockBlockedByShields: "Os Shields do Brave bloqueiam o bloqueio de teclado, por isso um único Escape sai do modo de jogo. Permita a API de teclado para este site nos controles de impressão digital dos Shields para poder segurar Escape.",
         clipboardSkipBinaryDisabled: "A área de transferência de imagens está desativada no servidor",
         clipboardSkipSendFailed: "Não foi possível enviar a imagem da área de transferência",
         clipboardSkipInDisabled: "O envio para a área de transferência remota está desativado",
@@ -1197,7 +1246,8 @@ const pt = {
     zeroBytes: "0 Bytes",
     filesModal: {
         closeAlt: "Fechar modal de arquivos",
-        iframeTitle: "Arquivos para Download"
+        iframeTitle: "Arquivos para Download",
+        loading: "Carregando arquivos..."
     }
 };
 
@@ -1289,12 +1339,19 @@ const fr = {
             hidpiEnableTitle: "Activer HiDPI (Pixel Perfect)",
             hidpiDisableTitle: "Désactiver HiDPI (Utiliser la mise à l'échelle CSS)",
             hidpiDisabledNoResizeTitle: "Les changements de résolution sont désactivés par le serveur (enable_resize)",
+            hidpiDisabledManualTitle: "Une résolution manuelle est diffusée en pixels exacts dans les deux cas ; la mise à l'échelle de l'interface dimensionne son bureau",
             antiAliasingLabel: "Anticrénelage",
             antiAliasingEnableTitle: "Activer l'anticrénelage (lisser à la mise à l'échelle)",
             antiAliasingDisableTitle: "Désactiver l'anticrénelage (forcer la pixellisation)",
             useNativeCursorStylesLabel: "Utiliser les curseurs CSS",
             useNativeCursorStylesEnableTitle: "Utiliser le rendu des curseurs CSS (Remplacer les curseurs système)",
             useNativeCursorStylesDisableTitle: "Utiliser le rendu des curseurs sur canevas (Dessiner sur le canevas)",
+            rawPointerMotionLabel: "Mouvement brut du pointeur",
+            rawPointerMotionEnableTitle: "Demander au navigateur un mouvement sans accélération sous le verrouillage du pointeur (accordé sur Windows et macOS, refusé sur Linux et Android)",
+            macCmdAsCtrlLabel: "Commande envoie Contrôle",
+            macCmdAsCtrlDisableTitle: "Envoyer Commande comme la touche Super que le gestionnaire de fenêtres de la session peut utiliser",
+            macCmdAsCtrlEnableTitle: "Envoyer les raccourcis Commande comme leurs raccourcis Contrôle, pour que Cmd+C copie à distance",
+            rawPointerMotionDisableTitle: "Conserver l'accélération du pointeur de cet appareil sous le verrouillage du pointeur",
             addScreenTitle: "Ajouter un deuxième écran",
             addScreenButton: "Ajouter un écran +",
             forceAlignedResolutionLabel: "Forcer la résolution alignée",
@@ -1419,6 +1476,8 @@ const fr = {
         clipboardSkipReadonly: "Les spectateurs ne peuvent pas modifier le presse-papiers",
         clipboardSkipNoImage: "Sélectionnez d'abord une image à envoyer",
         commandFailed: "Échec de la commande distante : {detail}",
+        keyboardLockUnavailable: "Ce navigateur n'offre pas de verrouillage du clavier : un simple appui sur Échap quitte le mode jeu au lieu d'atteindre la session.",
+        keyboardLockBlockedByShields: "Les Shields de Brave bloquent le verrouillage du clavier : un simple appui sur Échap quitte le mode jeu. Autorisez l'API clavier pour ce site dans les contrôles d'empreinte des Shields pour pouvoir maintenir Échap.",
         clipboardSkipBinaryDisabled: "Le presse-papiers d'images est désactivé sur le serveur",
         clipboardSkipSendFailed: "L'image du presse-papiers n'a pas pu être envoyée",
         clipboardSkipInDisabled: "L'envoi vers le presse-papiers distant est désactivé",
@@ -1435,7 +1494,8 @@ const fr = {
     zeroBytes: "0 Octets",
     filesModal: {
         closeAlt: "Fermer la modale des fichiers",
-        iframeTitle: "Fichiers téléchargeables"
+        iframeTitle: "Fichiers téléchargeables",
+        loading: "Chargement des fichiers..."
     }
 };
 
@@ -1527,12 +1587,19 @@ const ru = {
             hidpiEnableTitle: "Включить HiDPI (Пиксельная точность)",
             hidpiDisableTitle: "Отключить HiDPI (Использовать масштабирование CSS)",
             hidpiDisabledNoResizeTitle: "Изменение разрешения отключено на стороне сервера (enable_resize)",
+            hidpiDisabledManualTitle: "Заданное вручную разрешение передаётся точными пикселями в любом случае; масштаб интерфейса задаёт размер его рабочего стола",
             antiAliasingLabel: "Сглаживание",
             antiAliasingEnableTitle: "Включить сглаживание (плавно при масштабировании)",
             antiAliasingDisableTitle: "Отключить сглаживание (принудительно пикселизировать)",
             useNativeCursorStylesLabel: "Использовать курсоры CSS",
             useNativeCursorStylesEnableTitle: "Использовать рендеринг курсора CSS (Заменяет системные курсоры)",
             useNativeCursorStylesDisableTitle: "Использовать отрисовку курсора на холсте (Рисовать на холсте)",
+            rawPointerMotionLabel: "Сырое движение указателя",
+            rawPointerMotionEnableTitle: "Запрашивать у браузера движение без ускорения при захвате указателя (доступно в Windows и macOS, отклоняется в Linux и Android)",
+            macCmdAsCtrlLabel: "Command отправляет Control",
+            macCmdAsCtrlDisableTitle: "Отправлять Command как клавишу Super, которую может использовать оконный менеджер сеанса",
+            macCmdAsCtrlEnableTitle: "Отправлять сочетания с Command как сочетания с Control, чтобы Cmd+C копировал на удалённой стороне",
+            rawPointerMotionDisableTitle: "Сохранять ускорение указателя этого устройства при захвате указателя",
             addScreenTitle: "Добавить второй экран",
             addScreenButton: "Добавить экран +",
             forceAlignedResolutionLabel: "Принудительное выравнивание разрешения",
@@ -1657,6 +1724,8 @@ const ru = {
         clipboardSkipReadonly: "Зрители не могут изменять буфер обмена",
         clipboardSkipNoImage: "Сначала выберите изображение для загрузки",
         commandFailed: "Удалённая команда завершилась с ошибкой: {detail}",
+        keyboardLockUnavailable: "Этот браузер не поддерживает блокировку клавиатуры, поэтому одно нажатие Escape выходит из игрового режима, а не доходит до сеанса.",
+        keyboardLockBlockedByShields: "Shields в Brave блокируют блокировку клавиатуры, поэтому одно нажатие Escape выходит из игрового режима. Разрешите API клавиатуры для этого сайта в настройках защиты от отпечатков Shields, чтобы удерживать Escape.",
         clipboardSkipBinaryDisabled: "Буфер обмена изображениями отключён на сервере",
         clipboardSkipSendFailed: "Не удалось отправить изображение буфера обмена",
         clipboardSkipInDisabled: "Отправка в удалённый буфер обмена отключена",
@@ -1672,7 +1741,8 @@ const ru = {
     zeroBytes: "0 Байт",
     filesModal: {
         closeAlt: "Закрыть модальное окно файлов",
-        iframeTitle: "Файлы для скачивания"
+        iframeTitle: "Файлы для скачивания",
+        loading: "Загрузка файлов..."
     }
 };
 
@@ -1764,12 +1834,19 @@ const de = {
             hidpiEnableTitle: "HiDPI aktivieren (Pixelgenau)",
             hidpiDisableTitle: "HiDPI deaktivieren (CSS-Skalierung verwenden)",
             hidpiDisabledNoResizeTitle: "Auflösungsänderungen sind vom Server deaktiviert (enable_resize)",
+            hidpiDisabledManualTitle: "Eine manuelle Auflösung wird in beiden Fällen als exakte Pixel übertragen; die UI-Skalierung bestimmt die Größe ihres Desktops",
             antiAliasingLabel: "Kantenglättung",
             antiAliasingEnableTitle: "Kantenglättung aktivieren (Glättung bei Skalierung)",
             antiAliasingDisableTitle: "Kantenglättung deaktivieren (Verpixelung erzwingen)",
             useNativeCursorStylesLabel: "CSS-Cursor verwenden",
             useNativeCursorStylesEnableTitle: "CSS-Cursor-Rendering verwenden (Systemcursor ersetzen)",
             useNativeCursorStylesDisableTitle: "Canvas-Cursor-Rendering verwenden (Auf Canvas zeichnen)",
+            rawPointerMotionLabel: "Rohe Zeigerbewegung",
+            rawPointerMotionEnableTitle: "Den Browser bei gesperrtem Zeiger um unbeschleunigte Bewegung bitten (unter Windows und macOS gewährt, unter Linux und Android abgelehnt)",
+            macCmdAsCtrlLabel: "Command sendet Strg",
+            macCmdAsCtrlDisableTitle: "Command als Super-Taste senden, die der Fenstermanager der Sitzung belegen kann",
+            macCmdAsCtrlEnableTitle: "Command-Kombinationen als Strg-Kombinationen senden, damit Cmd+C entfernt kopiert",
+            rawPointerMotionDisableTitle: "Die Zeigerbeschleunigung dieses Geräts bei gesperrtem Zeiger beibehalten",
             addScreenTitle: "Einen zweiten Bildschirm hinzufügen",
             addScreenButton: "Bildschirm hinzufügen +",
             forceAlignedResolutionLabel: "Ausgerichtete Auflösung erzwingen",
@@ -1894,6 +1971,8 @@ const de = {
         clipboardSkipReadonly: "Zuschauer können die Zwischenablage nicht ändern",
         clipboardSkipNoImage: "Wählen Sie zuerst ein Bild zum Hochladen aus",
         commandFailed: "Der Remote-Befehl ist fehlgeschlagen: {detail}",
+        keyboardLockUnavailable: "Dieser Browser bietet keine Tastatursperre, daher verlässt ein einzelnes Escape den Spielmodus, statt die Sitzung zu erreichen.",
+        keyboardLockBlockedByShields: "Braves Shields blockieren die Tastatursperre, daher verlässt ein einzelnes Escape den Spielmodus. Erlauben Sie die Tastatur-API für diese Seite in den Fingerprinting-Einstellungen der Shields, um Escape stattdessen halten zu können.",
         clipboardSkipBinaryDisabled: "Die Bild-Zwischenablage ist auf dem Server deaktiviert",
         clipboardSkipSendFailed: "Das Zwischenablage-Bild konnte nicht gesendet werden",
         clipboardSkipInDisabled: "Das Senden an die Remote-Zwischenablage ist deaktiviert",
@@ -1909,7 +1988,8 @@ const de = {
     zeroBytes: "0 Bytes",
     filesModal: {
         closeAlt: "Dateimodal schließen",
-        iframeTitle: "Herunterladbare Dateien"
+        iframeTitle: "Herunterladbare Dateien",
+        loading: "Dateien werden geladen..."
     }
 };
 
@@ -2001,12 +2081,19 @@ const tr = {
             hidpiEnableTitle: "HiDPI'yi Etkinleştir (Piksel Mükemmelliği)",
             hidpiDisableTitle: "HiDPI'yi Devre Dışı Bırak (CSS Ölçeklendirme Kullan)",
             hidpiDisabledNoResizeTitle: "Çözünürlük değişiklikleri sunucu tarafından devre dışı bırakıldı (enable_resize)",
+            hidpiDisabledManualTitle: "Elle ayarlanan çözünürlük her durumda tam piksel olarak aktarılır; arayüz ölçeği masaüstünün boyutunu belirler",
             antiAliasingLabel: "Kenar Yumuşatma",
             antiAliasingEnableTitle: "Kenar yumuşatmayı etkinleştir (ölçeklemede pürüzsüzleştir)",
             antiAliasingDisableTitle: "Kenar yumuşatmayı devre dışı bırak (pikselli olmaya zorla)",
             useNativeCursorStylesLabel: "CSS imleçlerini kullan",
             useNativeCursorStylesEnableTitle: "CSS imleç işlemeyi kullan (Sistem imleçlerini değiştir)",
             useNativeCursorStylesDisableTitle: "Kanvas imleç işlemeyi kullan (Kanvasa çiz)",
+            rawPointerMotionLabel: "Ham işaretçi hareketi",
+            rawPointerMotionEnableTitle: "İşaretçi kilidinde tarayıcıdan hızlandırmasız hareket iste (Windows ve macOS'ta verilir, Linux ve Android'de reddedilir)",
+            macCmdAsCtrlLabel: "Command, Control gönderir",
+            macCmdAsCtrlDisableTitle: "Command tuşunu, oturumun pencere yöneticisinin kullanabileceği Super tuşu olarak gönder",
+            macCmdAsCtrlEnableTitle: "Command kısayollarını Control kısayolları olarak gönder, böylece Cmd+C uzakta kopyalar",
+            rawPointerMotionDisableTitle: "İşaretçi kilidinde bu cihazın işaretçi hızlandırmasını koru",
             addScreenTitle: "İkinci bir ekran ekle",
             addScreenButton: "Ekran Ekle +",
             forceAlignedResolutionLabel: "Hizalanmış Çözünürlüğü Zorla",
@@ -2131,6 +2218,8 @@ const tr = {
         clipboardSkipReadonly: "İzleyiciler panoyu değiştiremez",
         clipboardSkipNoImage: "Önce yüklenecek bir resim seçin",
         commandFailed: "Uzak komut başarısız oldu: {detail}",
+        keyboardLockUnavailable: "Bu tarayıcı klavye kilidi sunmaz; bu yüzden tek bir Escape oturuma ulaşmak yerine oyun modundan çıkar.",
+        keyboardLockBlockedByShields: "Brave'in Shields özelliği klavye kilidini engeller; bu yüzden tek bir Escape oyun modundan çıkar. Escape'i basılı tutabilmek için Shields parmak izi denetimlerinde bu site için klavye API'sine izin verin.",
         clipboardSkipBinaryDisabled: "Resim panosu sunucuda devre dışı",
         clipboardSkipSendFailed: "Pano resmi gönderilemedi",
         clipboardSkipInDisabled: "Uzak panoya gönderme devre dışı",
@@ -2146,7 +2235,8 @@ const tr = {
     zeroBytes: "0 Bayt",
     filesModal: {
         closeAlt: "Dosya modalını kapat",
-        iframeTitle: "İndirilebilir Dosyalar"
+        iframeTitle: "İndirilebilir Dosyalar",
+        loading: "Dosyalar yükleniyor..."
     }
 };
 
@@ -2238,12 +2328,19 @@ const it = {
             hidpiEnableTitle: "Abilita HiDPI (Pixel Perfect)",
             hidpiDisableTitle: "Disabilita HiDPI (Usa ridimensionamento CSS)",
             hidpiDisabledNoResizeTitle: "I cambiamenti di risoluzione sono disabilitati dal server (enable_resize)",
+            hidpiDisabledManualTitle: "Una risoluzione manuale viene trasmessa in pixel esatti in entrambi i casi; il ridimensionamento dell'interfaccia determina la dimensione del desktop",
             antiAliasingLabel: "Anti-aliasing",
             antiAliasingEnableTitle: "Abilita anti-aliasing (smussa durante il ridimensionamento)",
             antiAliasingDisableTitle: "Disabilita anti-aliasing (forza la pixelatura)",
             useNativeCursorStylesLabel: "Usa cursori CSS",
             useNativeCursorStylesEnableTitle: "Usa rendering del cursore CSS (Sostituisce i cursori di sistema)",
             useNativeCursorStylesDisableTitle: "Usa rendering del cursore su canvas (Disegna su canvas)",
+            rawPointerMotionLabel: "Movimento grezzo del puntatore",
+            rawPointerMotionEnableTitle: "Chiedere al browser un movimento senza accelerazione con il puntatore bloccato (concesso su Windows e macOS, rifiutato su Linux e Android)",
+            macCmdAsCtrlLabel: "Comando invia Control",
+            macCmdAsCtrlDisableTitle: "Inviare Comando come il tasto Super che il gestore di finestre della sessione può usare",
+            macCmdAsCtrlEnableTitle: "Inviare le scorciatoie Comando come scorciatoie Control, così Cmd+C copia in remoto",
+            rawPointerMotionDisableTitle: "Mantenere l'accelerazione del puntatore di questo dispositivo con il puntatore bloccato",
             addScreenTitle: "Aggiungi un secondo schermo",
             addScreenButton: "Aggiungi Schermo +",
             forceAlignedResolutionLabel: "Forza risoluzione allineata",
@@ -2368,6 +2465,8 @@ const it = {
         clipboardSkipReadonly: "Gli spettatori non possono modificare gli appunti",
         clipboardSkipNoImage: "Seleziona prima un'immagine da caricare",
         commandFailed: "Comando remoto non riuscito: {detail}",
+        keyboardLockUnavailable: "Questo browser non offre il blocco della tastiera, quindi una sola pressione di Esc esce dalla modalità gioco invece di raggiungere la sessione.",
+        keyboardLockBlockedByShields: "Gli Shields di Brave bloccano il blocco della tastiera, quindi una sola pressione di Esc esce dalla modalità gioco. Consenti l'API tastiera per questo sito nei controlli antifingerprinting degli Shields per poter tenere premuto Esc.",
         clipboardSkipBinaryDisabled: "Gli appunti immagine sono disabilitati sul server",
         clipboardSkipSendFailed: "Impossibile inviare l'immagine degli appunti",
         clipboardSkipInDisabled: "L'invio agli appunti remoti è disabilitato",
@@ -2383,7 +2482,8 @@ const it = {
     zeroBytes: "0 Byte",
     filesModal: {
         closeAlt: "Chiudi modale file",
-        iframeTitle: "File Scaricabili"
+        iframeTitle: "File Scaricabili",
+        loading: "Caricamento file..."
     }
 };
 
@@ -2475,12 +2575,19 @@ const nl = {
             hidpiEnableTitle: "HiDPI inschakelen (Pixel Perfect)",
             hidpiDisableTitle: "HiDPI uitschakelen (CSS-schaling gebruiken)",
             hidpiDisabledNoResizeTitle: "Resolutiewijzigingen zijn door de server uitgeschakeld (enable_resize)",
+            hidpiDisabledManualTitle: "Een handmatige resolutie wordt in beide gevallen als exacte pixels gestreamd; de UI-schaling bepaalt de grootte van dat bureaublad",
             antiAliasingLabel: "Randverzachting",
             antiAliasingEnableTitle: "Randverzachting inschakelen (vloeiend bij schalen)",
             antiAliasingDisableTitle: "Randverzachting uitschakelen (gepixeleerd forceren)",
             useNativeCursorStylesLabel: "CSS-cursors gebruiken",
             useNativeCursorStylesEnableTitle: "CSS-cursorweergave gebruiken (Vervangt systeemcursors)",
             useNativeCursorStylesDisableTitle: "Canvas-cursorweergave gebruiken (Tekenen op canvas)",
+            rawPointerMotionLabel: "Ruwe aanwijzerbeweging",
+            rawPointerMotionEnableTitle: "De browser om onversnelde beweging vragen bij aanwijzervergrendeling (toegestaan op Windows en macOS, geweigerd op Linux en Android)",
+            macCmdAsCtrlLabel: "Command stuurt Control",
+            macCmdAsCtrlDisableTitle: "Command versturen als de Super-toets die de windowmanager van de sessie kan gebruiken",
+            macCmdAsCtrlEnableTitle: "Command-combinaties als Control-combinaties versturen, zodat Cmd+C op afstand kopieert",
+            rawPointerMotionDisableTitle: "De aanwijzerversnelling van dit apparaat behouden bij aanwijzervergrendeling",
             addScreenTitle: "Een tweede scherm toevoegen",
             addScreenButton: "Scherm toevoegen +",
             forceAlignedResolutionLabel: "Uitgelijnde resolutie afdwingen",
@@ -2605,6 +2712,8 @@ const nl = {
         clipboardSkipReadonly: "Kijkers kunnen het klembord niet wijzigen",
         clipboardSkipNoImage: "Selecteer eerst een afbeelding om te uploaden",
         commandFailed: "Externe opdracht mislukt: {detail}",
+        keyboardLockUnavailable: "Deze browser biedt geen toetsenbordvergrendeling, dus één druk op Escape verlaat de gamemodus in plaats van de sessie te bereiken.",
+        keyboardLockBlockedByShields: "De Shields van Brave blokkeren de toetsenbordvergrendeling, dus één druk op Escape verlaat de gamemodus. Sta de toetsenbord-API voor deze site toe in de fingerprinting-instellingen van Shields om Escape ingedrukt te kunnen houden.",
         clipboardSkipBinaryDisabled: "Het afbeeldingenklembord is op de server uitgeschakeld",
         clipboardSkipSendFailed: "De afbeelding van het klembord kon niet worden verzonden",
         clipboardSkipInDisabled: "Verzenden naar het externe klembord is uitgeschakeld",
@@ -2620,7 +2729,8 @@ const nl = {
     zeroBytes: "0 bytes",
     filesModal: {
         closeAlt: "Bestandsmodal sluiten",
-        iframeTitle: "Downloadbare bestanden"
+        iframeTitle: "Downloadbare bestanden",
+        loading: "Bestanden laden..."
     }
 };
 
@@ -2712,12 +2822,19 @@ const ar = {
             hidpiEnableTitle: "تمكين HiDPI (دقة بكسل مثالية)",
             hidpiDisableTitle: "تعطيل HiDPI (استخدام تحجيم CSS)",
             hidpiDisabledNoResizeTitle: "تم تعطيل تغييرات الدقة من جانب الخادم (enable_resize)",
+            hidpiDisabledManualTitle: "تُبَث الدقة المحددة يدويًا ببكسلات مضبوطة في كلتا الحالتين؛ ويحدد تحجيم الواجهة حجم سطح المكتب",
             antiAliasingLabel: "تنعيم الحواف",
             antiAliasingEnableTitle: "تمكين تنعيم الحواف (سلس عند التكبير)",
             antiAliasingDisableTitle: "تعطيل تنعيم الحواف (فرض البيكسلات)",
             useNativeCursorStylesLabel: "استخدام مؤشرات CSS",
             useNativeCursorStylesEnableTitle: "استخدام عرض مؤشر CSS (استبدال مؤشرات النظام)",
             useNativeCursorStylesDisableTitle: "استخدام عرض مؤشر اللوحة (الرسم على اللوحة)",
+            rawPointerMotionLabel: "حركة المؤشر الخام",
+            rawPointerMotionEnableTitle: "طلب حركة بدون تسريع من المتصفح أثناء قفل المؤشر (مسموح على Windows وmacOS، مرفوض على Linux وAndroid)",
+            macCmdAsCtrlLabel: "Command يرسل Control",
+            macCmdAsCtrlDisableTitle: "إرسال Command كمفتاح Super الذي قد يستخدمه مدير النوافذ للجلسة",
+            macCmdAsCtrlEnableTitle: "إرسال اختصارات Command كاختصارات Control، حتى ينسخ Cmd+C عن بعد",
+            rawPointerMotionDisableTitle: "الإبقاء على تسريع مؤشر هذا الجهاز أثناء قفل المؤشر",
             addScreenTitle: "إضافة شاشة ثانية",
             addScreenButton: "إضافة شاشة +",
             forceAlignedResolutionLabel: "فرض محاذاة الدقة",
@@ -2842,6 +2959,8 @@ const ar = {
         clipboardSkipReadonly: "لا يمكن للمشاهدين تغيير الحافظة",
         clipboardSkipNoImage: "حدد صورة لرفعها أولاً",
         commandFailed: "فشل الأمر البعيد: {detail}",
+        keyboardLockUnavailable: "لا يوفر هذا المتصفح قفل لوحة المفاتيح، لذا فإن ضغطة واحدة على Escape تخرج من وضع الألعاب بدلاً من الوصول إلى الجلسة.",
+        keyboardLockBlockedByShields: "تحجب Shields في Brave قفل لوحة المفاتيح، لذا فإن ضغطة واحدة على Escape تخرج من وضع الألعاب. اسمح بواجهة API للوحة المفاتيح لهذا الموقع في إعدادات بصمة Shields لتتمكن من الضغط المطوّل على Escape بدلاً من ذلك.",
         clipboardSkipBinaryDisabled: "حافظة الصور معطّلة على الخادم",
         clipboardSkipSendFailed: "تعذر إرسال صورة الحافظة",
         clipboardSkipInDisabled: "الإرسال إلى الحافظة البعيدة معطّل",
@@ -2857,7 +2976,8 @@ const ar = {
     zeroBytes: "0 بايت",
     filesModal: {
         closeAlt: "إغلاق نافذة الملفات",
-        iframeTitle: "ملفات قابلة للتحميل"
+        iframeTitle: "ملفات قابلة للتحميل",
+        loading: "جارٍ تحميل الملفات..."
     }
 };
 
@@ -2949,12 +3069,19 @@ const ko = {
             hidpiEnableTitle: "HiDPI 활성화 (픽셀 퍼펙트)",
             hidpiDisableTitle: "HiDPI 비활성화 (CSS 스케일링 사용)",
             hidpiDisabledNoResizeTitle: "해상도 변경이 서버에서 비활성화되어 있습니다 (enable_resize)",
+            hidpiDisabledManualTitle: "수동 해상도는 어느 쪽이든 정확한 픽셀로 전송되며, UI 배율이 그 데스크톱의 크기를 정합니다",
             antiAliasingLabel: "안티에일리어싱",
             antiAliasingEnableTitle: "안티에일리어싱 활성화 (확대/축소 시 부드럽게)",
             antiAliasingDisableTitle: "안티에일리어싱 비활성화 (픽셀화 강제)",
             useNativeCursorStylesLabel: "CSS 커서 사용",
             useNativeCursorStylesEnableTitle: "CSS 커서 렌더링 사용 (시스템 커서 대체)",
             useNativeCursorStylesDisableTitle: "캔버스 커서 렌더링 사용 (캔버스에 그리기)",
+            rawPointerMotionLabel: "원시 포인터 이동",
+            rawPointerMotionEnableTitle: "포인터 잠금 중 브라우저에 가속 없는 이동을 요청 (Windows 및 macOS에서 허용, Linux 및 Android에서 거부)",
+            macCmdAsCtrlLabel: "Command를 Control로 전송",
+            macCmdAsCtrlDisableTitle: "세션의 창 관리자가 사용할 수 있는 Super 키로 Command를 전송",
+            macCmdAsCtrlEnableTitle: "Command 조합을 Control 조합으로 전송하여 Cmd+C가 원격에서 복사되도록 함",
+            rawPointerMotionDisableTitle: "포인터 잠금 중 이 기기의 포인터 가속 유지",
             addScreenTitle: "두 번째 화면 추가",
             addScreenButton: "화면 추가 +",
             forceAlignedResolutionLabel: "정렬된 해상도 강제 적용",
@@ -3079,6 +3206,8 @@ const ko = {
         clipboardSkipReadonly: "뷰어는 클립보드를 변경할 수 없습니다",
         clipboardSkipNoImage: "먼저 업로드할 이미지를 선택하세요",
         commandFailed: "원격 명령이 실패했습니다: {detail}",
+        keyboardLockUnavailable: "이 브라우저는 키보드 잠금을 제공하지 않아 Escape를 한 번 누르면 세션에 전달되지 않고 게임 모드가 종료됩니다.",
+        keyboardLockBlockedByShields: "Brave의 Shields가 키보드 잠금을 차단하여 Escape를 한 번 누르면 게임 모드가 종료됩니다. Escape를 길게 누를 수 있도록 Shields의 핑거프린팅 설정에서 이 사이트의 키보드 API를 허용하세요.",
         clipboardSkipBinaryDisabled: "서버에서 이미지 클립보드가 비활성화되어 있습니다",
         clipboardSkipSendFailed: "클립보드 이미지를 보낼 수 없습니다",
         clipboardSkipInDisabled: "원격 클립보드로 전송이 비활성화되어 있습니다",
@@ -3094,7 +3223,8 @@ const ko = {
     zeroBytes: "0 바이트",
     filesModal: {
         closeAlt: "파일 모달 닫기",
-        iframeTitle: "다운로드 가능한 파일"
+        iframeTitle: "다운로드 가능한 파일",
+        loading: "파일 로드 중..."
     }
 };
 
@@ -3186,12 +3316,19 @@ const ja = {
             hidpiEnableTitle: "HiDPI を有効にする (ピクセルパーフェクト)",
             hidpiDisableTitle: "HiDPI を無効にする (CSS スケーリングを使用)",
             hidpiDisabledNoResizeTitle: "解像度の変更はサーバーによって無効化されています (enable_resize)",
+            hidpiDisabledManualTitle: "手動解像度はどちらの場合も正確なピクセルで配信され、UI スケーリングがそのデスクトップの大きさを決めます",
             antiAliasingLabel: "アンチエイリアシング",
             antiAliasingEnableTitle: "アンチエイリアシングを有効にする (スケーリング時に滑らかに)",
             antiAliasingDisableTitle: "アンチエイリアシングを無効にする (ピクセル化を強制)",
             useNativeCursorStylesLabel: "CSS カーソルを使用",
             useNativeCursorStylesEnableTitle: "CSS カーソルレンダリングを使用 (システムカーソルを置換)",
             useNativeCursorStylesDisableTitle: "キャンバスカーソルレンダリングを使用 (キャンバスに描画)",
+            rawPointerMotionLabel: "生のポインター移動",
+            rawPointerMotionEnableTitle: "ポインターロック中にブラウザーへ加速なしの移動を要求 (Windows と macOS では許可、Linux と Android では拒否)",
+            macCmdAsCtrlLabel: "Command を Control として送信",
+            macCmdAsCtrlDisableTitle: "セッションのウィンドウマネージャーが割り当てる Super キーとして Command を送信",
+            macCmdAsCtrlEnableTitle: "Command の組み合わせを Control の組み合わせとして送信し、Cmd+C がリモートでコピーするようにする",
+            rawPointerMotionDisableTitle: "ポインターロック中もこのデバイスのポインター加速を維持",
             addScreenTitle: "2番目の画面を追加",
             addScreenButton: "画面を追加 +",
             forceAlignedResolutionLabel: "整列された解像度を強制",
@@ -3316,6 +3453,8 @@ const ja = {
         clipboardSkipReadonly: "閲覧者はクリップボードを変更できません",
         clipboardSkipNoImage: "先にアップロードする画像を選択してください",
         commandFailed: "リモートコマンドが失敗しました：{detail}",
+        keyboardLockUnavailable: "このブラウザーにはキーボードロックがないため、Escape を一度押すとセッションに届かずゲームモードが終了します。",
+        keyboardLockBlockedByShields: "Brave の Shields がキーボードロックを遮断するため、Escape を一度押すとゲームモードが終了します。Escape を長押しできるようにするには、Shields のフィンガープリント設定でこのサイトのキーボード API を許可してください。",
         clipboardSkipBinaryDisabled: "サーバーで画像クリップボードが無効です",
         clipboardSkipSendFailed: "クリップボード画像を送信できませんでした",
         clipboardSkipInDisabled: "リモートクリップボードへの送信が無効です",
@@ -3331,7 +3470,8 @@ const ja = {
     zeroBytes: "0 バイト",
     filesModal: {
         closeAlt: "ファイルモーダルを閉じる",
-        iframeTitle: "ダウンロード可能なファイル"
+        iframeTitle: "ダウンロード可能なファイル",
+        loading: "ファイルを読み込み中..."
     }
 };
 
@@ -3423,12 +3563,19 @@ const vi = {
             hidpiEnableTitle: "Bật HiDPI (Hoàn hảo đến từng Pixel)",
             hidpiDisableTitle: "Tắt HiDPI (Sử dụng CSS Scaling)",
             hidpiDisabledNoResizeTitle: "Máy chủ đã tắt thay đổi độ phân giải (enable_resize)",
+            hidpiDisabledManualTitle: "Độ phân giải thủ công luôn được truyền đúng số điểm ảnh; tỉ lệ giao diện quyết định kích thước màn hình đó",
             antiAliasingLabel: "Khử răng cưa",
             antiAliasingEnableTitle: "Bật khử răng cưa (làm mịn khi co giãn)",
             antiAliasingDisableTitle: "Tắt khử răng cưa (buộc hiển thị pixel)",
             useNativeCursorStylesLabel: "Sử dụng con trỏ CSS",
             useNativeCursorStylesEnableTitle: "Sử dụng kết xuất con trỏ CSS (Thay thế con trỏ hệ thống)",
             useNativeCursorStylesDisableTitle: "Sử dụng kết xuất con trỏ canvas (Vẽ lên canvas)",
+            rawPointerMotionLabel: "Chuyển động con trỏ thô",
+            rawPointerMotionEnableTitle: "Yêu cầu trình duyệt cung cấp chuyển động không tăng tốc khi khóa con trỏ (được cấp trên Windows và macOS, bị từ chối trên Linux và Android)",
+            macCmdAsCtrlLabel: "Command gửi Control",
+            macCmdAsCtrlDisableTitle: "Gửi Command như phím Super mà trình quản lý cửa sổ của phiên có thể dùng",
+            macCmdAsCtrlEnableTitle: "Gửi tổ hợp Command như tổ hợp Control, để Cmd+C sao chép từ xa",
+            rawPointerMotionDisableTitle: "Giữ tăng tốc con trỏ của thiết bị này khi khóa con trỏ",
             addScreenTitle: "Thêm màn hình thứ hai",
             addScreenButton: "Thêm Màn hình +",
             forceAlignedResolutionLabel: "Bắt buộc độ phân giải căn chỉnh",
@@ -3553,6 +3700,8 @@ const vi = {
         clipboardSkipReadonly: "Người xem không thể thay đổi clipboard",
         clipboardSkipNoImage: "Hãy chọn ảnh để tải lên trước",
         commandFailed: "Lệnh từ xa thất bại: {detail}",
+        keyboardLockUnavailable: "Trình duyệt này không có khóa bàn phím, nên chỉ một lần nhấn Escape sẽ thoát chế độ chơi game thay vì đến phiên làm việc.",
+        keyboardLockBlockedByShields: "Shields của Brave chặn khóa bàn phím, nên chỉ một lần nhấn Escape sẽ thoát chế độ chơi game. Hãy cho phép API bàn phím cho trang này trong phần kiểm soát dấu vân tay của Shields để có thể giữ Escape.",
         clipboardSkipBinaryDisabled: "Clipboard hình ảnh bị tắt trên máy chủ",
         clipboardSkipSendFailed: "Không thể gửi ảnh clipboard",
         clipboardSkipInDisabled: "Đã tắt gửi tới clipboard từ xa",
@@ -3568,7 +3717,8 @@ const vi = {
     zeroBytes: "0 Byte",
     filesModal: {
         closeAlt: "Đóng modal tệp",
-        iframeTitle: "Tệp có thể tải xuống"
+        iframeTitle: "Tệp có thể tải xuống",
+        loading: "Đang tải tệp..."
     }
 };
 
@@ -3660,12 +3810,19 @@ const th = {
             hidpiEnableTitle: "เปิดใช้งาน HiDPI (ความคมชัดระดับพิกเซล)",
             hidpiDisableTitle: "ปิดใช้งาน HiDPI (ใช้การปรับขนาด CSS)",
             hidpiDisabledNoResizeTitle: "การเปลี่ยนความละเอียดถูกปิดโดยเซิร์ฟเวอร์ (enable_resize)",
+            hidpiDisabledManualTitle: "ความละเอียดที่กำหนดเองจะถูกส่งเป็นพิกเซลตรงตามค่าทั้งสองกรณี การปรับขนาด UI เป็นตัวกำหนดขนาดเดสก์ท็อปนั้น",
             antiAliasingLabel: "การลบรอยหยัก",
             antiAliasingEnableTitle: "เปิดใช้งานการลบรอยหยัก (ปรับให้เรียบเมื่อปรับขนาด)",
             antiAliasingDisableTitle: "ปิดใช้งานการลบรอยหยัก (บังคับให้เป็นพิกเซล)",
             useNativeCursorStylesLabel: "ใช้เคอร์เซอร์แบบ CSS",
             useNativeCursorStylesEnableTitle: "ใช้การแสดงผลเคอร์เซอร์แบบ CSS (แทนที่เคอร์เซอร์ของระบบ)",
             useNativeCursorStylesDisableTitle: "ใช้การแสดงผลเคอร์เซอร์บนแคนวาส (วาดลงบนแคนวาส)",
+            rawPointerMotionLabel: "การเคลื่อนที่ของตัวชี้แบบดิบ",
+            rawPointerMotionEnableTitle: "ขอให้เบราว์เซอร์ส่งการเคลื่อนที่แบบไม่เร่งความเร็วขณะล็อกตัวชี้ (รองรับบน Windows และ macOS ปฏิเสธบน Linux และ Android)",
+            macCmdAsCtrlLabel: "Command ส่งเป็น Control",
+            macCmdAsCtrlDisableTitle: "ส่ง Command เป็นปุ่ม Super ที่ตัวจัดการหน้าต่างของเซสชันอาจใช้",
+            macCmdAsCtrlEnableTitle: "ส่งชุดปุ่ม Command เป็นชุดปุ่ม Control เพื่อให้ Cmd+C คัดลอกจากระยะไกล",
+            rawPointerMotionDisableTitle: "คงการเร่งความเร็วตัวชี้ของอุปกรณ์นี้ไว้ขณะล็อกตัวชี้",
             addScreenTitle: "เพิ่มหน้าจอที่สอง",
             addScreenButton: "เพิ่มหน้าจอ +",
             forceAlignedResolutionLabel: "บังคับความละเอียดที่จัดตำแหน่ง",
@@ -3790,6 +3947,8 @@ const th = {
         clipboardSkipReadonly: "ผู้ชมไม่สามารถแก้ไขคลิปบอร์ดได้",
         clipboardSkipNoImage: "เลือกภาพที่จะอัปโหลดก่อน",
         commandFailed: "คำสั่งระยะไกลล้มเหลว: {detail}",
+        keyboardLockUnavailable: "เบราว์เซอร์นี้ไม่มีการล็อกแป้นพิมพ์ การกด Escape ครั้งเดียวจึงออกจากโหมดเกมแทนที่จะส่งไปยังเซสชัน",
+        keyboardLockBlockedByShields: "Shields ของ Brave บล็อกการล็อกแป้นพิมพ์ การกด Escape ครั้งเดียวจึงออกจากโหมดเกม อนุญาต API แป้นพิมพ์สำหรับไซต์นี้ในการควบคุมลายนิ้วมือของ Shields เพื่อให้กด Escape ค้างไว้ได้แทน",
         clipboardSkipBinaryDisabled: "คลิปบอร์ดภาพถูกปิดใช้งานบนเซิร์ฟเวอร์",
         clipboardSkipSendFailed: "ไม่สามารถส่งภาพคลิปบอร์ดได้",
         clipboardSkipInDisabled: "ปิดการส่งไปยังคลิปบอร์ดระยะไกล",
@@ -3805,7 +3964,8 @@ const th = {
     zeroBytes: "0 ไบต์",
     filesModal: {
         closeAlt: "ปิดหน้าต่างไฟล์",
-        iframeTitle: "ไฟล์ที่สามารถดาวน์โหลดได้"
+        iframeTitle: "ไฟล์ที่สามารถดาวน์โหลดได้",
+        loading: "กำลังโหลดไฟล์..."
     }
 };
 
@@ -3897,12 +4057,19 @@ const fil = {
             hidpiEnableTitle: "Paganahin ang HiDPI (Pixel Perfect)",
             hidpiDisableTitle: "Huwag paganahin ang HiDPI (Gamitin ang CSS Scaling)",
             hidpiDisabledNoResizeTitle: "Ang mga pagbabago sa resolusyon ay hindi pinapagana ng server (enable_resize)",
+            hidpiDisabledManualTitle: "Ang manual na resolusyon ay isinasalin nang eksaktong pixel sa alinmang paraan; ang UI scaling ang nagtatakda ng laki ng desktop nito",
             antiAliasingLabel: "Anti-aliasing (Pagpapakinis)",
             antiAliasingEnableTitle: "Paganahin ang anti-aliasing (makinis kapag nag-scale)",
             antiAliasingDisableTitle: "Huwag paganahin ang anti-aliasing (puwersahing maging pixelated)",
             useNativeCursorStylesLabel: "Gamitin ang mga CSS cursor",
             useNativeCursorStylesEnableTitle: "Gamitin ang pag-render ng CSS cursor (Palitan ang mga cursor ng system)",
             useNativeCursorStylesDisableTitle: "Gamitin ang pag-render ng canvas cursor (Iguhit sa canvas)",
+            rawPointerMotionLabel: "Raw na paggalaw ng pointer",
+            rawPointerMotionEnableTitle: "Hilingin sa browser ang paggalaw na walang acceleration habang naka-lock ang pointer (pinapayagan sa Windows at macOS, tinatanggihan sa Linux at Android)",
+            macCmdAsCtrlLabel: "Command ay nagpapadala ng Control",
+            macCmdAsCtrlDisableTitle: "Ipadala ang Command bilang Super key na maaaring gamitin ng window manager ng session",
+            macCmdAsCtrlEnableTitle: "Ipadala ang mga Command chord bilang Control chord, para makakopya ang Cmd+C sa remote",
+            rawPointerMotionDisableTitle: "Panatilihin ang pointer acceleration ng device na ito habang naka-lock ang pointer",
             addScreenTitle: "Magdagdag ng pangalawang screen",
             addScreenButton: "Magdagdag ng Screen +",
             forceAlignedResolutionLabel: "Ipilit ang Nakahanay na Resolusyon",
@@ -4027,6 +4194,8 @@ const fil = {
         clipboardSkipReadonly: "Hindi mababago ng mga viewer ang clipboard",
         clipboardSkipNoImage: "Pumili muna ng imahe na ia-upload",
         commandFailed: "Nabigo ang remote na utos: {detail}",
+        keyboardLockUnavailable: "Walang keyboard lock ang browser na ito, kaya isang pindot lang ng Escape ay lalabas sa gaming mode sa halip na umabot sa session.",
+        keyboardLockBlockedByShields: "Hinaharang ng Shields ng Brave ang keyboard lock, kaya isang pindot lang ng Escape ay lalabas sa gaming mode. Payagan ang keyboard API para sa site na ito sa mga kontrol ng fingerprinting ng Shields para mapindot nang matagal ang Escape.",
         clipboardSkipBinaryDisabled: "Naka-disable ang clipboard ng imahe sa server",
         clipboardSkipSendFailed: "Hindi maipadala ang imahe ng clipboard",
         clipboardSkipInDisabled: "Naka-disable ang pagpapadala sa remote clipboard",
@@ -4042,7 +4211,8 @@ const fil = {
     zeroBytes: "0 Bytes",
     filesModal: {
         closeAlt: "Isara ang modal ng mga file",
-        iframeTitle: "Mga Nada-download na File"
+        iframeTitle: "Mga Nada-download na File",
+        loading: "Nilo-load ang mga file..."
     }
 };
 
@@ -4134,12 +4304,19 @@ const da = {
             hidpiEnableTitle: "Aktivér HiDPI (Pixel Perfekt)",
             hidpiDisableTitle: "Deaktivér HiDPI (Brug CSS-skalering)",
             hidpiDisabledNoResizeTitle: "Opløsningsændringer er deaktiveret af serveren (enable_resize)",
+            hidpiDisabledManualTitle: "En manuel opløsning streames som præcise pixels under alle omstændigheder; UI-skalering bestemmer skrivebordets størrelse",
             antiAliasingLabel: "Kantudjævning",
             antiAliasingEnableTitle: "Aktiver kantudjævning (glat ved skalering)",
             antiAliasingDisableTitle: "Deaktiver kantudjævning (tving pixeleret)",
             useNativeCursorStylesLabel: "Brug CSS-markører",
             useNativeCursorStylesEnableTitle: "Brug CSS-markørgengivelse (Erstatter systemmarkører)",
             useNativeCursorStylesDisableTitle: "Brug lærredsmarkørgengivelse (Tegn på lærred)",
+            rawPointerMotionLabel: "Rå markørbevægelse",
+            rawPointerMotionEnableTitle: "Bed browseren om bevægelse uden acceleration under markørlås (tilladt på Windows og macOS, afvist på Linux og Android)",
+            macCmdAsCtrlLabel: "Command sender Control",
+            macCmdAsCtrlDisableTitle: "Send Command som den Super-tast, sessionens vindueshåndtering kan bruge",
+            macCmdAsCtrlEnableTitle: "Send Command-kombinationer som deres Control-kombinationer, så Cmd+C kopierer eksternt",
+            rawPointerMotionDisableTitle: "Behold denne enheds markøracceleration under markørlås",
             addScreenTitle: "Tilføj en anden skærm",
             addScreenButton: "Tilføj Skærm +",
             forceAlignedResolutionLabel: "Gennemtving justeret opløsning",
@@ -4264,6 +4441,8 @@ const da = {
         clipboardSkipReadonly: "Seere kan ikke ændre udklipsholderen",
         clipboardSkipNoImage: "Vælg først et billede til upload",
         commandFailed: "Fjernkommandoen mislykkedes: {detail}",
+        keyboardLockUnavailable: "Denne browser tilbyder ingen tastaturlås, så et enkelt tryk på Escape forlader spiltilstand i stedet for at nå sessionen.",
+        keyboardLockBlockedByShields: "Braves Shields blokerer tastaturlåsen, så et enkelt tryk på Escape forlader spiltilstand. Tillad tastatur-API'et for dette websted under Shields' fingeraftrykskontroller for at kunne holde Escape nede i stedet.",
         clipboardSkipBinaryDisabled: "Billedeudklipsholderen er deaktiveret på serveren",
         clipboardSkipSendFailed: "Billedet fra udklipsholderen kunne ikke sendes",
         clipboardSkipInDisabled: "Afsendelse til den eksterne udklipsholder er deaktiveret",
@@ -4279,7 +4458,8 @@ const da = {
     zeroBytes: "0 bytes",
     filesModal: {
         closeAlt: "Luk fil-modal",
-        iframeTitle: "Downloadbare Filer"
+        iframeTitle: "Downloadbare Filer",
+        loading: "Indlæser filer..."
     }
 };
 

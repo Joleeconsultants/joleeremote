@@ -23,6 +23,7 @@ it('commits exact renewal once, survives eviction and ignores old alarm', async(
     await evictDurableObject(s.stub);
     expect(await s.stub.commitRenewal(s.input)).toBe(true);
     expect((await s.stub.status())?.expiresAt).toBe(s.input.expiresAt);
+    expect((await s.stub.readOriginalAuthorizationContext())?.expiresAt).toBe(s.input.previousExpiresAt);
     await runInDurableObject(s.stub,async(instance,state)=>{
       await instance.onAlarm(); expect(await state.storage.getAlarm()).toBe(s.input.expiresAt);
     });

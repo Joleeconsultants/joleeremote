@@ -195,3 +195,13 @@ it("parses Option A filesList and filesGet inputs", () => {
   });
   expect(parseInputJson('{"t":"filesGet"}')).toBeNull();
 });
+
+it('accepts only exact negotiated audio requests with matching ASC',()=>{
+  const pcm={t:'audio_config',v:1,requestId:'12345678-1234-1234-1234-123456789abc',codec:'pcm_s16le'};
+  expect(parseInputJson(JSON.stringify(pcm))).toEqual(pcm);
+  expect(parseInputJson(JSON.stringify({...pcm,extra:1}))).toBeNull();
+  const aac={...pcm,codec:'mp4a.40.2',sourceGeneration:'a'.repeat(32),sampleRate:48000,channels:2,description:'EZA=',targetBitrate:128000};
+  expect(parseInputJson(JSON.stringify(aac))).toEqual(aac);
+  for(const change of [{description:'EhA='},{targetBitrate:510000},{sourceGeneration:'A'.repeat(32)},{sampleRate:24000},{requestId:'00000000-0000-0000-0000-000000000000'}])
+    expect(parseInputJson(JSON.stringify({...aac,...change}))).toBeNull();
+});

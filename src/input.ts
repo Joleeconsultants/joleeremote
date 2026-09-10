@@ -64,6 +64,9 @@ export type AudioDeviceInput = {
   context: string;
   deviceId?: string;
 };
+export type AudioConfigInput = {t:'audio_config';v:1;requestId:string;codec:'pcm_s16le'} |
+  {t:'audio_config';v:1;requestId:string;codec:'mp4a.40.2';sourceGeneration:string;
+    sampleRate:number;channels:number;description:string;targetBitrate:number};
 
 export type PipelineInput = {
   t: "pipeline";
@@ -97,6 +100,7 @@ export type InputPayload =
   | CssScalingInput
   | SettingsInput
   | AudioDeviceInput
+  | AudioConfigInput
   | PipelineInput
   | MicInput
   | WebcamInput
@@ -233,6 +237,17 @@ function parseObject(obj: Record<string, unknown>): InputPayload | null {
       const out: AudioDeviceInput = { t: "audioDevice", context: obj.context };
       if (typeof obj.deviceId === "string") out.deviceId = obj.deviceId;
       return out;
+    }
+    case 'audio_config': {
+      if(obj.v!==1 || typeof obj.requestId!=='string' ||
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(obj.requestId) ||
+        obj.requestId==='00000000-0000-0000-0000-000000000000')return null;
+      if(obj.codec==='pcm_s16le')return Object.keys(obj).length===4 ? obj as AudioConfigInput : null;
+      if(obj.codec!=='mp4a.40.2'||Object.keys(obj).length!==9||typeof obj.sourceGeneration!=='string'||
+        !/^[a-f0-9]{32}$/.test(obj.sourceGeneration)||![44100,48000].includes(obj.sampleRate as number)||
+        ![1,2].includes(obj.channels as number)||![96000,128000,160000,192000].includes(obj.targetBitrate as number))return null;
+      const asc=obj.sampleRate===44100 ? (obj.channels===1?'Egg=':'EhA=') : (obj.channels===1?'EYg=':'EZA=');
+      return obj.description===asc ? obj as AudioConfigInput : null;
     }
     case "pipeline": {
       if (typeof obj.pipeline !== "string") return null;

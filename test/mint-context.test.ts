@@ -50,3 +50,12 @@ it("expired context is unavailable",async()=>{
  await runInDurableObject(stub,(_instance,state)=>{state.storage.sql.exec("UPDATE session SET expires_at = ?",Date.now()-1);});
  expect(await stub.readMintContext()).toBeNull();expect((await attempt(stub,value)).ok).toBe(false);
 });
+
+it('owned context requires the exact browser token and remains unavailable after expiry',async()=>{
+ const value=input(),stub=env.Session.getByName(value.sessionId);await stub.mint(value);
+ expect(await stub.readOwnedMintContext('wrong')).toBeNull();
+ expect(await stub.readOwnedMintContext(value.agentToken)).toBeNull();
+ expect((await stub.readOwnedMintContext(value.browserToken))?.context).toBe(value.mintContext);
+ await runInDurableObject(stub,(_instance,state)=>state.storage.sql.exec('UPDATE session SET expires_at = ?',Date.now()-1));
+ expect(await stub.readOwnedMintContext(value.browserToken)).toBeNull();
+});

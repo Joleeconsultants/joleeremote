@@ -141,6 +141,13 @@ export class Session extends Server<Env> {
     return { sessionId: row.id, expiresAt: row.expires_at, context: sealed[0]?.context ?? null };
   }
 
+  /** Internal RPC: private integration must also verify fresh operator identity. */
+  async readOwnedMintContext(browserToken:string):Promise<{sessionId:string;expiresAt:number;context:string|null}|null>{
+    const row=this.loadRow();
+    if(!row||typeof browserToken!=='string'||!timingSafeEqual(browserToken,row.browser_token))return null;
+    return this.readMintContext();
+  }
+
   /** Immutable privileged authorization deadline; ordinary renewal must never extend it. */
   async readOriginalAuthorizationContext(): Promise<{sessionId:string;expiresAt:number;context:string|null}|null> {
     const context=await this.readMintContext();

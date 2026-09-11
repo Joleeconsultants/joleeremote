@@ -130,7 +130,7 @@ Trackpad is in scope and visible; Trackpad ≠ Gaming. One-finger movement contr
 
 On touch clients, Trackpad Mode defaults **on in portrait**. Landscape **hides** the sidebar Trackpad tile and forces absolute touch. The last portrait choice is session memory only (no `localStorage`) and is restored when rotating back to portrait (default on). The core posts `trackpadModeUpdate` so the tile stays in sync.
 
-Drawn text caret: `EXPERIMENTAL_IBEAM_CONTRAST` in `public/viewer.html` replaces the remoted I-beam bitmap with a high-contrast SVG. Set the flag to `false` (or delete that block and the `applyCursorFrame` branch) to revert.
+Drawn text caret: `EXPERIMENTAL_IBEAM_CONTRAST` in `public/viewer.html` is currently `false` (was tried; looked wrong). Set to `true` to re-enable, or delete the block to remove (or delete that block and the `applyCursorFrame` branch) to revert.
 
 Gaming (gamepads, gaming mode, soft buttons, extra player seats) stays hidden. Image clipboard is unlocked: it is a hop JSON path, not a Selkies pixelflux encoder. A leftover postMessage of still-hidden types is ignored so a stale build cannot crash the core.
 

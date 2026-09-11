@@ -40,8 +40,8 @@ test('native mode uses local cursor types while drawn mode retains remote shape 
   f.useBrowserCursors=false;f.applyCursorMode();assert.equal(f.cursorEl.style.display,'none');
 });
 
-test('experimental I-beam replaces remoted text caret bitmap and stays flagged for revert',()=>{
-  assert.match(html,/const EXPERIMENTAL_IBEAM_CONTRAST=true/);
+test('experimental I-beam flag exists and is off (disabled after look-wrong feedback)',()=>{
+  assert.match(html,/const EXPERIMENTAL_IBEAM_CONTRAST=false/);
   assert.match(html,/Set EXPERIMENTAL_IBEAM_CONTRAST=false/);
   const f=fixture();
   const svg=vm.runInContext('EXPERIMENTAL_IBEAM_SVG',f);

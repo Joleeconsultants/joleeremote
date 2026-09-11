@@ -1,7 +1,7 @@
-diff --git a/chrome/selkies-dashboard/src/components/Sidebar.jsx b/chrome/selkies-dashboard/src/components/Sidebar.jsx
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
 index c15f517..176f2ef 100644
---- a/chrome/selkies-dashboard/src/components/Sidebar.jsx
-+++ b/chrome/selkies-dashboard/src/components/Sidebar.jsx
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
 @@ -4169,6 +4169,14 @@ function Sidebar() {
                          ))}
                        </select>

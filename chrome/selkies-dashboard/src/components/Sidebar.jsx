@@ -70,7 +70,7 @@ import {
   resolveFailedAppCommand,
   writeInstalledApps,
 } from "../jolee-shims/app-commands.js";
-import { postToCore, debounceSettings, listAudioDevices } from "../jolee-bridge.js";
+import { postToCore, debounceSettings, listAudioDevices, microphoneErrorMessage } from "../jolee-bridge.js";
 import { createClipboardDelivery, clipboardImageBlob } from "../jolee-clipboard-delivery.js";
 import {
   startParentMicrophone,
@@ -2021,7 +2021,7 @@ function Sidebar() {
    * are left alone: the core keeps the devices this dashboard picked for the
    * life of the page, so a reopened section shows them rather than defaulting.
    */
-  const populateAudioDevices = useCallback(async () => {
+  const populateAudioDevices = useCallback(async (requestLabels = true) => {
     console.log("Dashboard: Attempting to populate audio devices...");
     setIsLoadingAudioDevices(true);
     setAudioDeviceError(null);
@@ -2039,7 +2039,7 @@ function Sidebar() {
       console.log(
         "Dashboard: Listing devices; microphone permission is optional for labels..."
       );
-      const devices = await listAudioDevices(navigator.mediaDevices);
+      const devices = await listAudioDevices(navigator.mediaDevices, requestLabels);
       console.log("Dashboard: Devices found:", devices);
       const inputs = [];
       const outputs = [];
@@ -2087,6 +2087,13 @@ function Sidebar() {
       setIsLoadingAudioDevices(false);
     }
   }, [t, isWebrtc]);
+
+  useEffect(() => {
+    if (!sectionsOpen.audioSettings) return;
+    const refresh = () => populateAudioDevices(false);
+    navigator.mediaDevices?.addEventListener?.('devicechange', refresh);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refresh);
+  }, [sectionsOpen.audioSettings, populateAudioDevices]);
 
   /** Folds or unfolds a section; opening the audio section enumerates devices. */
   const toggleSection = useCallback(
@@ -2993,7 +3000,7 @@ function Sidebar() {
             microphoneSession.stop();
             if (typeof message.error === "string" && message.error) {
               const id = "microphone-start-error";
-              const text = `${t("notifications.errorPrefix")} ${message.error}`;
+              const text = microphoneErrorMessage(message.error);
               setNotifications((prev) => {
                 const filtered = prev.filter((n) => n.id !== id);
                 return [
@@ -3001,6 +3008,7 @@ function Sidebar() {
                   {
                     id,
                     fileName: "Microphone",
+                    errorTitle: "Microphone unavailable",
                     status: "error",
                     progress: 100,
                     message: text,
@@ -4166,11 +4174,12 @@ function Sidebar() {
                       <select
                         id="audioInputSelect"
                         title={!microphoneReady ? microphoneUnavailable : undefined}
-                        value={selectedInputDeviceId}
+                        value={audioInputDevices.some(d => d.deviceId === selectedInputDeviceId) ? selectedInputDeviceId : ''}
                         onChange={handleAudioInputChange}
-                        disabled={!microphoneReady || isLoadingAudioDevices || !!audioDeviceError}
+                        disabled={!microphoneReady || isLoadingAudioDevices || !!audioDeviceError || audioInputDevices.length === 0}
                         className="audio-device-select"
                       >
+                        <option value="" disabled>{isLoadingAudioDevices ? 'Loading microphones…' : audioInputDevices.length ? 'Select microphone' : 'No browser microphone found'}</option>
                         {audioInputDevices.map((d) => (
                           <option key={d.deviceId} value={d.deviceId}>
                             {d.label}
@@ -5077,14 +5086,14 @@ function Sidebar() {
               {n.status === "error" && (
                 <>
                   <span className="notification-status-text error-text">
-                    {t("notifications.uploadFailed")}
+                    {n.errorTitle || t("notifications.uploadFailed")}
                   </span>
-                  <div className="notification-progress-bar-outer">
+                  {!n.errorTitle && <div className="notification-progress-bar-outer">
                     <div
                       className="notification-progress-bar-inner"
                       style={{ width: `100%` }}
                     />
-                  </div>
+                  </div>}
                   {n.message && (
                     <p className="notification-error-message">{n.message}</p>
                   )}

@@ -2,6 +2,20 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { microphoneErrorMessage, listAudioDevices } from '../chrome/selkies-dashboard/src/jolee-bridge.js';
+
+test('microphone errors identify local browser capture problems without exposing raw errors',()=>{
+  assert.match(microphoneErrorMessage('NotFoundError'),/this browser/);
+  assert.match(microphoneErrorMessage('NotAllowedError'),/Allow microphone access/);
+  assert.match(microphoneErrorMessage('NotReadableError'),/another app/);
+  assert.doesNotMatch(microphoneErrorMessage('secret arbitrary message'),/secret/);
+});
+test('device changes enumerate without activating or requesting microphone access',async()=>{
+  const devices=[{kind:'audiooutput',deviceId:'default',label:''}];
+  let captures=0;
+  assert.deepEqual(await listAudioDevices({enumerateDevices:async()=>devices,getUserMedia:()=>{captures++;}},false),devices);
+  assert.equal(captures,0);
+});
 
 function fixture() {
   const requests = [];

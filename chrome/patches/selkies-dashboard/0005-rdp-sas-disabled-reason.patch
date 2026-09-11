@@ -1,7 +1,7 @@
-diff --git a/chrome/selkies-dashboard/src/components/Sidebar.jsx b/chrome/selkies-dashboard/src/components/Sidebar.jsx
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
 index 176f2ef..23304b7 100644
---- a/chrome/selkies-dashboard/src/components/Sidebar.jsx
-+++ b/chrome/selkies-dashboard/src/components/Sidebar.jsx
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
 @@ -2839,7 +2839,7 @@ function Sidebar() {
        if (message?.type === 'status' && message.state !== 'paired') setSasState({ available: false, pending: false });
        if (message?.type === 'sasState' && typeof message.available === 'boolean' && typeof message.pending === 'boolean') {

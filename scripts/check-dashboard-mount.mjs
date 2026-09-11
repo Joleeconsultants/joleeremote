@@ -81,6 +81,16 @@ try {
   assert.deepEqual(errors, [], 'dashboard startup must not throw');
   assert(await page.locator('#dashboard-root button').count() >= 5, 'original controls must mount');
   await page.locator('.toggle-handle').click();
+  await page.getByText('Audio Settings', {exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#audioInputSelect')?.textContent.includes('No browser microphone found'));
+  await page.frameLocator('#jolee-core').locator('body').evaluate(()=>{
+    parent.postMessage({type:'pipelineStatusUpdate',microphone:false,error:'NotFoundError'},location.origin);
+  });
+  await page.getByText('Microphone unavailable', {exact:true}).waitFor();
+  assert.equal(await page.getByText('Upload Failed', {exact:true}).count(),0);
+  assert.equal(await page.locator('.notification-progress-bar-outer').count(),0);
+  assert.match(await page.locator('.notification-error-message').innerText(),/No microphone is available to this browser/);
+  await page.getByText('Audio Settings', {exact:true}).click();
   await page.getByText('Video Settings', { exact: true }).click();
   assert(await page.locator('#encoderSelect').isDisabled());
   assert.deepEqual(await page.locator('#encoderSelect option').evaluateAll(options=>options.map(o=>o.value)), ['']);

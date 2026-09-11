@@ -18,12 +18,12 @@ window.cursorMode=null;
 window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='setUseBrowserCursors')window.cursorMode=e.data.value;});
 const sizes={current:{width:1920,height:1200},custom:{width:3440,height:1440},unknown:null};
 const opaque=n=>String(n).padStart(32,'0');
-function publish(id){
+function publish(id,canResize=true){
   const size=sizes[id];
   const modes=[{id:opaque(2),width:1920,height:1200,refresh_hz:60,selectable:true,reason:null},
     {id:opaque(3),width:3440,height:1440,refresh_hz:60,selectable:true,reason:null},
     {id:opaque(4),width:7680,height:4320,refresh_hz:60,selectable:false,reason:'capture_limit'}];
-  const display={id:opaque(1),label:'Test monitor',primary:true,x:0,y:0,width:size?.width||1920,height:size?.height||1200,current_mode_id:opaque(id==='custom'?3:2),modes,can_resize:true,reason:null};
+  const display={id:opaque(1),label:'Test monitor',primary:true,x:0,y:0,width:size?.width||1920,height:size?.height||1200,current_mode_id:opaque(id==='custom'?3:2),modes,can_resize:canResize,reason:canResize?null:'session_unavailable'};
   parent.postMessage({type:'statsUpdate',screen:{effective:size,catalog:size?{revision:opaque(9),selected_display_id:id==='removed'?null:opaque(1),displays:[display]}:null},microphone_supported:false,webcam_supported:false},location.origin);
 }
 sizes.removed=sizes.current;
@@ -152,8 +152,16 @@ try {
   await page.getByRole('button', {name:'Set to Best Fit',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#manualWidthInput').value==='1920');
   assert.equal(await page.locator('#manualHeightInput').inputValue(),'1200');
-  assert(await page.locator('#resolutionPresetSelect option[value="7680x4320"]').isDisabled());
-  assert.match(await page.locator('#resolutionPresetSelect option[value="7680x4320"]').innerText(),/capture limit/);
+  assert.equal(await page.locator('#resolutionPresetSelect option[value="7680x4320"]').count(),0);
+  await page.frameLocator('#jolee-core').locator('body').evaluate(()=>publish('current',false));
+  await page.getByText('Resolution changes are temporarily unavailable on this desktop.',{exact:true}).waitFor();
+  assert(await page.locator('#resolutionPresetSelect').isDisabled());
+  assert.equal(await page.locator('#resolutionPresetSelect option[value="3440x1440"]').count(),0);
+  assert.equal(await page.locator('#resolutionPresetSelect').inputValue(),'1920x1200');
+  await page.frameLocator('#jolee-core').locator('#current').click();
+  await page.waitForFunction(()=>!document.querySelector('#resolutionPresetSelect').disabled);
+  assert.equal(await page.locator('#resolutionPresetSelect option[value="3440x1440"]').count(),1);
+  assert.equal(await page.getByText('Resolution changes are temporarily unavailable on this desktop.',{exact:true}).count(),0);
   await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.displayRequests.length===1);
   assert.equal(await page.frameLocator('#jolee-core').locator('body').evaluate(()=>window.displayRequests[0].type),'setBestFit');
   await page.frameLocator('#jolee-core').locator('#removed').click();

@@ -69,5 +69,6 @@ export function resolutionChoices(display) {
   }
   return [...groups].map(([value, mode]) => ({value, mode,
     current: value === `${display.width}x${display.height}`}))
+    .filter(choice => choice.current || display.can_resize && choice.mode.selectable)
     .sort((a, b) => a.mode.width - b.mode.width || a.mode.height - b.mode.height);
 }

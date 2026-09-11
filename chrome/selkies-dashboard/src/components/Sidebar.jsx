@@ -4070,6 +4070,7 @@ function Sidebar() {
                       </select>
                     </div>
                     {displayCatalog && !remoteDisplay && <p role="status">The selected monitor is disconnected. Select an available monitor.</p>}
+                    {remoteDisplay && !remoteDisplay.can_resize && !displayPending && <p role="status">Resolution changes are temporarily unavailable on this desktop.</p>}
                     {displayPending && <p role="status">Waiting for the PC to confirm the display change…</p>}
                     <div className="resolution-manual-inputs">
                       <div className="dev-setting-item manual-input-item">

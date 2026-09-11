@@ -4217,6 +4217,7 @@ function Sidebar() {
                         <input
                           type="range"
                           id="audioBitrateSlider"
+                          aria-valuetext={`${audioBitrate / 1000} kbps`}
                           min={0}
                           max={audioBitrateChoices.length - 1}
                           step={1}
@@ -4224,6 +4225,11 @@ function Sidebar() {
                           onChange={(e) => handleAudioBitrateChange(audioBitrateChoices[parseInt(e.target.value, 10)])}
                           disabled={agentCapabilities.audio_bitrate_supported !== true || (agentCapabilities.audio_bitrate_choices?.length ?? 0) <= 1}
                         />
+                        {agentCapabilities.audio_bitrate_supported === true && audioBitrateChoices.length > 1 && (
+                          <div className="audio-bitrate-ticks" aria-hidden="true">
+                            {audioBitrateChoices.map(value => <span key={value} title={`${value / 1000} kbps`} />)}
+                          </div>
+                        )}
                       </div>
                     )}
                     {!isOutputSelectionSupported &&

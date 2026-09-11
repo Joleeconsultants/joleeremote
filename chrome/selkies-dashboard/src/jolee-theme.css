@@ -66,3 +66,16 @@
 .sidebar input, .sidebar textarea, .sidebar [contenteditable="true"] {
   caret-color: auto;
 }
+
+.audio-bitrate-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin: -2px 10px 0;
+  pointer-events: none;
+}
+.audio-bitrate-ticks span {
+  width: 1px;
+  height: 5px;
+  background: currentColor;
+  opacity: .65;
+}

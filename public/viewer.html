@@ -83,12 +83,14 @@ let useBrowserCursors=false, pointerOver=false, agentCursorVisible=true;
 let nativeCursor='default';
 const sessionState=new SessionState(({text,visible,state})=>{
   const notice=document.getElementById('connection-status');
+  const changed=notice.dataset.connectionVisible!==String(visible)||notice.dataset.state!==state;
   notice.dataset.connectionVisible=String(visible);
   const label=notice.querySelector('[data-connection-text]');label.textContent=text;
   const connectionPriority=visible&&!['ended','expired','unavailable'].includes(state);
   label.hidden=!connectionPriority&&notice.dataset.renewalActive==='true';
   const renewalText=notice.querySelector('[data-renewal-text]');if(renewalText)renewalText.hidden=connectionPriority;
   notice.hidden=!visible&&notice.dataset.renewalActive!=='true';notice.dataset.state=state;
+  if(changed)notice.dispatchEvent(new Event('connectionstatechange'));
 });
 const renewalUi=mountRenewalUi({sessionId:session,browserToken:token,onExpired:()=>queueMicrotask(()=>{disconnect();setStatus('expired');})});
 let cursorHx=DEFAULT_CURSOR_HX, cursorHy=DEFAULT_CURSOR_HY, cursorPosition=null;

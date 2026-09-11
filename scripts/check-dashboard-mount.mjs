@@ -191,14 +191,14 @@ try {
   await page.getByText('Shortcuts',{exact:true}).click();
   await page.frameLocator('#jolee-core').locator('#securefail').click();
   const shortcut=page.getByRole('button',{name:'Ctrl + Alt + Del',exact:true});
-  await page.waitForFunction(()=>document.querySelector('#shortcuts-content button').title.includes('stopped unexpectedly'));
+  await page.waitForFunction(()=>[...document.querySelectorAll('#shortcuts-content button')].some(button=>button.textContent.trim()==='Ctrl + Alt + Del'&&button.title.includes('stopped unexpectedly')));
   assert(await shortcut.isDisabled());
   await page.waitForTimeout(11000);
   const failure=page.locator('.notification-item').filter({hasText:'The secure-screen helper stopped unexpectedly.'});
   assert.equal(await failure.count(),1,'failure must survive the previous warning timer');
   assert.match(await shortcut.getAttribute('title'),/Return to the normal desktop was not verified/);
   await page.frameLocator('#jolee-core').locator('#sasnext').click();
-  await page.waitForFunction(()=>document.querySelector('#shortcuts-content button').title==='Waiting for the PC response');
+  await page.waitForFunction(()=>[...document.querySelectorAll('#shortcuts-content button')].some(button=>button.textContent.trim()==='Ctrl + Alt + Del'&&button.title==='Waiting for the PC response'));
   assert.equal(await failure.count(),0,'new command clears previous failure');
   assert.deepEqual(errors,[]);
   // Explicit choices survive reload; touch clients get a drawn default until

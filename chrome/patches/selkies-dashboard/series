@@ -5,3 +5,6 @@
 0005-rdp-sas-disabled-reason.patch
 0006-microphone-device-feedback.patch
 0007-escape-f11-shortcuts.patch
+0008-scale-locally-default-off.patch
+0009-device-beta-flags.patch
+0010-trackpad-portrait-default.patch

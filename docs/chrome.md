@@ -128,6 +128,10 @@ Open `/api/files/?session=SESSION&token=TOKEN`; subsequent navigation uses sessi
 
 Trackpad is in scope and visible; Trackpad ≠ Gaming. One-finger movement controls a relative cursor (1.25× sensitivity); a short tap clicks at that cursor. Two-finger drag scrolls, two-finger tap or a stationary 500 ms one-finger hold right-clicks. Pinch zooms/pans the local canvas (1–4×) without remote input; each two-finger gesture locks to scrolling or pinching after a 10 px threshold. Switching back to touch restores absolute positioning and resets zoom.
 
+On touch clients, Trackpad Mode defaults **on in portrait**. Landscape **hides** the sidebar Trackpad tile and forces absolute touch. The last portrait choice is session memory only (no `localStorage`) and is restored when rotating back to portrait (default on). The core posts `trackpadModeUpdate` so the tile stays in sync.
+
+Drawn text caret: `EXPERIMENTAL_IBEAM_CONTRAST` in `public/viewer.html` replaces the remoted I-beam bitmap with a high-contrast SVG. Set the flag to `false` (or delete that block and the `applyCursorFrame` branch) to revert.
+
 Gaming (gamepads, gaming mode, soft buttons, extra player seats) stays hidden. Image clipboard is unlocked: it is a hop JSON path, not a Selkies pixelflux encoder. A leftover postMessage of still-hidden types is ignored so a stale build cannot crash the core.
 
 ```mermaid

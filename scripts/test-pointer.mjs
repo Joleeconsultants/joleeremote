@@ -118,3 +118,64 @@ test('cancelled, switched, or disconnected trackpad holds never click',()=>{
     assert.equal(f.sent.length,0);
   }
 });
+
+function orientFixture({touch=true,portrait=true}={}){
+  let portraitState=portrait;
+  const sent=[], posted=[];
+  const c=vm.createContext({
+    Array,Math,performance:{now:()=>0},setTimeout:()=>1,clearTimeout(){},
+    canvas:{style:{},focus(){},addEventListener(){}},
+    window:{parent:{postMessage:m=>posted.push(m)},location:{origin:'https://example.test'},addEventListener(){}},
+    stage:{getBoundingClientRect:()=>({left:0,top:0,width:1000,height:500})},
+    contentBox:()=>({left:0,top:0,width:1000,height:500}),
+    pointerNorm:p=>({x:p.clientX/1000,y:p.clientY/500}),cursorPosition:{clientX:400,clientY:200},
+    pointerInput:{cancel(){}},sessionPaired:true,displayTransition:{blocked:false},
+    pointerOver:false,moveOverlay(){},applyCursorMode(){},unlockAudioFromGesture(){},
+    sendInput:m=>sent.push(m),
+    navigator:{maxTouchPoints:touch?5:0},
+    matchMedia:q=>({matches:q.includes('orientation: portrait')?portraitState:q.includes('pointer: coarse')?touch:false}),
+    innerHeight:portrait?800:400,innerWidth:portrait?400:800,
+  });
+  vm.runInContext(html.slice(html.indexOf('// Trackpad touch gestures'),html.indexOf('canvas.addEventListener("pointermove"')),c);
+  const read=expr=>vm.runInContext(expr,c);
+  return {
+    c,posted,read,
+    setPortrait(next){
+      portraitState=next;
+      c.innerHeight=next?800:400;c.innerWidth=next?400:800;
+      c.syncTrackpadForOrientation();
+    },
+  };
+}
+test('touch portrait defaults trackpad on; landscape forces absolute and restores the session pref',()=>{
+  const f=orientFixture({touch:true,portrait:true});
+  f.c.syncTrackpadForOrientation();
+  assert.equal(f.read('trackpadMode'),true);
+  assert.equal(f.read('trackpadUserPref'),true);
+  assert.equal(f.posted.at(-1).enabled,true);
+  f.c.setTouchInputMode('touch');
+  assert.equal(f.read('trackpadMode'),false);
+  assert.equal(f.read('trackpadUserPref'),false);
+  f.setPortrait(false);
+  assert.equal(f.read('trackpadMode'),false);
+  assert.equal(f.read('trackpadUserPref'),false);
+  f.setPortrait(true);
+  assert.equal(f.read('trackpadMode'),false);
+  f.c.setTouchInputMode('trackpad');
+  assert.equal(f.read('trackpadUserPref'),true);
+  f.setPortrait(false);
+  assert.equal(f.read('trackpadMode'),false);
+  assert.equal(f.read('trackpadUserPref'),true);
+  f.c.setTouchInputMode('trackpad');
+  assert.equal(f.read('trackpadMode'),false);
+  assert.equal(f.read('trackpadUserPref'),true);
+  f.setPortrait(true);
+  assert.equal(f.read('trackpadMode'),true);
+});
+test('non-touch clients do not auto-enable trackpad',()=>{
+  const f=orientFixture({touch:false,portrait:true});
+  f.c.syncTrackpadForOrientation();
+  assert.equal(f.read('trackpadMode'),false);
+  f.c.setTouchInputMode('trackpad');
+  assert.equal(f.read('trackpadMode'),true);
+});

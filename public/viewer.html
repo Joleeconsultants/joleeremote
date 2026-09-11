@@ -54,6 +54,11 @@ import { AudioControl } from './audio-control.js';
 const VERSION=1, KIND_FRAME=1, KIND_INPUT=2, KIND_AUDIO=3;
 const DEFAULT_CURSOR_SVG="data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round" d="M1 1v16.5l4.2-4.3 3.3 8 2.5-1-3.3-7.9H15z"/></svg>');
 const DEFAULT_CURSOR_HX=1, DEFAULT_CURSOR_HY=1;
+// EXPERIMENTAL: high-contrast I-beam for drawn remote text caret (washes out on light bg).
+// Set EXPERIMENTAL_IBEAM_CONTRAST=false (or delete this block + applyCursorFrame branch) to revert.
+const EXPERIMENTAL_IBEAM_CONTRAST=true;
+const EXPERIMENTAL_IBEAM_SVG="data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="12" height="20" viewBox="0 0 12 20"><path fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" d="M3 2h6M6 2v16M3 18h6"/><path fill="none" stroke="#111" stroke-width="1.6" stroke-linecap="round" d="M3 2h6M6 2v16M3 18h6"/></svg>');
+const EXPERIMENTAL_IBEAM_HX=6, EXPERIMENTAL_IBEAM_HY=10;
 const canvas=document.getElementById("surface");
 const stage=document.getElementById("stage");
 const cursorEl=document.getElementById("remote-cursor");
@@ -419,9 +424,16 @@ function applyCursorFrame(cur){
   agentCursorVisible=cur.visible;
   if(cur.visible&&cur.css)nativeCursor=cur.css;
   if(cur.visible && cur.mime && cur.data){
-    cursorEl.src="data:image/png;base64,"+cur.data;
-    nativeCursor=cur.css||'default';
-    cursorHx=cur.hx;cursorHy=cur.hy;
+    // EXPERIMENTAL_IBEAM_CONTRAST: replace remoted text caret bitmap with high-contrast SVG.
+    if(EXPERIMENTAL_IBEAM_CONTRAST && cur.css==="text"){
+      cursorEl.src=EXPERIMENTAL_IBEAM_SVG;
+      nativeCursor="text";
+      cursorHx=EXPERIMENTAL_IBEAM_HX;cursorHy=EXPERIMENTAL_IBEAM_HY;
+    }else{
+      cursorEl.src="data:image/png;base64,"+cur.data;
+      nativeCursor=cur.css||'default';
+      cursorHx=cur.hx;cursorHy=cur.hy;
+    }
     if(cursorPosition) moveOverlay(cursorPosition);
   }
   applyCursorMode();
@@ -1429,7 +1441,17 @@ function createPointerInput(send, point, paired){
 }
 const pointerInput=createPointerInput(sendInput,pointerNorm,()=>sessionPaired);
 // Trackpad touch gestures are separate from the absolute mouse/pen/touch helper.
-let trackpadMode=false, virtualCursor={x:0.5,y:0.5};
+// Mobile portrait defaults ON; landscape forces absolute and hides the sidebar tile.
+// trackpadUserPref is in-memory session memory only (no localStorage).
+const isTouchPrimaryClient=()=>{
+  try{return ((navigator.maxTouchPoints|0)>0)||(typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches);}
+  catch{return false;}
+};
+const isPortraitOrientation=()=>{
+  try{if(typeof matchMedia==="function")return matchMedia("(orientation: portrait)").matches;}catch{}
+  try{return innerHeight>=innerWidth;}catch{return true;}
+};
+let trackpadMode=false, trackpadUserPref=true, virtualCursor={x:0.5,y:0.5};
 let trackpadGesture=null, trackpadTimer=null;
 let trackpadZoom=1, trackpadPan={x:0,y:0};
 const clampTrackpad=(n)=>Math.max(0,Math.min(1,n));
@@ -1448,8 +1470,12 @@ function trackpadClick(b){
   sendInput({t:"pointer",e:"down",...virtualCursor,b});
   sendInput({t:"pointer",e:"up",...virtualCursor,b});
 }
-function setTouchInputMode(mode){
-  const enabled=mode==="trackpad";
+function setTouchInputMode(mode, opts={}){
+  const remember=opts.remember!==false;
+  let enabled=mode==="trackpad";
+  if(remember&&isTouchPrimaryClient())trackpadUserPref=enabled;
+  // Landscape never runs trackpad — absolute touch only (tile also hidden in chrome).
+  if(enabled&&isTouchPrimaryClient()&&!isPortraitOrientation())enabled=false;
   if(enabled!==trackpadMode){
     pointerInput.cancel();resetTrackpadGesture();
     if(enabled){
@@ -1466,6 +1492,11 @@ function setTouchInputMode(mode){
     }
   }
   if(window.parent!==window)window.parent.postMessage({type:"trackpadModeUpdate",enabled},window.location.origin);
+}
+function syncTrackpadForOrientation(){
+  if(!isTouchPrimaryClient())return;
+  if(!isPortraitOrientation())setTouchInputMode("touch",{remember:false});
+  else setTouchInputMode(trackpadUserPref?"trackpad":"touch",{remember:false});
 }
 function trackpadPoints(touches){
   return Array.from(touches,t=>({id:t.identifier,x:t.clientX,y:t.clientY}));
@@ -1747,6 +1778,17 @@ applyScale();
 applySmoothing();
 applyCursorMode();
 window.addEventListener('resize',scheduleScreenResize);
+if(isTouchPrimaryClient()){
+  syncTrackpadForOrientation();
+  const onOrient=()=>syncTrackpadForOrientation();
+  window.addEventListener("orientationchange",()=>setTimeout(onOrient,0));
+  try{
+    const mq=matchMedia("(orientation: portrait)");
+    if(mq.addEventListener)mq.addEventListener("change",onOrient);
+    else if(mq.addListener)mq.addListener(onOrient);
+  }catch{}
+  window.addEventListener("resize",()=>{if(isTouchPrimaryClient())syncTrackpadForOrientation();});
+}
 setStatus("disconnected");
 if(session.trim()&&token.trim()) connect();
 </script></body></html>

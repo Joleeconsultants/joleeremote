@@ -1,0 +1,70 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index 636eb9b..5a4c425 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -51,7 +51,7 @@
+  */
+ import { useState, useEffect, useCallback, useId, useMemo, useRef } from "react";
+ import { readDisplayCatalog, selectedDisplay, resolutionChoices } from "../../../../public/display-catalog.js";
+-import { displayLabel, decodableEncoders, canDecodeFullColor, getRoutePrefix, getStorageAppName, isMobileClient } from "../jolee-shims/util.js";
++import { displayLabel, decodableEncoders, canDecodeFullColor, getRoutePrefix, getStorageAppName, isMobileClient, isPortraitOrientation } from "../jolee-shims/util.js";
+ import { sessionAuthHeaders, withSessionToken } from "../jolee-shims/session-token.js";
+ import { resolveSpec, isSettingPinned, HIDPI_SPEC, RATE_CONTROL_SPEC,
+   USE_BROWSER_CURSORS_SPEC, VIDEO_FULLCOLOR_SPEC, VIDEO_STREAMING_MODE_SPEC,
+@@ -951,7 +951,12 @@ function Sidebar() {
+   }, []);
+   const currentDeviceDpi = DEVICE_DPI;
+   const isMobile = isMobileClient;
+-  const [isTrackpadModeActive, setIsTrackpadModeActive] = useState(false);
++  const [isPortrait, setIsPortrait] = useState(isPortraitOrientation);
++  // Touch+portrait defaults on; landscape hides the tile. Core owns the
++  // session-memory pref and posts trackpadModeUpdate after orientation changes.
++  const [isTrackpadModeActive, setIsTrackpadModeActive] = useState(
++    () => isMobileClient && isPortraitOrientation(),
++  );
+   const [hasDetectedTouch, setHasDetectedTouch] = useState(false);
+   const [heldKeys, setHeldKeys] = useState({
+     Control: false,
+@@ -1189,6 +1194,33 @@ function Sidebar() {
+     };
+   }, []);
+ 
++  useEffect(() => {
++    const onOrient = () => setIsPortrait(isPortraitOrientation());
++    window.addEventListener("orientationchange", onOrient);
++    window.addEventListener("resize", onOrient);
++    let mq;
++    try {
++      mq = window.matchMedia("(orientation: portrait)");
++      if (mq.addEventListener) mq.addEventListener("change", onOrient);
++      else if (mq.addListener) mq.addListener(onOrient);
++    } catch {}
++    onOrient();
++    return () => {
++      window.removeEventListener("orientationchange", onOrient);
++      window.removeEventListener("resize", onOrient);
++      try {
++        if (mq?.removeEventListener) mq.removeEventListener("change", onOrient);
++        else if (mq?.removeListener) mq.removeListener(onOrient);
++      } catch {}
++    };
++  }, []);
++
++  useEffect(() => {
++    if (!isMobileClient || !isPortraitOrientation()) return;
++    setIsTrackpadModeActive(true);
++    postToCore({ type: "touchinput:trackpad" }, window.location.origin);
++  }, []);
++
+   useEffect(() => {
+     const setRealViewportHeight = () => {
+       const vh = window.innerHeight * 0.01;
+@@ -3355,7 +3387,7 @@ function Sidebar() {
+   const showKeyboardTile =
+     (isMobile || hasDetectedTouch) && (renderableSettings.softButtons ?? true);
+   const showTrackpadTile =
+-    (isMobile || hasDetectedTouch) && (renderableSettings.trackpad ?? true);
++    (isMobile || hasDetectedTouch) && isPortrait && (renderableSettings.trackpad ?? true);
+   const filteredSharingLinks = sharingLinks.filter(link => {
+     if (link.id === 'shared') return renderableSettings.enableShared ?? true;
+     if (link.id === 'player2') return renderableSettings.enablePlayer2 ?? true;

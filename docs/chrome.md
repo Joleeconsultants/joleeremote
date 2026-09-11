@@ -150,3 +150,30 @@ The patch series exists to rewire that chrome onto the hop canvas. Add chrome ba
 Do not bump packages past what the source uses: dashboard npm follows the pinned Selkies package.json; wrangler, workers-types, partyserver, and partysocket follow those sources, not latest-on-npm.
 
 Dependabot covers npm weekly (Monday) at `/` and `/chrome/selkies-dashboard`, plus GitHub Actions at `/`. The dashboard is pinned in `chrome/selkies-dashboard/UPSTREAM`; overlay files in `OVERLAY` are kept; Jolee rewires are `chrome/patches/selkies-dashboard/` plus `scripts/sync-selkies-dashboard.sh` (`latest` or a SHA). A weekday Action opens an issue titled "Selkies dashboard upstream moved" when the pin is behind.
+
+## Adding remote shortcuts
+
+The Shortcuts panel uses the same `resolution-button` class as Files. Keep the
+Files action spacing: 5px above and below each button, supplied by
+`#shortcuts-content > .resolution-button` in the Jolee theme overlay. Reuse the
+existing full-width buttons, colors, border, radius, typography, hover and focus
+styles; do not stack touching buttons or introduce a separate button design.
+
+For ordinary keys, follow Esc and F11 (Full Screen): the sidebar posts
+`{type: "shortcutKey", key: "Escape"}` (or `F11`) to the core. `sendShortcutKey`
+in `public/viewer.html` accepts an explicit allowlist, requires a paired session,
+and sends one `key` down/up pair through the existing input path. It does not
+queue presses for reconnect or release a key already held by this viewer.
+F11 affects the remote application's fullscreen behavior, not the local browser.
+
+To add another ordinary key, verify its native key mapping, extend the explicit
+core allowlist, add the matching sidebar button and tooltip, and update the
+key-packet and shipped-dashboard delivery checks. Preserve sidebar changes in
+the pinned Selkies patch series and rebuild the dashboard assets. Publish the
+public change first, then sync the private product and deploy.
+
+Ctrl+Alt+Del is different: it uses the privileged SAS command and capability
+checks. Do not route it as ordinary key presses or use ordinary shortcut buttons
+to bypass native secure-desktop admission. A button being present or a packet
+being sent does not prove Windows accepted it; remote acceptance depends on the
+native input path and should be verified when that path is available.

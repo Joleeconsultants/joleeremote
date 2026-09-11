@@ -81,6 +81,16 @@ try {
   assert.deepEqual(errors, [], 'dashboard startup must not throw');
   assert(await page.locator('#dashboard-root button').count() >= 5, 'original controls must mount');
   await page.locator('.toggle-handle').click();
+  await page.getByText('Shortcuts',{exact:true}).click();
+  await page.frameLocator('#jolee-core').locator('body').evaluate(()=>{
+    window.shortcutKeys=[];
+    window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='shortcutKey')window.shortcutKeys.push(e.data.key);});
+  });
+  await page.getByRole('button',{name:'Esc',exact:true}).click();
+  await page.getByRole('button',{name:'F11 (Full Screen)',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.shortcutKeys.length===2);
+  assert.deepEqual(await page.frameLocator('#jolee-core').locator('body').evaluate(()=>window.shortcutKeys),['Escape','F11']);
+  await page.getByText('Shortcuts',{exact:true}).click();
   await page.getByText('Audio Settings', {exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#audioInputSelect')?.textContent.includes('No browser microphone found'));
   await page.frameLocator('#jolee-core').locator('body').evaluate(()=>{
@@ -181,14 +191,14 @@ try {
   await page.getByText('Shortcuts',{exact:true}).click();
   await page.frameLocator('#jolee-core').locator('#securefail').click();
   const shortcut=page.getByRole('button',{name:'Ctrl + Alt + Del',exact:true});
-  await page.waitForFunction(()=>document.querySelector('#shortcuts-content button').title.includes('stopped unexpectedly'));
+  await page.waitForFunction(()=>[...document.querySelectorAll('#shortcuts-content button')].some(button=>button.textContent.trim()==='Ctrl + Alt + Del'&&button.title.includes('stopped unexpectedly')));
   assert(await shortcut.isDisabled());
   await page.waitForTimeout(11000);
   const failure=page.locator('.notification-item').filter({hasText:'The secure-screen helper stopped unexpectedly.'});
   assert.equal(await failure.count(),1,'failure must survive the previous warning timer');
   assert.match(await shortcut.getAttribute('title'),/Return to the normal desktop was not verified/);
   await page.frameLocator('#jolee-core').locator('#sasnext').click();
-  await page.waitForFunction(()=>document.querySelector('#shortcuts-content button').title==='Waiting for the PC response');
+  await page.waitForFunction(()=>[...document.querySelectorAll('#shortcuts-content button')].some(button=>button.textContent.trim()==='Ctrl + Alt + Del'&&button.title==='Waiting for the PC response'));
   assert.equal(await failure.count(),0,'new command clears previous failure');
   assert.deepEqual(errors,[]);
   // Explicit choices survive reload; touch clients get a drawn default until

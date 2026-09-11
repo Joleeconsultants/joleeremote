@@ -69,3 +69,14 @@ export const isMobileClient =
   typeof window !== "undefined" &&
   typeof window.matchMedia === "function" &&
   window.matchMedia("(pointer: coarse)").matches;
+
+/** Live portrait check for Trackpad tile visibility (session orientation, not stored). */
+export function isPortraitOrientation() {
+  if (typeof window === "undefined") return true;
+  try {
+    if (typeof window.matchMedia === "function") {
+      return window.matchMedia("(orientation: portrait)").matches;
+    }
+  } catch {}
+  return window.innerHeight >= window.innerWidth;
+}

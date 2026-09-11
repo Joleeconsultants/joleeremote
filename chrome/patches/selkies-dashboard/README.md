@@ -12,7 +12,7 @@ Add a real hop path, then show the ORIGINAL Selkies dashboard control. Use origi
 
 Leftover list = recommended features not yet hopped, not a junk drawer. CSS cursors is original dashboard UI; the remote cursor overlay is hop core.
 
-The current series starts with a refreshed integration baseline, then accepts small incremental patches. It is applied by `scripts/sync-selkies-dashboard.sh` after copying upstream `addons/selkies-dashboard`.
+The current series starts with a refreshed integration baseline, then accepts small incremental patches. It is applied by `scripts/sync-selkies-dashboard.sh` after copying upstream `addons/selkies-dashboard`. `0010-trackpad-portrait-default.patch` shows the Trackpad tile in portrait only and defaults it on for touch clients.
 
 The series rewires Selkies chrome onto the hop canvas. Add chrome back as the hop grows. Prefer overlay `chrome/selkies-dashboard/src/jolee-settings.js` for hide-flags so Sidebar diffs stay small.
 

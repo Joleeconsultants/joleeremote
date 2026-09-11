@@ -225,11 +225,26 @@ try {
   const mobileContext=await browser.newContext({hasTouch:true,isMobile:true,viewport:{width:390,height:844}});
   try {
     await mobileContext.route('**/*',route=>route.request().url().startsWith(`${origin}/`)?route.continue():route.abort());
+    await mobileContext.addInitScript(()=>{
+      window.__touchInput=[];
+      window.addEventListener('message',e=>{
+        if(e.data?.type==='touchinput:trackpad'||e.data?.type==='touchinput:touch')window.__touchInput.push(e.data.type);
+      });
+    });
     const mobile=await mobileContext.newPage();mobile.setDefaultTimeout(10000);
     mobile.on('pageerror',error=>errors.push(error.message));
     await mobile.goto(origin);
     await mobile.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===false);
     await mobile.locator('.toggle-handle').click();
+    const trackpad=mobile.locator('.trackpad-mode-button');
+    await trackpad.waitFor({state:'visible'});
+    assert(await trackpad.evaluate(el=>el.classList.contains('active')),'portrait touch defaults Trackpad on');
+    await mobile.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.__touchInput?.includes('touchinput:trackpad'));
+    assert.equal(await mobile.getByTitle(/Gaming Mode/).count(),0,'Gaming stays hidden');
+    await mobile.setViewportSize({width:844,height:390});
+    await mobile.waitForFunction(()=>document.querySelectorAll('.trackpad-mode-button').length===0);
+    await mobile.setViewportSize({width:390,height:844});
+    await trackpad.waitFor({state:'visible'});
     await mobile.getByText('Screen Settings',{exact:true}).click();
     assert.equal(await mobile.locator('#useBrowserCursorsToggle').getAttribute('aria-pressed'),'false');
     await mobile.locator('#useBrowserCursorsToggle').click();

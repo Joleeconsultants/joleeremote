@@ -9,7 +9,9 @@ function fixture(){
     canvas:{style:{}},cursorEl:{style:{},src:'fallback'},stage:{addEventListener(){},getBoundingClientRect:()=>({left:10,top:20})},
     secureCursorActive:false,useBrowserCursors:false,nativeCursor:'default',pointerOver:true,agentCursorVisible:true,cursorHx:1,cursorHy:1,cursorPosition:null,
     DEFAULT_CURSOR_SVG:'fallback',DEFAULT_CURSOR_HX:1,DEFAULT_CURSOR_HY:1});
-  vm.runInContext(html.slice(html.indexOf('function applyCursorMode('),html.indexOf('let sessionPaired='))+
+  vm.runInContext(
+    html.slice(html.indexOf('// EXPERIMENTAL:'),html.indexOf('const canvas='))+
+    html.slice(html.indexOf('function applyCursorMode('),html.indexOf('let sessionPaired='))+
     html.slice(html.indexOf('function cursorFromFrame('),html.indexOf('function contentBox('))+
     html.slice(html.indexOf('function moveOverlay('),html.indexOf('// Each native generation')),c);
   return c;
@@ -27,15 +29,31 @@ test('cursor accepts bounded PNG geometry and rejects invalid hotspots or arbitr
     {...cursor(),data:'AAAA'},{...cursor(),data:'A'.repeat(174765)},{...cursor(),visible:1}])assert.equal(f.cursorFromFrame(c),null);
 });
 test('native mode uses local cursor types while drawn mode retains remote shape and hotspot',()=>{
-  const f=fixture(),shape=f.cursorFromFrame({...cursor(),css:'text'});f.applyCursorFrame(shape);
+  const f=fixture(),shape=f.cursorFromFrame({...cursor(),css:'pointer'});f.applyCursorFrame(shape);
   assert.equal(f.cursorEl.style.display,'block');assert.equal(f.canvas.style.cursor,'none');
   f.useBrowserCursors=true;f.applyCursorMode();
-  assert.equal(f.canvas.style.cursor,'text');assert.match(f.cursorEl.src,/^data:image\/png;base64,/);
+  assert.equal(f.canvas.style.cursor,'pointer');assert.match(f.cursorEl.src,/^data:image\/png;base64,/);
   assert.equal(f.cursorEl.style.display,'none');
   f.applyCursorFrame(f.cursorFromFrame({t:'cursor',visible:false}));assert.equal(f.canvas.style.cursor,'none');
-  f.applyCursorFrame(f.cursorFromFrame({t:'cursor',visible:true}));assert.equal(f.canvas.style.cursor,'text');
+  f.applyCursorFrame(f.cursorFromFrame({t:'cursor',visible:true}));assert.equal(f.canvas.style.cursor,'pointer');
   f.applyCursorFrame(f.cursorFromFrame({t:'cursor',visible:false}));
   f.useBrowserCursors=false;f.applyCursorMode();assert.equal(f.cursorEl.style.display,'none');
+});
+
+test('experimental I-beam replaces remoted text caret bitmap and stays flagged for revert',()=>{
+  assert.match(html,/const EXPERIMENTAL_IBEAM_CONTRAST=true/);
+  assert.match(html,/Set EXPERIMENTAL_IBEAM_CONTRAST=false/);
+  const f=fixture();
+  const svg=vm.runInContext('EXPERIMENTAL_IBEAM_SVG',f);
+  const hx=vm.runInContext('EXPERIMENTAL_IBEAM_HX',f);
+  const hy=vm.runInContext('EXPERIMENTAL_IBEAM_HY',f);
+  f.applyCursorFrame(f.cursorFromFrame({...cursor(),css:'text'}));
+  assert.equal(f.cursorEl.src,svg);
+  assert.equal(f.nativeCursor,'text');
+  assert.equal(f.cursorHx,hx);
+  assert.equal(f.cursorHy,hy);
+  f.applyCursorFrame(f.cursorFromFrame({...cursor(),css:'pointer'}));
+  assert.match(f.cursorEl.src,/^data:image\/png;base64,/);
 });
 
 test('unknown or missing native type uses local arrow while preserving drawn PNG',()=>{

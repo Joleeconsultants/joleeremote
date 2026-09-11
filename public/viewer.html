@@ -10,6 +10,7 @@ main{padding:0;height:100%;position:relative}
 #stage{position:relative;width:100%;height:100%}
 canvas{display:block;width:100%;height:100%;background:#000;object-fit:contain;touch-action:none}
 #stage.exact-resolution{overflow:auto;display:flex}
+#surface:focus{outline:none}
 canvas.exact-resolution{flex:none;width:auto;height:auto;margin:auto;object-fit:fill}
 #remote-cursor{position:absolute;left:0;top:0;pointer-events:none;user-select:none;z-index:2;display:none;max-width:none;border:0}
 #connection-status{position:absolute;top:16px;left:50%;transform:translateX(-50%);max-width:calc(100% - 64px);padding:12px 18px;border:1px solid #75839a;border-radius:8px;background:#222833;color:#e6ebf3;font:16px system-ui;z-index:4;pointer-events:none;text-align:center}

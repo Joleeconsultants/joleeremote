@@ -63,7 +63,7 @@ const hashParams=new URLSearchParams((location.hash||"").replace(/^#/, ""));
 let session=params.get("session")||"";
 let token=hashParams.get("token")||params.get("token")||"";
 let hop=params.get("hop")||"";
-let socket=null, scaleLocally=true, antiAliasing=true;
+let socket=null, scaleLocally=window.matchMedia("(pointer: coarse)").matches, antiAliasing=true;
 let audioEnabled=true, videoEnabled=true, audioSinkId="";
 // Deferred until a suitable production-signed open-source Windows driver is available.
 const microphoneFeatureEnabled=true;

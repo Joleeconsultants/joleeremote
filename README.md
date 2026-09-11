@@ -114,7 +114,7 @@ Suggested viewer payloads (opaque to the hop): UTF-8 JSON inside kind `input`, e
 
 Session HTML is served from your chosen origin (placeholder in docs: `https://remote.example.com`). The hop Worker may be a different host (`hop` query param). Same origin: omit `hop`.
 
-- `POST /sessions` on the hop Worker. Optional JSON `{ "ttlSeconds": 900 }` (clamped 1..3600). Default TTL comes from Worker var `SESSION_TTL_SECONDS` (wrangler default `"900"` / 15 min; raise to `"3600"` later for 1h without code changes). Body override still clamped. **Production requires `MINT_SECRET`**: send `Authorization: Bearer <MINT_SECRET>` or `X-Mint-Secret`. Unset in local `wrangler dev` keeps open mint. Returns `sessionId`, `browserToken`, `agentToken`, `expiresAt`, `ttlSeconds`, `joins`.
+- `POST /sessions` on the hop Worker. Optional JSON `{ "ttlSeconds": 900 }` (clamped 1..3600). Default TTL comes from Worker var `SESSION_TTL_SECONDS` (wrangler default `"3600"` / 1 hour). Body override still clamped. **Production requires `MINT_SECRET`**: send `Authorization: Bearer <MINT_SECRET>` or `X-Mint-Secret`. Unset in local `wrangler dev` keeps open mint. Returns `sessionId`, `browserToken`, `agentToken`, `expiresAt`, `ttlSeconds`, `joins`.
 - `GET /sessions/:id` — public status; does **not** return tokens.
 - **Browser HTML:** `https://remote.example.com/?session=<id>#token=<browserToken>` (same origin) or `https://remote.example.com/?session=<id>&hop=<worker-host>#token=<browserToken>` (split). Mint `joins.browser` is that path on the hop Worker, not a full `https://remote.example.com/...` URL unless UI and hop share an origin. See [docs/chrome.md](docs/chrome.md).
 - **Agent join** (any WebSocket client; PartySocket not required): prefer first text `{"type":"join","token":"..."}` or `Authorization: Bearer` on the upgrade. Query `?token=` remains fallback (`joins.agent`: `wss://<worker-host>/sessions/<id>/agent?token=`).
@@ -175,7 +175,7 @@ Package scripts: `typecheck`, `test`, `dev` (`wrangler dev`), `build:dashboard`,
 
 Local `wrangler dev` leaves `MINT_SECRET` unset (open mint). Production requires Worker secret `MINT_SECRET`.
 
-Plaintext Worker var `SESSION_TTL_SECONDS` (default `"900"`) sets the mint default TTL when the request omits `ttlSeconds`. Clamped to 1..3600 (`MAX_TTL_SECONDS` already allows a future 1-hour default).
+Plaintext Worker var `SESSION_TTL_SECONDS` (default `"3600"`) sets the mint default TTL when the request omits `ttlSeconds`. Clamped to 1..3600 (`MAX_TTL_SECONDS` allows the 1-hour default).
 
 ## Keeping chrome in sync
 

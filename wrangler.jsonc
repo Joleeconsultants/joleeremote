@@ -19,7 +19,7 @@
   },
   "vars": {
     "MINT_SECRET": "",
-    // Default mint TTL (seconds). Change to "3600" later for 1h without code changes.
-    "SESSION_TTL_SECONDS": "900"
+    // Default initial session duration: one hour (seconds).
+    "SESSION_TTL_SECONDS": "3600"
   }
 }

@@ -22,7 +22,7 @@ export type MintResponse = {
 };
 
 /** Fallback when SESSION_TTL_SECONDS is unset or unparseable. */
-export const DEFAULT_TTL_SECONDS = 900;
+export const DEFAULT_TTL_SECONDS = 3600;
 export const MIN_TTL_SECONDS = 1;
 export const MAX_TTL_SECONDS = 3600;
 

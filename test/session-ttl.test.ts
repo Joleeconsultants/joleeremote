@@ -47,14 +47,14 @@ describe("mint TTL from env default / body override", () => {
     });
     expect(res.status).toBe(201);
     const body = (await res.json()) as { ttlSeconds: number };
-    expect(body.ttlSeconds).toBe(900);
+    expect(body.ttlSeconds).toBe(3600);
   });
 
   it("mints with default when no JSON body", async () => {
     const res = await SELF.fetch("https://example.com/sessions", { method: "POST" });
     expect(res.status).toBe(201);
     const body = (await res.json()) as { ttlSeconds: number };
-    expect(body.ttlSeconds).toBe(900);
+    expect(body.ttlSeconds).toBe(3600);
   });
 
   it("clamps body ttlSeconds override", async () => {

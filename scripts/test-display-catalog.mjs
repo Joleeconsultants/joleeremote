@@ -9,14 +9,19 @@ const mode=(n,width,height,refresh_hz=60,selectable=true)=>({id:id(n),width,heig
 const display={id:id(1),label:'Left monitor',primary:false,x:-1920,y:0,width:1920,height:1080,
   current_mode_id:id(2),can_resize:true,reason:null,modes:[mode(2,1920,1080),mode(3,1920,1080,75),mode(4,1280,720),mode(5,7680,4320,60,false)]};
 const catalog={revision:id(9),selected_display_id:id(1),displays:[display]};
-test('catalog preserves negative origins, disabled Windows modes and preferred refresh',()=>{
+test('catalog validates disabled modes but offers only available resolutions and current',()=>{
   assert.equal(readDisplayCatalog(catalog),catalog);
   assert.equal(readDisplayCatalog({...catalog,selected_display_id:null})?.selected_display_id,null);
   const choices=resolutionChoices(display);
-  assert.equal(choices.length,3);
+  assert.equal(choices.length,2);
   assert.equal(choices[1].mode.id,id(2));
   assert.equal(choices[1].current,true);
-  assert.equal(choices[2].mode.selectable,false);
+  const unavailable={...display,can_resize:false,reason:'session_unavailable'};
+  assert.deepEqual(resolutionChoices(unavailable).map(c=>c.value),['1920x1080']);
+  assert.equal(resolutionChoices(unavailable)[0].current,true);
+  assert.equal(resolutionChoices(display).length,2);
+  const currentUnavailable={...display,modes:display.modes.map(m=>({...m,selectable:false,reason:'windows_rejected'}))};
+  assert.deepEqual(resolutionChoices(currentUnavailable).map(c=>c.value),['1920x1080']);
   for(const bad of [null,{...catalog,selected_display_id:id(99)},{...catalog,displays:[display,display]},
     {...catalog,displays:[{...display,current_mode_id:id(99)}]},
     {...catalog,displays:[{...display,modes:[{...mode(2,1920,1080),selectable:'true'}]}]}]) assert.equal(readDisplayCatalog(bad),null);

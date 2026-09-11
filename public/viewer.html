@@ -1451,6 +1451,12 @@ function sendKeyFromUI(e,direction){
   clipboardPaste.key({t:'key',e:direction,key:e.key,code:e.code},
     {trusted:e.isTrusted,ctrlKey:e.ctrlKey,metaKey:e.metaKey,shiftKey:e.shiftKey,altKey:e.altKey});
 }
+function sendShortcutKey(key){
+  if(!sessionPaired||!['Escape','F11'].includes(key))return;
+  if(heldViewerKeys.has(key))return;
+  sendInput({t:'key',e:'down',key,code:key});
+  sendInput({t:'key',e:'up',key,code:key});
+}
 canvas.addEventListener("keydown",(e)=>{sendKeyFromUI(e,'down');e.preventDefault();});
 canvas.addEventListener("keyup",(e)=>{sendKeyFromUI(e,'up');e.preventDefault();});
 vk.addEventListener("keydown",(e)=>sendKeyFromUI(e,'down'));
@@ -1551,6 +1557,7 @@ window.addEventListener("message",(event)=>{
         sendInput({t:"settings",settings:msg.settings});
       }
       break;
+    case 'shortcutKey': sendShortcutKey(msg.key); break;
     case "command": {
       const value=String(msg.value??msg.command??msg.payload?.command??"");
       const compact=value.toLowerCase().replace(/[^a-z]/g,"");

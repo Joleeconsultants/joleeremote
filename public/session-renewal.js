@@ -39,7 +39,7 @@ export class SessionRenewal {
       if(epoch!==this.epoch)return false;
       if((this.now()>=previousExpiresAt&&this.expiresAt<=previousExpiresAt)||result?.sessionId!==session||result.requestId!==requestId||
         result.status!=='committed'||!Number.isSafeInteger(result.expiresAt)||result.expiresAt<=previousExpiresAt||
-        result.expiresAt>this.now()+3600000)throw Error('renewal_not_confirmed');
+        result.expiresAt-this.now()>2147483647)throw Error('renewal_not_confirmed');
       this.expiresAt=Math.max(this.expiresAt,result.expiresAt);this.attempt=null;return true;
     }catch{
       if(epoch===this.epoch)this.error='Renewal was not confirmed.';

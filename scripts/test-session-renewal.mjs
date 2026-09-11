@@ -14,6 +14,13 @@ test('only matching committed response extends expiry',async()=>{
  const bad=harness(async()=>({status:'committed',expiresAt:3601000}));bad.c.bind('session',301000,true);
  assert.equal(await bad.c.renew(),false);assert.equal(bad.state.expiresAt,301000);
 });
+
+test('accepts server-confirmed lifetimes past one hour within the native timer limit',async()=>{
+ const h=harness(async r=>({...r,status:'committed',expiresAt:7201000}));h.c.bind('session',3601000,true);
+ assert.equal(await h.c.renew(),true);assert.equal(h.state.expiresAt,7201000);
+ const bad=harness(async r=>({...r,status:'committed',expiresAt:1000+2147483648}));bad.c.bind('session',301000,true);
+ assert.equal(await bad.c.renew(),false);
+});
 test('late response after expiry does not revive session',async()=>{
  let resolve;const h=harness(()=>new Promise(r=>resolve=r));h.c.bind('session',2000,true);
  const pending=h.c.renew();h.advance(1000);resolve({sessionId:'session',requestId:'request',status:'committed',expiresAt:3601000});

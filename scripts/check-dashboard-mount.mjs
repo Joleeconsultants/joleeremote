@@ -115,8 +115,7 @@ try {
   await page.waitForFunction(()=>document.querySelector('#encoderSelect').value==='');
   assert.deepEqual(await page.locator('#encoderSelect option').evaluateAll(options=>options.map(o=>o.value)), ['']);
   await page.getByText('Screen Settings', { exact: true }).click();
-  await page.locator('#uiScalingSelect').waitFor({ state: 'visible' });
-  assert(await page.locator('#uiScalingSelect').isDisabled(), 'unknown DPI capability stays disabled');
+  assert.equal(await page.locator('#uiScalingSelect').count(),0, 'unknown DPI capability stays hidden');
   assert.equal(await page.locator('#useBrowserCursorsToggle').getAttribute('aria-pressed'),'true','desktop starts with native cursors');
   await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.cursorMode===true);
   assert(await page.getByRole('button', { name: 'Set to Best Fit', exact: true }).isDisabled());
@@ -132,7 +131,7 @@ try {
   assert.equal(await page.locator('#manualHeightInput').inputValue(), '');
   await page.waitForTimeout(100);
   assert.deepEqual(errors, [], 'screen reset must not throw');
-  assert(await page.locator('#uiScalingSelect').isDisabled());
+  assert.equal(await page.locator('#uiScalingSelect').count(),0);
   // Reported PC geometry, including a non-preset ultrawide mode, must be visible
   // without sending a resolution change or overwriting a manual draft.
   await page.frameLocator('#jolee-core').locator('#custom').click();
@@ -153,6 +152,8 @@ try {
   await page.waitForFunction(()=>document.querySelector('#manualWidthInput').value==='1920');
   assert.equal(await page.locator('#manualHeightInput').inputValue(),'1200');
   assert.equal(await page.locator('#resolutionPresetSelect option[value="7680x4320"]').count(),0);
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.displayRequests.length===1);
+  await page.waitForFunction(()=>!document.querySelector('#resolutionPresetSelect').disabled);
   await page.frameLocator('#jolee-core').locator('body').evaluate(()=>publish('current',false));
   await page.getByText('Resolution changes are temporarily unavailable on this desktop.',{exact:true}).waitFor();
   assert(await page.locator('#resolutionPresetSelect').isDisabled());

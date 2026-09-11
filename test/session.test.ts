@@ -657,3 +657,36 @@ describe("public PC files HTTP", () => {
     expect((await SELF.fetch(filesUrl(m, path))).status).toBe(400);
   });
 });
+
+
+describe('persisted device beta flags',()=>{
+ it('defaults off and filters print/mic messages while PC sound and input pass',async()=>{
+  const m=await mint();const browser=await openWs(browserJoinPath(m.sessionId,m.browserToken));const agent=await openWs(agentJoinPath(m.sessionId,m.agentToken));
+  await waitUntilState(m.sessionId,'paired');
+  const received=waitBinary(browser);
+  agent.send(encodeEnvelope('frame',JSON.stringify({t:'print',data:'YQ=='})));
+  agent.send(encodeEnvelope('audio',new Uint8Array([9])));
+  expect(decodeEnvelope(await received)?.kind).toBe('audio');
+  const input=waitBinary(agent);
+  browser.send(encodeEnvelope('input',JSON.stringify({t:'mic',data:'YQ=='})));
+  browser.send(encodeEnvelope('input',JSON.stringify({t:'pipeline',pipeline:'microphone',enabled:true})));
+  browser.send(encodeEnvelope('input',JSON.stringify({t:'key',key:'a',e:'down'})));
+  expect(JSON.parse(new TextDecoder().decode(decodeEnvelope(await input)!.payload)).t).toBe('key');
+  browser.close();agent.close();
+ });
+ it('persists independent trusted mint flags and rejects retry flag changes',async()=>{
+  const id=crypto.randomUUID(),stub=env.Session.getByName(id);
+  const input={sessionId:id,browserToken:'a'.repeat(64),agentToken:'b'.repeat(64),betaFeatures:{printingBeta:true,microphoneBeta:false}};
+  await runInDurableObject(stub,(instance:Session)=>instance.mint(input));
+  await expect(runInDurableObject(stub,(instance:Session)=>instance.mint({...input,betaFeatures:{printingBeta:true,microphoneBeta:true}}))).rejects.toThrow('session already minted');
+  await evictDurableObject(stub);
+  await runInDurableObject(stub,async(_instance,state)=>{
+   expect(state.storage.sql.exec('SELECT printing,microphone FROM session_features').toArray()).toEqual([{printing:1,microphone:0}]);
+  });
+  const browser=await openWs(browserJoinPath(id,input.browserToken)),agent=await openWs(agentJoinPath(id,input.agentToken));
+  await waitUntilState(id,'paired');const result=waitBinary(browser);
+  agent.send(encodeEnvelope('frame',JSON.stringify({t:'print',data:'YQ=='})));
+  expect(JSON.parse(new TextDecoder().decode(decodeEnvelope(await result)!.payload)).t).toBe('print');
+  browser.close();agent.close();
+ });
+});

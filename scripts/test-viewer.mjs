@@ -12,7 +12,7 @@ import { publishScreenDiagnostic } from '../public/display-catalog.js';
 import { NegotiatedAudioDecoder } from '../public/audio-decoder.js';
 import { AudioControl } from '../public/audio-control.js';
 function viewerContext(globals) {
-  globals={audioEnabled:true,audioCodecState:{choices:[],effective:null},DisplayTransition,displayTransition:new DisplayTransition(),heldViewerKeys:new Map(),printJobChunks:new Map(),stage:{classList:{toggle(){}},scrollLeft:0,scrollTop:0},sessionState:{set(){},frame(){},stale(){}},...globals};
+  globals={printingFeatureEnabled:true,microphoneFeatureEnabled:true,audioEnabled:true,audioCodecState:{choices:[],effective:null},DisplayTransition,displayTransition:new DisplayTransition(),heldViewerKeys:new Map(),printJobChunks:new Map(),stage:{classList:{toggle(){}},scrollLeft:0,scrollTop:0},sessionState:{set(){},frame(){},stale(){}},...globals};
   return vm.createContext({ canvas:{dataset:{}},setMicrophoneForwarding:()=>{},applyCursorMode:()=>{},resetRemoteCursor:()=>{},pointerInput:{reset(){}},clearTimeout:()=>{},session:'fixture-session', SasControl, structuredClone, sasControl:{consume:()=>false,request:()=>{},publish:()=>{}}, ClipboardPasteGate, clipboardPaste: new ClipboardPasteGate({ send() {}, report() {}, supported: () => false, connection: () => null }), ...globals,
     UploadControl,uploadControl:{bind(){},capability(){},consume(){return false;}},crypto:{subtle:webcrypto.subtle,...globals.crypto} });
 }
@@ -145,7 +145,7 @@ function viewer() {
   const window = {};
   window.parent = window;
   const context = viewerContext({
-    window, Uint8Array, printJobChunks: new Map(),sessionPaired:true,
+    window, Uint8Array, printingFeatureEnabled:true, printJobChunks: new Map(),sessionPaired:true,
     setTimeout:callback=>{timers.set(++nextTimer,callback);return nextTimer;},clearTimeout:id=>timers.delete(id),
     base64ToBytes: data => new Uint8Array(Buffer.from(data, 'base64')),
     openPrintPreview: file => previews.push(file),
@@ -639,7 +639,8 @@ test('replaced sockets cannot change status, deliver data or close the current s
     close(){this.closed=true;}
     fire(name,event={}){this.listeners[name](event);}
   }
-  const c=viewerContext({PartySocket:Socket,URL,session:'test',token:'owned-test-token',hop:'',socket:null,
+  const fakeWindow={};fakeWindow.parent=fakeWindow;
+  const c=viewerContext({window:fakeWindow,PartySocket:Socket,URL,session:'test',token:'owned-test-token',hop:'',socket:null,
     location:{host:'test.invalid',href:'https://test.invalid/viewer.html'},history:{replaceState:()=>{}},
     videoDecoder:null,stopAudioPlayback:()=>{},stopMicrophone:()=>{},stopWebcam:()=>{},printJobChunks:new Map(),
     setStatus:s=>states.push(s),decodeEnvelope:()=>{throw new Error('stale binary message consumed');}});
@@ -961,4 +962,11 @@ test('Paste results require exact action and clipboard ids and partial/timeout a
     h.gate.consume({t:'clipboard_paste_result',id:action.id,clipboard_id:'image-1',status:'injected',reason:null});
     assert.equal(h.reported.length,1);assert.equal(h.sent.filter(p=>p.t==='clipboard_paste').length,1);h.gate.reset();
   }
+});
+
+
+test('disabled printing never assembles or opens received jobs',()=>{
+  const h=viewer();h.context.printingFeatureEnabled=false;
+  h.send(0,'%PDF-disabled','single',1);h.send(0,'partial');
+  assert.equal(h.previews.length,0);assert.equal(h.context.printJobChunks.size,0);
 });

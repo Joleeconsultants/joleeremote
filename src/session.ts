@@ -1,3 +1,4 @@
+import { betaFeatures, betaMessageAllowed, type BetaFeatures } from './beta-features';
 import { Server, type Connection, type ConnectionContext, type WSMessage } from "partyserver";
 import { decodeEnvelope, encodeEnvelope, envelopeByteLength, MAX_ENVELOPE_BYTES } from "./envelope";
 import {
@@ -86,6 +87,9 @@ export class Session extends Server<Env> {
         context TEXT
       )`);
       this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS browser_absence (id INTEGER PRIMARY KEY, deadline INTEGER NOT NULL)`);
+      this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS session_features (
+        session_id TEXT PRIMARY KEY, printing INTEGER NOT NULL, microphone INTEGER NOT NULL
+      )`);
       this.ensureFilesTable();
       this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS session_renewal (
         session_id TEXT PRIMARY KEY, revision INTEGER NOT NULL,
@@ -102,7 +106,9 @@ export class Session extends Server<Env> {
     ttlSeconds?: number;
     /** Internal Worker context only. HTTP mint never forwards this field. */
     mintContext?: string | null;
+    betaFeatures?: BetaFeatures;
   }): Promise<{ sessionId: string; expiresAt: number; ttlSeconds: number }> {
+    const flags = betaFeatures(input.betaFeatures);
     const context = input.mintContext ?? null;
     if (context !== null && (typeof context !== "string" || new TextEncoder().encode(context).length > 8192))
       throw new Error("invalid mint context");
@@ -117,6 +123,7 @@ export class Session extends Server<Env> {
         if (sealed.length === 1 && existing.id === input.sessionId && existing.state !== "ended" &&
             Date.now() < existing.expires_at && timingSafeEqual(existing.browser_token, input.browserToken) &&
             timingSafeEqual(existing.agent_token, input.agentToken) && sealed[0].context === context &&
+            JSON.stringify(this.readBetaFeatures()) === JSON.stringify(flags) &&
             existing.expires_at - existing.created_at === ttlSeconds * 1000)
           return { sessionId: existing.id, expiresAt: existing.expires_at, ttlSeconds };
         throw new Error("session already minted");
@@ -127,6 +134,7 @@ export class Session extends Server<Env> {
         "INSERT INTO session (id, browser_token, agent_token, expires_at, created_at, state) VALUES (?, ?, ?, ?, ?, ?)",
         input.sessionId, input.browserToken, input.agentToken, expiresAt, now, "waiting");
       this.ctx.storage.sql.exec("INSERT INTO session_mint_context (session_id, context) VALUES (?, ?)", input.sessionId, context);
+      this.ctx.storage.sql.exec("INSERT INTO session_features (session_id, printing, microphone) VALUES (?, ?, ?)", input.sessionId, Number(flags.printingBeta), Number(flags.microphoneBeta));
       return { sessionId: input.sessionId, expiresAt, ttlSeconds };
     });
     await this.ctx.storage.setAlarm(minted.expiresAt);
@@ -271,6 +279,7 @@ export class Session extends Server<Env> {
     const row = this.loadRow();
     if (!row || row.state === "ended" || Date.now() >= this.sessionDeadline(row)) return;
 
+    if (!betaMessageAllowed(decoded, this.readBetaFeatures())) return;
     const sender = this.roleOf(connection);
     // Frames and audio are agent → browser only. Input is browser → agent.
     // Unknown kinds are already dropped by decodeEnvelope.
@@ -571,10 +580,15 @@ export class Session extends Server<Env> {
     }
   }
 
+  private readBetaFeatures(): BetaFeatures {
+    const row = this.ctx.storage.sql.exec<{printing:number;microphone:number}>("SELECT printing, microphone FROM session_features LIMIT 1").toArray()[0];
+    return {printingBeta:row?.printing === 1, microphoneBeta:row?.microphone === 1};
+  }
+
   private broadcastStatus(): void {
     const status = this.snapshot();
     if (!status) return;
-    this.broadcast(JSON.stringify({ type: "status", ...status }));
+    this.broadcast(JSON.stringify({ type: "status", ...status, betaFeatures: this.readBetaFeatures() }));
   }
 
   private snapshot(): PublicStatus | null {

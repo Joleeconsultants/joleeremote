@@ -1,0 +1,114 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index 3416a14..dd257b2 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -1508,6 +1508,8 @@ function Sidebar() {
+   });
+   const [notifications, setNotifications] = useState([]);
+   const notificationTimeouts = useRef({});
++  const [printingBeta, setPrintingBeta] = useState(false);
++  const [microphoneBeta, setMicrophoneBeta] = useState(false);
+   const [microphoneReady, setMicrophoneReady] = useState(false);
+   const [microphoneSetup, setMicrophoneSetup] = useState(null);
+   const microphoneUnavailable = microphoneSetup?.reason === 'waiting_for_user' ? 'Microphone preparation is waiting for one signed-in Windows user.'
+@@ -1524,14 +1526,20 @@ function Sidebar() {
+   }), []);
+   useEffect(() => {
+     const core = document.getElementById('jolee-core');
+-    const reset = () => { microphoneSession.reset(); setMicrophoneSetup(null); };
++    const reset = () => { microphoneSession.reset(); setMicrophoneSetup(null); setMicrophoneBeta(false); setPrintingBeta(false); };
+     const receive = (event) => {
+       if (event.origin !== window.location.origin || event.source !== core?.contentWindow) return;
+-      if (event.data?.type === 'status') microphoneSession.paired(event.data.state === 'paired');
++      if (event.data?.type === 'status') { microphoneSession.paired(event.data.state === 'paired'); if(event.data.state!=='paired')setMicrophoneBeta(false); }
++      if (event.data?.type === 'betaFeatures' || event.data?.type === 'statsUpdate') {
++        const enabled=(event.data.betaFeatures || event.data).microphoneBeta === true;
++        setMicrophoneBeta(enabled);
++        setPrintingBeta((event.data.betaFeatures || event.data).printingBeta === true);
++        if(!enabled)microphoneSession.reset();
++      }
+       if (event.data?.type === 'statsUpdate') {
+         setMicrophoneSetup(event.data.microphone_setup || null);
+         const pcm = setParentMicFormats(event.data.microphone_formats);
+-        microphoneSession.support(event.data.microphone_supported === true && pcm);
++        microphoneSession.support(event.data.betaFeatures?.microphoneBeta === true && event.data.microphone_supported === true && pcm);
+       }
+     };
+     window.addEventListener('message', receive);
+@@ -2039,7 +2047,7 @@ function Sidebar() {
+       console.log(
+         "Dashboard: Listing devices; microphone permission is optional for labels..."
+       );
+-      const devices = await listAudioDevices(navigator.mediaDevices, requestLabels);
++      const devices = await listAudioDevices(navigator.mediaDevices, requestLabels && microphoneBeta);
+       console.log("Dashboard: Devices found:", devices);
+       const inputs = [];
+       const outputs = [];
+@@ -2086,7 +2094,7 @@ function Sidebar() {
+     } finally {
+       setIsLoadingAudioDevices(false);
+     }
+-  }, [t, isWebrtc]);
++  }, [t, isWebrtc, microphoneBeta]);
+ 
+   useEffect(() => {
+     if (!sectionsOpen.audioSettings) return;
+@@ -2429,6 +2437,7 @@ function Sidebar() {
+     scheduleNotificationRemoval(id, NOTIFICATION_TIMEOUT_ERROR);
+   };
+   const handleMicrophoneToggle = () => {
++    if (!microphoneBeta) return;
+     if (!isMicrophoneActive && !microphoneReady) return showMediaUnavailable('microphone');
+     return microphoneSession.toggle(selectedInputDeviceId);
+   };
+@@ -3441,6 +3450,7 @@ function Sidebar() {
+           </div>
+         </div>
+ 
++        {printingBeta && <p className="beta-feature-notice">Printing (Beta) enabled for this device</p>}
+         {(showCoreButtons || showKeyboardTile || showTrackpadTile) && (
+           <div className="sidebar-action-buttons">
+             {showCoreButtons && (renderableSettings.videoToggle ?? true) && (
+@@ -3469,10 +3479,11 @@ function Sidebar() {
+                 <SpeakerIcon />
+               </button>
+             )}
+-            {showCoreButtons && (renderableSettings.microphoneToggle ?? true) && (
++            {showCoreButtons && microphoneBeta && (renderableSettings.microphoneToggle ?? true) && (
+               <button
+                 className={`action-button ${isMicrophoneActive ? "active" : ""}`}
+                 onClick={handleMicrophoneToggle}
++                aria-label="Microphone (Beta)"
+                 disabled={!microphoneReady && !isMicrophoneActive}
+                 title={!microphoneReady ? microphoneUnavailable : t(
+                   isMicrophoneActive
+@@ -3480,7 +3491,7 @@ function Sidebar() {
+                     : "buttons.microphoneEnableTitle"
+                 )}
+               >
+-                <MicrophoneIcon />
++                <MicrophoneIcon /><span className="beta-label">Beta</span>
+               </button>
+             )}
+             {showCoreButtons && (renderableSettings.webcamToggle ?? true) && (
+@@ -4167,9 +4178,9 @@ function Sidebar() {
+                     {audioDeviceError && (
+                       <div className="error-message">{audioDeviceError}</div>
+                     )}
+-                    <div className="dev-setting-item">
++                    {microphoneBeta && <div className="dev-setting-item">
+                       <label htmlFor="audioInputSelect">
+-                        {t("sections.audio.inputLabel")}
++                        {t("sections.audio.inputLabel")} (Beta)
+                       </label>
+                       <select
+                         id="audioInputSelect"
+@@ -4186,7 +4197,7 @@ function Sidebar() {
+                           </option>
+                         ))}
+                       </select>
+-                    </div>
++                    </div>}
+                     {isOutputSelectionSupported && (
+                       <div className="dev-setting-item">
+                         <label htmlFor="audioOutputSelect">

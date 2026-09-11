@@ -85,5 +85,5 @@ test('deferred viewer refuses pilot microphone enable before acquiring resources
  const c=vm.createContext({microphoneFeatureEnabled:false,microphoneForwarding:false,clearMicrophoneResources(){cleared++;}});
  vm.runInContext(source,c);c.setMicrophoneForwarding(true);
  assert.equal(c.microphoneForwarding,false);assert.equal(cleared,1);
- assert.match(html,/const microphoneFeatureEnabled=true/);
+ assert.match(html,/let microphoneFeatureEnabled=false/);
 });

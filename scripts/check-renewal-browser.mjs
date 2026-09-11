@@ -6,7 +6,7 @@ const notice=viewer.match(/<div id="connection-status"[^>]*>.*?<\/div>/)[0];
 const stateInit=viewer.slice(viewer.indexOf('const sessionState=new SessionState('),viewer.indexOf('const renewalUi='));
 const browser=await chromium.launch({channel:'msedge',headless:true});
 try{
- const page=await browser.newPage();page.on('pageerror',e=>console.log('PAGE ERROR',e.message));let starts=0,request,unsupported=false,inspections=0;
+ const page=await browser.newPage();page.on('pageerror',e=>console.log('PAGE ERROR',e.message));let starts=0,request,unsupported=false,inspections=0,freshOnLoad=true;
  await page.route('https://renewal.test/**',async route=>{
   const path=new URL(route.request().url()).pathname;
   if(path==='/api/session-renewal'){
@@ -19,7 +19,7 @@ try{
    return route.fulfill({json:{...body,status:'committed',expiresAt:Date.now()+3600000}});
   }
   if(path.endsWith('.js'))return route.fulfill({contentType:'text/javascript',body:readFileSync(new URL('../public'+path,import.meta.url),'utf8')});
-  return route.fulfill({contentType:'text/html',body:`${notice}<script type="module">import {mountRenewalUi} from '/renewal-ui.js';import {SessionState} from '/session-state.js';${stateInit}window.sessionState=sessionState;sessionState.set('paired');sessionState.frame();sessionStorage.setItem('jolee_tab_device',JSON.stringify({session:'session',name:'QBOOKS-HOST'}));window.ui=mountRenewalUi({sessionId:'session',browserToken:'browser',onExpired:()=>window.expired=true});ui.bind('paired',Date.now()+60000);</script>`});
+  return route.fulfill({contentType:'text/html',body:`${notice}<script type="module">import {mountRenewalUi} from '/renewal-ui.js';import {SessionState} from '/session-state.js';${stateInit}window.sessionState=sessionState;sessionState.set('paired');${freshOnLoad?'sessionState.frame();':''}sessionStorage.setItem('jolee_tab_device',JSON.stringify({session:'session',name:'QBOOKS-HOST'}));window.ui=mountRenewalUi({sessionId:'session',browserToken:'browser',onExpired:()=>window.expired=true});ui.bind('paired',Date.now()+180000);</script>`});
  });
  await page.goto('https://renewal.test/');
  const keep=page.getByRole('button',{name:'Keep session active'});
@@ -54,6 +54,37 @@ try{
  await page.getByRole('button',{name:'Restart session'}).waitFor({state:'visible'});
  assert.match(await page.locator('[data-connection-text]').innerText(),/Waiting for the PC/);
  await page.evaluate(()=>window.ui.bind('expired'));await page.getByRole('button',{name:'Restart session'}).waitFor({state:'visible'});
+ // Refresh near expiry: paired transport must not flash the renewal action
+ // over the waiting-for-first-frame message, even after async inspection.
+ freshOnLoad=false;await page.reload();await page.waitForFunction(()=>!!window.ui);
+ await page.waitForFunction(()=>document.querySelector('.session-action').textContent==='Restart session');
+ assert.match(await page.locator('[data-connection-text]').innerText(),/Waiting for a fresh screen/);
+ assert.equal(await keep.isVisible(),false);
+ assert.equal(await page.locator('.session-action').isVisible(),false);
+ await page.clock.fastForward(14000);
+ await page.evaluate(()=>window.ui.bind('paired',Date.now()+180000));
+ assert.equal(await page.locator('.session-action').isVisible(),false);
+ await page.clock.fastForward(1000);
+ await page.getByRole('button',{name:'Restart session'}).waitFor({state:'visible'});
+ // The final expiry bubble and its renewal action return on fresh paint,
+ // without requiring another status packet. The reconnect timer is cancelled.
+ await page.evaluate(()=>window.sessionState.frame());
+ await keep.waitFor({state:'visible'});
+ assert.match(await page.locator('[data-renewal-text]').innerText(),/Session expires in 3 minutes/);
+ assert.equal(await page.locator('[data-connection-text]').isVisible(),false);
+ assert.equal(await keep.isEnabled(),true);
+ await page.evaluate(()=>{window.sessionState.set('disconnected');window.ui.bind('disconnected');});
+ await page.clock.fastForward(5000);
+ await page.evaluate(()=>{window.sessionState.set('paired');window.ui.bind('paired',Date.now()+180000);});
+ await page.clock.fastForward(9000);
+ assert.equal(await page.locator('.session-action').isVisible(),false);
+ await page.evaluate(()=>window.sessionState.frame());
+ await keep.waitFor({state:'visible'});
+ await page.clock.fastForward(1000);
+ assert.equal(await keep.isVisible(),true);
+ assert.equal(await page.getByRole('button',{name:'Restart session'}).isVisible(),false);
+ await keep.click();await page.waitForFunction(()=>document.querySelector('[role=status]').hidden);
+ assert.equal(starts,3);
  unsupported=true;await page.reload();await page.waitForFunction(()=>!!window.ui);
  assert.equal(await keep.isVisible(),false);
  console.log('Edge explicit renewal, committed confirmation, expiry/restart and unsupported-agent hiding PASS.');

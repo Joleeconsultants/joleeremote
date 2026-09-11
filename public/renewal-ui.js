@@ -20,9 +20,16 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
   }catch{}
  }
  restoreRestart();
+ const awaitingScreen=()=>['connecting','waiting','disconnected'].includes(lastState)||
+  (lastState==='paired'&&box.dataset.connectionVisible==='true');
+ function syncRecovery(){
+  if(awaitingScreen()){
+   if(recoverySince===null){recoverySince=Date.now();recoveryTimer=setTimeout(()=>{if(model.session)model.publish();else render({});},15000);}
+  }else{clearTimeout(recoveryTimer);recoverySince=null;}
+ }
  const render=state=>{
   const ended=state.expired||['ended','expired','unavailable'].includes(lastState);
-  const recovering=Boolean(restartPath&&['connecting','waiting','disconnected'].includes(lastState));
+  const recovering=Boolean(restartPath&&awaitingScreen());
   const active=Boolean(ended||recovering||(supported&&(state.warning||state.error||state.pending)));
   box.dataset.renewalActive=String(active);
   if(!active){text.textContent='';button.hidden=true;const label=box.querySelector('[data-connection-text]');if(label)label.hidden=false;box.hidden=connectionBox?box.dataset.connectionVisible!=='true':true;return;}
@@ -32,7 +39,7 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
   text.hidden=connectionPriority;
   text.textContent=ended?(lastState==='expired'||state.expired?'Session expired. The last screen is not live.':'Session ended. The last screen is not live.'):state.pending?'Confirming session extension…':state.error||'Session expires in '+Math.max(1,Math.ceil((state.expiresAt-Date.now())/60000))+' minutes.';
   button.textContent=ended||recovering?'Restart session':'Keep session active';button.hidden=ended?!restartPath:false;
-  if(!ended&&['connecting','waiting','disconnected'].includes(lastState))button.hidden=!recovering||recoverySince===null||Date.now()-recoverySince<15000;
+  if(!ended&&awaitingScreen())button.hidden=!recovering||recoverySince===null||Date.now()-recoverySince<15000;
   button.disabled=ended||recovering?false:!state.canRenew;
   button.onclick=()=>{if((ended||recovering)&&restartPath)window.top.location.assign(restartPath);else void model.renew();};
   if(state.expired&&!expiredNotified){expiredNotified=true;onExpired();}
@@ -48,6 +55,10 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
   }
   throw Error('confirmation_timeout');
  },render});
+ // Fresh paint can change the notice without another hop status message.
+ connectionBox?.addEventListener('connectionstatechange',()=>{
+  syncRecovery();if(model.session)model.publish();else render({});
+ });
  const api={bind(state,expiresAt,identity){
   if(identity&&(identity.sessionId!==sessionId||identity.browserToken!==browserToken)){
    identityGeneration++;clearTimeout(retryTimer);clearTimeout(recoveryTimer);recoverySince=null;model.reset();
@@ -56,9 +67,7 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
   }
   if(state==='paired'&&lastState!=='paired'&&!supported){checked=false;inspectAttempts=0;}
   lastState=state;
-  if(['connecting','waiting','disconnected'].includes(state)){
-   if(recoverySince===null){recoverySince=Date.now();recoveryTimer=setTimeout(()=>{if(model.session)model.publish();else render({});},15000);}
-  }else{clearTimeout(recoveryTimer);recoverySince=null;}
+  syncRecovery();
   if(Number.isSafeInteger(expiresAt))model.bind(sessionId,expiresAt,supported);
   else if(model.session)model.publish();else render({});
   if(state!=='paired'||checked||checking||!Number.isSafeInteger(expiresAt))return;

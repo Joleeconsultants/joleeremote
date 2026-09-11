@@ -1,0 +1,170 @@
+diff --git b/src/components/Sidebar.jsx a/src/components/Sidebar.jsx
+index 23304b7..0cd027b 100644
+--- b/src/components/Sidebar.jsx
++++ a/src/components/Sidebar.jsx
+@@ -70,7 +70,7 @@ import {
+   resolveFailedAppCommand,
+   writeInstalledApps,
+ } from "../jolee-shims/app-commands.js";
+-import { postToCore, debounceSettings, listAudioDevices } from "../jolee-bridge.js";
++import { postToCore, debounceSettings, listAudioDevices, microphoneErrorMessage } from "../jolee-bridge.js";
+ import { createClipboardDelivery, clipboardImageBlob } from "../jolee-clipboard-delivery.js";
+ import {
+   startParentMicrophone,
+@@ -1509,6 +1509,14 @@ function Sidebar() {
+   const [notifications, setNotifications] = useState([]);
+   const notificationTimeouts = useRef({});
+   const [microphoneReady, setMicrophoneReady] = useState(false);
++  const [microphoneSetup, setMicrophoneSetup] = useState(null);
++  const microphoneUnavailable = microphoneSetup?.reason === 'waiting_for_user' ? 'Microphone preparation is waiting for one signed-in Windows user.'
++    : microphoneSetup?.reason === 'platform_unsupported' ? 'Microphone forwarding is not supported on this Windows version.'
++    : microphoneSetup?.state === 'installing' ? 'Preparing the PC microphone component…'
++    : microphoneSetup?.state === 'restart_required' ? 'Restart the PC to finish preparing microphone forwarding.'
++    : microphoneSetup?.state === 'failed' ? 'The PC microphone component could not be prepared.'
++    : microphoneSetup?.state === 'not_installed' ? 'The PC microphone component is not installed yet.'
++    : 'Microphone forwarding requires a connected PC with confirmed support.';
+   const microphoneSession = useMemo(() => createMicrophoneSession({
+     start: startParentMicrophone, stop: stopParentMicrophone, select: setParentMicDeviceId,
+     changed: (active, ready) => { setIsMicrophoneActive(active); setMicrophoneReady(ready); },
+@@ -1516,11 +1524,12 @@ function Sidebar() {
+   }), []);
+   useEffect(() => {
+     const core = document.getElementById('jolee-core');
+-    const reset = () => microphoneSession.reset();
++    const reset = () => { microphoneSession.reset(); setMicrophoneSetup(null); };
+     const receive = (event) => {
+       if (event.origin !== window.location.origin || event.source !== core?.contentWindow) return;
+       if (event.data?.type === 'status') microphoneSession.paired(event.data.state === 'paired');
+       if (event.data?.type === 'statsUpdate') {
++        setMicrophoneSetup(event.data.microphone_setup || null);
+         const pcm = setParentMicFormats(event.data.microphone_formats);
+         microphoneSession.support(event.data.microphone_supported === true && pcm);
+       }
+@@ -2012,7 +2021,7 @@ function Sidebar() {
+    * are left alone: the core keeps the devices this dashboard picked for the
+    * life of the page, so a reopened section shows them rather than defaulting.
+    */
+-  const populateAudioDevices = useCallback(async () => {
++  const populateAudioDevices = useCallback(async (requestLabels = true) => {
+     console.log("Dashboard: Attempting to populate audio devices...");
+     setIsLoadingAudioDevices(true);
+     setAudioDeviceError(null);
+@@ -2030,7 +2039,7 @@ function Sidebar() {
+       console.log(
+         "Dashboard: Listing devices; microphone permission is optional for labels..."
+       );
+-      const devices = await listAudioDevices(navigator.mediaDevices);
++      const devices = await listAudioDevices(navigator.mediaDevices, requestLabels);
+       console.log("Dashboard: Devices found:", devices);
+       const inputs = [];
+       const outputs = [];
+@@ -2079,6 +2088,13 @@ function Sidebar() {
+     }
+   }, [t, isWebrtc]);
+ 
++  useEffect(() => {
++    if (!sectionsOpen.audioSettings) return;
++    const refresh = () => populateAudioDevices(false);
++    navigator.mediaDevices?.addEventListener?.('devicechange', refresh);
++    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refresh);
++  }, [sectionsOpen.audioSettings, populateAudioDevices]);
++
+   /** Folds or unfolds a section; opening the audio section enumerates devices. */
+   const toggleSection = useCallback(
+     (sectionKey) => {
+@@ -2984,7 +3000,7 @@ function Sidebar() {
+             microphoneSession.stop();
+             if (typeof message.error === "string" && message.error) {
+               const id = "microphone-start-error";
+-              const text = `${t("notifications.errorPrefix")} ${message.error}`;
++              const text = microphoneErrorMessage(message.error);
+               setNotifications((prev) => {
+                 const filtered = prev.filter((n) => n.id !== id);
+                 return [
+@@ -2992,6 +3008,7 @@ function Sidebar() {
+                   {
+                     id,
+                     fileName: "Microphone",
++                    errorTitle: "Microphone unavailable",
+                     status: "error",
+                     progress: 100,
+                     message: text,
+@@ -3457,7 +3474,7 @@ function Sidebar() {
+                 className={`action-button ${isMicrophoneActive ? "active" : ""}`}
+                 onClick={handleMicrophoneToggle}
+                 disabled={!microphoneReady && !isMicrophoneActive}
+-                title={!microphoneReady ? 'Microphone forwarding requires a connected PC with confirmed support.' : t(
++                title={!microphoneReady ? microphoneUnavailable : t(
+                   isMicrophoneActive
+                     ? "buttons.microphoneDisableTitle"
+                     : "buttons.microphoneEnableTitle"
+@@ -4156,12 +4173,13 @@ function Sidebar() {
+                       </label>
+                       <select
+                         id="audioInputSelect"
+-                        title={!microphoneReady ? 'Microphone forwarding requires a connected PC with confirmed support.' : undefined}
+-                        value={selectedInputDeviceId}
++                        title={!microphoneReady ? microphoneUnavailable : undefined}
++                        value={audioInputDevices.some(d => d.deviceId === selectedInputDeviceId) ? selectedInputDeviceId : ''}
+                         onChange={handleAudioInputChange}
+-                        disabled={!microphoneReady || isLoadingAudioDevices || !!audioDeviceError}
++                        disabled={!microphoneReady || isLoadingAudioDevices || !!audioDeviceError || audioInputDevices.length === 0}
+                         className="audio-device-select"
+                       >
++                        <option value="" disabled>{isLoadingAudioDevices ? 'Loading microphones…' : audioInputDevices.length ? 'Select microphone' : 'No browser microphone found'}</option>
+                         {audioInputDevices.map((d) => (
+                           <option key={d.deviceId} value={d.deviceId}>
+                             {d.label}
+@@ -4169,14 +4187,6 @@ function Sidebar() {
+                         ))}
+                       </select>
+                     </div>
+-                    {(microphoneReady || isMicrophoneActive) && (
+-                      <p className="device-support-notice" data-testid="microphone-driver-notice">
+-                        Microphone forwarding uses VB-CABLE by VB-Audio.{' '}
+-                        The origin of VB-CABLE: <a href="https://www.vb-cable.com/" target="_blank" rel="noopener noreferrer">www.vb-cable.com</a>.
+-                        {' '}VB-CABLE is a donationware, all participations are welcome.{' '}
+-                        <a href="https://vb-audio.com/Services/licensing.htm" target="_blank" rel="noopener noreferrer">Donate / pay for a license</a>.
+-                      </p>
+-                    )}
+                     {isOutputSelectionSupported && (
+                       <div className="dev-setting-item">
+                         <label htmlFor="audioOutputSelect">
+@@ -4207,6 +4217,7 @@ function Sidebar() {
+                         <input
+                           type="range"
+                           id="audioBitrateSlider"
++                          aria-valuetext={`${audioBitrate / 1000} kbps`}
+                           min={0}
+                           max={audioBitrateChoices.length - 1}
+                           step={1}
+@@ -4214,6 +4225,11 @@ function Sidebar() {
+                           onChange={(e) => handleAudioBitrateChange(audioBitrateChoices[parseInt(e.target.value, 10)])}
+                           disabled={agentCapabilities.audio_bitrate_supported !== true || (agentCapabilities.audio_bitrate_choices?.length ?? 0) <= 1}
+                         />
++                        {agentCapabilities.audio_bitrate_supported === true && audioBitrateChoices.length > 1 && (
++                          <div className="audio-bitrate-ticks" aria-hidden="true">
++                            {audioBitrateChoices.map(value => <span key={value} title={`${value / 1000} kbps`} />)}
++                          </div>
++                        )}
+                       </div>
+                     )}
+                     {!isOutputSelectionSupported &&
+@@ -5070,14 +5086,14 @@ function Sidebar() {
+               {n.status === "error" && (
+                 <>
+                   <span className="notification-status-text error-text">
+-                    {t("notifications.uploadFailed")}
++                    {n.errorTitle || t("notifications.uploadFailed")}
+                   </span>
+-                  <div className="notification-progress-bar-outer">
++                  {!n.errorTitle && <div className="notification-progress-bar-outer">
+                     <div
+                       className="notification-progress-bar-inner"
+                       style={{ width: `100%` }}
+                     />
+-                  </div>
++                  </div>}
+                   {n.message && (
+                     <p className="notification-error-message">{n.message}</p>
+                   )}

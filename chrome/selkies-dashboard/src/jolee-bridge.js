@@ -16,10 +16,10 @@ const settingsByFrame = new WeakMap();
 const localPreferences = new Set(["setScaleLocally", "setAntiAliasing", "setUseBrowserCursors"]);
 
 /** Enumerate playback devices even when microphone access is unavailable. */
-export async function listAudioDevices(mediaDevices) {
+export async function listAudioDevices(mediaDevices, requestLabels = true) {
   let devices = await mediaDevices.enumerateDevices();
   const audioDevices = devices.filter(device => device.kind === "audioinput" || device.kind === "audiooutput");
-  if (!audioDevices.length || audioDevices.some(device => !device.label)) {
+  if (requestLabels && (!audioDevices.length || audioDevices.some(device => !device.label))) {
     try {
       const stream = await mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach(track => track.stop());
@@ -30,6 +30,16 @@ export async function listAudioDevices(mediaDevices) {
     }
   }
   return devices;
+}
+
+export function microphoneErrorMessage(name) {
+  if (name === 'NotFoundError' || name === 'OverconstrainedError')
+    return 'No microphone is available to this browser. Connect a microphone or enable microphone redirection in your RDP connection, then choose it in Audio Settings and try again.';
+  if (name === 'NotAllowedError' || name === 'SecurityError')
+    return 'Allow microphone access for this site in your browser, then try again.';
+  if (name === 'NotReadableError' || name === 'AbortError')
+    return 'The browser could not open your microphone. Check whether another app is using it, then try again.';
+  return 'Microphone capture could not start in this browser. Check the input device in Audio Settings and try again.';
 }
 
 /** Coalesce slider bursts by key, so adjusting another control loses no values. */

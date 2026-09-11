@@ -80,6 +80,7 @@ let agentStatsReceivedAt=0;
 const printJobChunks=new Map();
 // Native mode uses local OS cursor types; drawn mode uses the remote bitmap.
 let useBrowserCursors=false, pointerOver=false, agentCursorVisible=true;
+let secureCursorActive=false;
 let nativeCursor='default';
 const sessionState=new SessionState(({text,visible,state})=>{
   const notice=document.getElementById('connection-status');
@@ -106,8 +107,9 @@ function applySmoothing(){
   canvas.style.imageRendering=antiAliasing?"auto":"pixelated";
 }
 function applyCursorMode(){
-  canvas.style.cursor=useBrowserCursors && agentCursorVisible?nativeCursor:"none";
-  const show=!useBrowserCursors && pointerOver && agentCursorVisible;
+  const fallback=secureCursorActive && !agentCursorVisible;
+  canvas.style.cursor=fallback?"default":useBrowserCursors && agentCursorVisible?nativeCursor:"none";
+  const show=!fallback && !useBrowserCursors && pointerOver && agentCursorVisible;
   cursorEl.style.display=show?"block":"none";
 }
 let sessionPaired=false;
@@ -118,6 +120,7 @@ const sasControl=new SasControl({
   },
   changed:state=>{if(window.parent!==window)window.parent.postMessage({type:'sasState',...state},window.location.origin);},
   report:status=>{if(window.parent!==window)window.parent.postMessage({type:'sasResult',status},window.location.origin);},
+  secureActive:active=>{secureCursorActive=active;applyCursorMode();},
   secureReport:result=>{if(window.parent!==window)window.parent.postMessage({type:'secureDesktopResult',...result},window.location.origin);},
 });
 let latestSettings={video_protocol:1,max_edge:3840};
@@ -406,6 +409,7 @@ function cursorFromFrame(payload){
   }catch{return null;}
 }
 function resetRemoteCursor(){
+  secureCursorActive=false;
   agentCursorVisible=true;pointerOver=false;nativeCursor='default';cursorHx=DEFAULT_CURSOR_HX;cursorHy=DEFAULT_CURSOR_HY;
   cursorEl.src=DEFAULT_CURSOR_SVG;cursorPosition=null;applyCursorMode();
 }

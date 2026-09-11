@@ -52,9 +52,9 @@ export function validSasResult(value) {
 
 /** Ephemeral session/connection-bound requests. Never persist or replay commands. */
 export class SasControl {
-  constructor({ send, changed, report, secureReport = () => {}, now = Date.now, makeId = () => crypto.randomUUID(),
+  constructor({ send, changed, report, secureReport = () => {}, secureActive = () => {}, now = Date.now, makeId = () => crypto.randomUUID(),
     schedule = (fn, delay) => setTimeout(fn, delay), unschedule = timer => clearTimeout(timer) }) {
-    Object.assign(this, { send, changed, report, secureReport, now, makeId, schedule, unschedule });
+    Object.assign(this, { send, changed, report, secureReport, secureActive, now, makeId, schedule, unschedule });
     this.connection = null; this.session = ''; this.capability = null; this.pending = null;
     this.expiryTimer = null; this.expiresAt = null; this.deadlines = new Map();
     this.observations = new Map();
@@ -70,6 +70,7 @@ export class SasControl {
     this.unschedule(this.observationTimer); this.observationTimer=null;
     this.unschedule(this.expiryTimer); this.expiryTimer = null; this.capability = null;
     this.observations.clear();
+    this.publishSecureActive();
     this.finish('uncertain');
   }
   pruneObservations() {
@@ -77,8 +78,13 @@ export class SasControl {
       this.observations.delete(id);
       if (entry.secureExpiry && !entry.terminal) this.secureReport({status:'failed',code:'deadline_reached'});
     }
+    this.publishSecureActive();
+  }
+  publishSecureActive() {
+    this.secureActive([...this.observations.values()].some(entry => entry.active && !entry.terminal));
   }
   armObservationExpiry() {
+    this.publishSecureActive();
     this.unschedule(this.observationTimer);
     const deadlines=[...this.observations.values()].filter(e=>!e.terminal).map(e=>e.deadline);
     if (!deadlines.length) return;
@@ -137,7 +143,7 @@ export class SasControl {
             !this.deadlines.has(message.generation) && this.deadlines.size >= 128)) {
         this.invalidate(); this.publish(); return true;
       }
-      if (this.capability?.generation !== message.generation) this.observations.clear();
+      if (this.capability?.generation !== message.generation) { this.observations.clear(); this.publishSecureActive(); }
       // Availability controls new requests, not the outcome of an already admitted request.
       // Secure-desktop preparation temporarily makes the same generation unavailable.
       if (this.capability?.generation !== message.generation) this.finish('uncertain');

@@ -66,7 +66,7 @@ let hop=params.get("hop")||"";
 let socket=null, scaleLocally=true, antiAliasing=true;
 let audioEnabled=true, videoEnabled=true, audioSinkId="";
 // Deferred until a suitable production-signed open-source Windows driver is available.
-const microphoneFeatureEnabled=false;
+const microphoneFeatureEnabled=true;
 let webcamGen=0,webcamStarting=false;
 let microphoneStream=null, microphoneRecorder=null, microphoneGen=0, microphoneForwarding=false, audioInputDeviceId="", webcamStream=null, webcamTimer=null;
 let frameCount=0, statsStartedAt=performance.now(), bytesSinceStats=0;
@@ -1321,6 +1321,8 @@ function postStats(){
   if(stats.print_forwarding)canvas.dataset.printFolder=stats.print_forwarding.folder;
   else delete canvas.dataset.printFolder;
   stats.microphone_supported=microphoneFeatureEnabled&&micFresh&&agentStats.microphone_supported===true;
+  const micSetup=micFresh?agentStats.microphone_setup:null;
+  stats.microphone_setup=micSetup&&micSetup.component==='vb-cable'&&['not_installed','ready','installing','restart_required','failed'].includes(micSetup.state)?{state:micSetup.state,reason:['waiting_for_user','platform_unsupported'].includes(micSetup.reason)?micSetup.reason:null}:null;
   stats.microphone_formats=microphoneFeatureEnabled&&micFresh&&Array.isArray(agentStats.microphone_formats)?agentStats.microphone_formats.filter(x=>typeof x==='string').slice(0,8):[];
   stats.webcam_supported=micFresh&&typeof agentStats.webcam_supported==='boolean'?agentStats.webcam_supported:null;
   const cameraCapture=micFresh?agentStats.webcam_capture:null;

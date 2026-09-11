@@ -281,6 +281,8 @@ function setStatus(state,expiresAt=null){
     printJobChunks.clear();
     delete canvas.dataset.printFolder;
     delete canvas.dataset.clipboardReceipt;
+    delete canvas.dataset.inputReceipt;
+    delete canvas.dataset.inputDispatch;
     clipboardPaste.reset();
     setMicrophoneForwarding(false);
     resetRemoteCursor();
@@ -330,6 +332,16 @@ function statsFromFrame(payload){
   const obj=parseJsonFrameObject(payload);
   if(!obj||!(obj.t==="stats"||obj.type==="stats")) return null;
   return obj;
+}
+function consumeInputResult(obj){
+  if(obj?.type!=='input_result')return false;
+  if(['rejected','uncertain'].includes(obj.status)&&
+      ['input_failed','input_partial','input_unknown','input_closed','session_changed','invalid_input'].includes(obj.code)&&
+      Number.isInteger(obj.requested)&&obj.requested>=0&&obj.requested<=512&&
+      Number.isInteger(obj.submitted)&&obj.submitted>=0&&obj.submitted<=4294967295){
+    canvas.dataset.inputReceipt=JSON.stringify({status:obj.status,code:obj.code,requested:obj.requested,submitted:obj.submitted});
+  }
+  return true;
 }
 function printFromFrame(payload){
   const obj=parseJsonFrameObject(payload);
@@ -1031,6 +1043,7 @@ function connect(opts){
     if(uploadControl.consume(parseJsonFrameObject(env.payload),currentSocket))return;
     if(sasControl.consume(parseJsonFrameObject(env.payload),currentSocket))return;
     if(consumeLatencyReply(env.payload))return;
+    if(consumeInputResult(parseJsonFrameObject(env.payload)))return;
     if(clipboardPaste.consume(parseJsonFrameObject(env.payload)))return;
     if(consumeClipboardResult(env.payload))return;
     const videoConfig=parseJsonFrameObject(env.payload);
@@ -1070,7 +1083,11 @@ function connect(opts){
   });
 }
 function sendInput(payload){
-  if(!displayTransition.allows(payload))return;
+  const diagnosticInput=['pointer','wheel','key'].includes(payload.t);
+  if(!displayTransition.allows(payload)){
+    if(diagnosticInput)canvas.dataset.inputDispatch='display_transition';
+    return;
+  }
   if(payload.t==='pointer'&&payload.e==='down'||payload.t==='wheel')clipboardPaste.cancel('conflicting_input');
   if(payload.t==="settings"&&payload.settings&&typeof payload.settings==="object"){
     if(payload.settings.enable_binary_clipboard===false)clipboardPaste.invalidate('cancelled');
@@ -1089,10 +1106,14 @@ function sendInput(payload){
     latestSettings=merged;
     if(!sessionPaired)return;
   }
-  if(!socket||socket.readyState!==1)return;
+  if(!socket||socket.readyState!==1){
+    if(diagnosticInput)canvas.dataset.inputDispatch='disconnected';
+    return;
+  }
   const encoded=encodeInput(payload);
   if(encoded.length>MAX_ENVELOPE_BYTES)return;
   socket.send(encoded);
+  if(diagnosticInput)canvas.dataset.inputDispatch='sent';
   if(payload.t==='key'){
     const identity=payload.code||payload.key;
     if(payload.e==='down')heldViewerKeys.set(identity,payload);else heldViewerKeys.delete(identity);

@@ -94,7 +94,7 @@ const sessionState=new SessionState(({text,visible,state})=>{
   notice.hidden=!visible&&notice.dataset.renewalActive!=='true';notice.dataset.state=state;
   if(changed)notice.dispatchEvent(new Event('connectionstatechange'));
 });
-const renewalUi=mountRenewalUi({sessionId:session,browserToken:token,onExpired:()=>queueMicrotask(()=>{disconnect();setStatus('expired');})});
+const renewalUi=mountRenewalUi({sessionId:session,browserToken:token,onExpired:()=>queueMicrotask(()=>{disconnect('expired');})});
 let cursorHx=DEFAULT_CURSOR_HX, cursorHy=DEFAULT_CURSOR_HY, cursorPosition=null;
 cursorEl.src=DEFAULT_CURSOR_SVG;
 function applyScale(){
@@ -275,7 +275,7 @@ function consumeLatencyReply(payload){
   return true;
 }
 function setStatus(state,expiresAt=null){
-  sessionState.set(state);
+  state=sessionState.set(state,expiresAt,session)??state;
   if(typeof renewalUi!=='undefined')renewalUi.bind(state,expiresAt,{sessionId:session,browserToken:token});
   const wasPaired=sessionPaired;
   sessionPaired=state==="paired";
@@ -1004,7 +1004,7 @@ function playAudioChunk(payload){
   remoteAudio.push(payload);
 }
 function unlockAudioFromGesture(){remoteAudio.unlock();}
-function disconnect(){const previous=socket;socket=null;if(previous)previous.close();stopAudioPlayback();stopMicrophone();stopWebcam();setStatus("disconnected");}
+function disconnect(state="disconnected"){const previous=socket;socket=null;if(previous)previous.close();stopAudioPlayback();stopMicrophone();stopWebcam();setStatus(state); }
 function connect(opts){
   if(opts&&typeof opts==="object"){
     if(typeof opts.session==="string") session=opts.session;
@@ -1031,8 +1031,7 @@ function connect(opts){
     if(socket!==currentSocket)return;
     if(ev&&([4000,4001,4002,4003,4004,4009,4010].includes(ev.code))){
       try{if(socket)socket.maxRetries=0;}catch(e){}
-      disconnect();
-      setStatus(ev.code===4010?'expired':ev.code===4000?'ended':'unavailable');
+      disconnect(ev.code===4010?'expired':ev.code===4000?'ended':'unavailable');
       return;
     }
     setStatus("disconnected");

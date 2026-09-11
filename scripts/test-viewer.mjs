@@ -644,7 +644,7 @@ test('replaced sockets cannot change status, deliver data or close the current s
     location:{host:'test.invalid',href:'https://test.invalid/viewer.html'},history:{replaceState:()=>{}},
     videoDecoder:null,stopAudioPlayback:()=>{},stopMicrophone:()=>{},stopWebcam:()=>{},printJobChunks:new Map(),
     setStatus:s=>states.push(s),decodeEnvelope:()=>{throw new Error('stale binary message consumed');}});
-  vm.runInContext(html.slice(html.indexOf('function disconnect(){'),html.indexOf('function sendInput(')),c);
+  vm.runInContext(html.slice(html.indexOf('function disconnect('),html.indexOf('function sendInput(')),c);
   c.connect();const old=sockets[0];c.connect();const current=sockets[1];
   current.fire('open');current.fire('message',{data:JSON.stringify({type:'status',state:'paired'})});
   const count=states.length;
@@ -652,7 +652,9 @@ test('replaced sockets cannot change status, deliver data or close the current s
   old.fire('message',{data:new ArrayBuffer(2)});old.fire('close',{code:4000});
   assert.equal(states.length,count);assert.equal(states.at(-1),'paired');
   assert.equal(c.socket,current);assert.equal(current.closed,undefined);assert.equal(current.maxRetries,3);
+  const beforeClose=states.length;
   current.fire('close',{code:4000});assert.equal(current.closed,true);assert.equal(c.socket,null);
+  assert.deepEqual(states.slice(beforeClose),['ended']);
   assert.equal(states.at(-1),'ended');
 });
 

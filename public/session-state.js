@@ -1,7 +1,12 @@
 // Connection state is independent of the last frame left on the canvas.
 export class SessionState {
   constructor(render) { this.render=render; this.paired=false; this.fresh=false; this.terminal=false; this.set('connecting'); }
-  set(state) {
+  set(state,expiresAt=null,identity=this.identity) {
+    if(identity!==this.identity){this.identity=identity;this.expiresAt=null;this.terminal=false;this.paired=false;this.fresh=false;}
+    if(this.terminal)return this.state;
+    if(Number.isSafeInteger(expiresAt))this.expiresAt=expiresAt;
+    if(Number.isSafeInteger(this.expiresAt)&&Date.now()>=this.expiresAt)state='expired';
+    this.state=state;
     this.terminal=['ended','expired','unavailable'].includes(state);
     if(state!=='paired'){this.paired=false;this.fresh=false;}
     else if(!this.paired){this.paired=true;this.fresh=false;}
@@ -12,6 +17,7 @@ export class SessionState {
       unavailable:'Session unavailable. Open a new session to connect again.',
       paused:'Video is paused.',paired:'Connected. Waiting for a fresh screen…'};
     this.render({state,text:text[state]||'Session unavailable.',visible:state!=='paired'||!this.fresh,terminal:this.terminal});
+    return state;
   }
   frame(){if(this.paired&&!this.terminal){this.fresh=true;this.set('paired');}}
   stale(text){if(this.paired&&!this.terminal){this.fresh=false;this.render({state:'paired',text,visible:true,terminal:false});}}

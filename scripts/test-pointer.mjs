@@ -50,3 +50,71 @@ test('unsupported extra mouse buttons never become a native left click',()=>{
   assert.deepEqual(f.sent.filter(m=>m.e==='up').map(m=>m.b),[0]);
   assert.equal(f.sent.find(m=>m.e==='move').b,1);
 });
+
+// Exercise the shipped gesture block without changing the absolute helper slice.
+function trackpadFixture(){
+  const listeners={}, sent=[], posted=[];let now=0, timer=null;
+  const c=vm.createContext({
+    Array,Math,performance:{now:()=>now},setTimeout:fn=>{timer=fn;return 1;},clearTimeout:()=>{timer=null;},
+    canvas:{style:{},focus(){},addEventListener:(type,fn)=>{listeners[type]=fn;}},
+    window:{parent:{postMessage:m=>posted.push(m)},location:{origin:'https://example.test'},addEventListener(){}},
+    stage:{getBoundingClientRect:()=>({left:0,top:0,width:1000,height:500})},
+    contentBox:()=>({left:0,top:0,width:1000,height:500}),
+    pointerNorm:p=>({x:p.clientX/1000,y:p.clientY/500}),cursorPosition:{clientX:400,clientY:200},
+    pointerInput:{cancel(){}},sessionPaired:true,displayTransition:{blocked:false},
+    pointerOver:false,moveOverlay:p=>{c.cursorPosition=p;},applyCursorMode(){},unlockAudioFromGesture(){},
+    sendInput:m=>sent.push(JSON.parse(JSON.stringify(m))),
+  });
+  vm.runInContext(html.slice(html.indexOf('// Trackpad touch gestures'),html.indexOf('canvas.addEventListener("pointermove"')),c);
+  c.setTouchInputMode('trackpad');
+  const point=(id,x,y)=>({identifier:id,clientX:x,clientY:y});
+  function fire(type,points,changed=points){listeners[type]({type,touches:points,changedTouches:changed,preventDefault(){}});}
+  return {c,sent,posted,point,fire,advance:ms=>{now+=ms;},hold:()=>{now+=500;timer?.();}};
+}
+test('trackpad movement is relative, clamped, and taps click at the virtual cursor',()=>{
+  const f=trackpadFixture(), p=f.point;
+  f.fire('touchstart',[p(1,800,400)]);
+  assert.equal(f.sent.length,0);
+  f.fire('touchmove',[p(1,900,450)]);
+  assert.deepEqual(f.sent[0],{t:'pointer',e:'move',x:0.525,y:0.525,b:0});
+  f.fire('touchend',[],[p(1,900,450)]);
+  assert.equal(f.sent.length,1);
+  f.fire('touchstart',[p(1,100,100)]);f.fire('touchend',[],[p(1,100,100)]);
+  assert.deepEqual(f.sent.slice(-2).map(m=>[m.e,m.b,m.x,m.y]),[['down',0,0.525,0.525],['up',0,0.525,0.525]]);
+  f.fire('touchstart',[p(1,100,100)]);f.fire('touchmove',[p(1,2000,-2000)]);
+  assert.deepEqual([f.sent.at(-1).x,f.sent.at(-1).y],[1,0]);
+});
+test('trackpad two-finger tap and long press each right-click once',()=>{
+  const f=trackpadFixture(),p=f.point;
+  f.fire('touchstart',[p(1,100,100)]);f.fire('touchstart',[p(1,100,100),p(2,200,100)]);
+  f.fire('touchend',[p(1,100,100)],[p(2,200,100)]);f.fire('touchend',[],[p(1,100,100)]);
+  f.fire('touchstart',[p(1,100,100)]);f.hold();f.fire('touchend',[],[p(1,100,100)]);
+  assert.deepEqual(f.sent.map(m=>[m.e,m.b]),[['down',2],['up',2],['down',2],['up',2]]);
+});
+test('trackpad scroll emits wheel only; pinch emits no input and touch mode resets zoom',()=>{
+  const f=trackpadFixture(),p=f.point;
+  f.fire('touchstart',[p(1,100,100),p(2,200,100)]);
+  f.fire('touchmove',[p(1,100,120),p(2,200,120)]);
+  f.fire('touchend',[],[p(1,100,120),p(2,200,120)]);
+  assert.deepEqual(f.sent,[{t:'wheel',dx:0,dy:-20,x:0.4,y:0.4}]);
+  f.sent.length=0;
+  f.fire('touchstart',[p(1,100,100),p(2,200,100)]);
+  f.fire('touchmove',[p(1,80,100),p(2,220,100)]);
+  f.fire('touchmove',[p(1,90,120),p(2,230,120)]);
+  f.fire('touchend',[p(1,90,120)],[p(2,230,120)]);
+  f.fire('touchmove',[p(1,100,150)]);f.fire('touchend',[],[p(1,100,150)]);
+  assert.equal(f.sent.length,0);assert.match(f.c.canvas.style.transform,/scale\(1.4\)/);
+  f.c.setTouchInputMode('touch');assert.equal(f.c.canvas.style.transform,'');
+  assert.deepEqual(f.posted.map(m=>m.enabled),[true,false]);
+});
+test('cancelled, switched, or disconnected trackpad holds never click',()=>{
+  for(const stop of ['cancel','mode','disconnect']){
+    const f=trackpadFixture(),p=f.point;
+    f.fire('touchstart',[p(1,100,100)]);
+    if(stop==='cancel')f.fire('touchcancel',[],[p(1,100,100)]);
+    if(stop==='mode')f.c.setTouchInputMode('touch');
+    if(stop==='disconnect')f.c.sessionPaired=false;
+    f.hold();f.fire('touchend',[],[p(1,100,100)]);
+    assert.equal(f.sent.length,0);
+  }
+});

@@ -8,7 +8,8 @@
 /**
  * Overlay hide-flags for the vendored sidebar. Add chrome back as the hop
  * grows; Apps and Sharing stay hidden until their hop exists.
- * Hide gaming (gamepads, gaming mode, trackpad, extra players).
+ * Trackpad is back and in scope. Trackpad ≠ Gaming.
+ * Keep gaming (gamepads, gaming mode, soft buttons, extra players) hidden.
  * Audio playback (kind 0x03), microphone, webcam, and screen size / DPI /
  * HiDPI are unlocked (core toggles enabled / toggleable). Files, stats,
  * shortcuts, and agent-owned encoder preference (default H.264; JPEG fallback) has a hop path. There
@@ -36,7 +37,7 @@ export const JOLEE_SERVER_SETTINGS = {
   ui_sidebar_show_shortcuts: flag(true),
   ui_sidebar_show_fullscreen: flag(true),
   ui_sidebar_show_gaming_mode: flag(false),
-  ui_sidebar_show_trackpad: flag(false),
+  ui_sidebar_show_trackpad: flag(true),
   ui_sidebar_show_keyboard_button: flag(true),
   ui_sidebar_show_soft_buttons: flag(false),
   ui_show_core_buttons: flag(true),

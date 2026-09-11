@@ -110,7 +110,7 @@ function applySmoothing(){
 function applyCursorMode(){
   const fallback=secureCursorActive && !agentCursorVisible;
   canvas.style.cursor=fallback?"default":useBrowserCursors && agentCursorVisible?nativeCursor:"none";
-  const show=!fallback && !useBrowserCursors && pointerOver && agentCursorVisible;
+  const show=!fallback && (!useBrowserCursors || (typeof trackpadMode!=="undefined"&&trackpadMode)) && pointerOver && agentCursorVisible;
   cursorEl.style.display=show?"block":"none";
 }
 let sessionPaired=false;
@@ -239,7 +239,7 @@ function requestCatalogDisplay(message){
     }
   }
   screenAutoEnabled=false;scheduleScreenResize();
-  pointerInput.cancel();
+  pointerInput.cancel();resetTrackpadGesture();
   for(const key of heldViewerKeys.values())sendInput({...key,e:'up'});
   heldViewerKeys.clear();clipboardPaste.reset();hideDrawnCursor();
   displayTransition.begin(id);
@@ -293,7 +293,7 @@ function setStatus(state,expiresAt=null){
     clipboardPaste.reset();
     setMicrophoneForwarding(false);
     resetRemoteCursor();
-    pointerInput.reset();
+    pointerInput.reset();resetTrackpadGesture();
     invalidateVideoFrames();
     if(wasPaired){stopAudioPlayback();stopWebcam();}
     finishScreenRequest('rejected','session_unavailable');
@@ -1428,7 +1428,137 @@ function createPointerInput(send, point, paired){
   };
 }
 const pointerInput=createPointerInput(sendInput,pointerNorm,()=>sessionPaired);
+// Trackpad touch gestures are separate from the absolute mouse/pen/touch helper.
+let trackpadMode=false, virtualCursor={x:0.5,y:0.5};
+let trackpadGesture=null, trackpadTimer=null;
+let trackpadZoom=1, trackpadPan={x:0,y:0};
+const clampTrackpad=(n)=>Math.max(0,Math.min(1,n));
+function resetTrackpadGesture(){
+  clearTimeout(trackpadTimer);trackpadTimer=null;trackpadGesture=null;
+}
+function showTrackpadCursor(){
+  const b=contentBox();
+  pointerOver=true;
+  moveOverlay({clientX:b.left+virtualCursor.x*b.width,clientY:b.top+virtualCursor.y*b.height});
+  applyCursorMode();
+}
+function trackpadClick(b){
+  if(!sessionPaired||displayTransition.blocked)return;
+  showTrackpadCursor();
+  sendInput({t:"pointer",e:"down",...virtualCursor,b});
+  sendInput({t:"pointer",e:"up",...virtualCursor,b});
+}
+function setTouchInputMode(mode){
+  const enabled=mode==="trackpad";
+  if(enabled!==trackpadMode){
+    pointerInput.cancel();resetTrackpadGesture();
+    if(enabled){
+      const p=cursorPosition?pointerNorm(cursorPosition):{x:0.5,y:0.5};
+      virtualCursor={x:clampTrackpad(p.x),y:clampTrackpad(p.y)};
+    }
+    trackpadMode=enabled;
+    if(enabled)showTrackpadCursor();
+    else{
+      trackpadZoom=1;trackpadPan={x:0,y:0};canvas.style.transform="";
+      const b=contentBox();
+      moveOverlay({clientX:b.left+virtualCursor.x*b.width,clientY:b.top+virtualCursor.y*b.height});
+      applyCursorMode();
+    }
+  }
+  if(window.parent!==window)window.parent.postMessage({type:"trackpadModeUpdate",enabled},window.location.origin);
+}
+function trackpadPoints(touches){
+  return Array.from(touches,t=>({id:t.identifier,x:t.clientX,y:t.clientY}));
+}
+function trackpadPair(points){
+  const [a,b]=points;
+  return {x:(a.x+b.x)/2,y:(a.y+b.y)/2,d:Math.hypot(a.x-b.x,a.y-b.y)};
+}
+canvas.addEventListener("touchstart",e=>{
+  if(!trackpadMode)return;
+  e.preventDefault();
+  if(!sessionPaired||displayTransition.blocked)return;
+  canvas.focus();unlockAudioFromGesture();showTrackpadCursor();
+  const points=trackpadPoints(e.touches);
+  clearTimeout(trackpadTimer);
+  if(!trackpadGesture){
+    trackpadGesture={started:performance.now(),max:points.length,moved:false,kind:"pending",points,origins:points};
+  }else{
+    // Adding a finger rebases deltas; lifting it later cannot create another tap.
+    trackpadGesture.max=Math.max(trackpadGesture.max,points.length);
+    trackpadGesture.points=points;trackpadGesture.origins=points;
+  }
+  const g=trackpadGesture;
+  if(points.length===2){g.pair=trackpadPair(points);g.kind="pending";}
+  if(points.length>2){g.kind="ignore";g.moved=true;}
+  if(points.length===1&&g.max===1){
+    trackpadTimer=setTimeout(()=>{
+      if(trackpadGesture===g&&!g.moved){g.kind="held";g.moved=true;trackpadClick(2);}
+    },500);
+  }
+},{passive:false});
+canvas.addEventListener("touchmove",e=>{
+  if(!trackpadMode)return;
+  e.preventDefault();
+  const g=trackpadGesture;if(!g)return;
+  if(!sessionPaired||displayTransition.blocked){resetTrackpadGesture();return;}
+  const points=trackpadPoints(e.touches);
+  if(points.length!==g.points.length)return;
+  const moved=points.some(p=>{
+    const start=g.origins.find(o=>o.id===p.id);
+    return !start||Math.hypot(p.x-start.x,p.y-start.y)>10;
+  });
+  if(moved){g.moved=true;clearTimeout(trackpadTimer);}
+  if(points.length===1&&g.max===1&&g.kind!=="held"){
+    const b=contentBox();
+    virtualCursor.x=clampTrackpad(virtualCursor.x+(points[0].x-g.points[0].x)/(b.width||1)*1.25);
+    virtualCursor.y=clampTrackpad(virtualCursor.y+(points[0].y-g.points[0].y)/(b.height||1)*1.25);
+    sendInput({t:"pointer",e:"move",...virtualCursor,b:0});
+  }else if(points.length===2&&g.max===2){
+    const pair=trackpadPair(points), prev=trackpadPair(g.points);
+    if(g.kind==="pending"){
+      if(Math.abs(pair.d-g.pair.d)>10){g.kind="pinch";g.moved=true;}
+      else if(Math.hypot(pair.x-g.pair.x,pair.y-g.pair.y)>10){g.kind="scroll";g.moved=true;}
+    }
+    if(g.kind==="pinch"){
+      const base=g.kind===g.previousKind?prev:g.pair;
+      const next=Math.max(1,Math.min(4,trackpadZoom*pair.d/(base.d||1)));
+      const r=stage.getBoundingClientRect(), ratio=next/trackpadZoom;
+      trackpadPan={x:pair.x-r.left-(base.x-r.left-trackpadPan.x)*ratio,
+        y:pair.y-r.top-(base.y-r.top-trackpadPan.y)*ratio};
+      trackpadZoom=next;
+      trackpadPan.x=Math.max(r.width*(1-next),Math.min(0,trackpadPan.x));
+      trackpadPan.y=Math.max(r.height*(1-next),Math.min(0,trackpadPan.y));
+      canvas.style.transformOrigin="0 0";
+      canvas.style.transform=`translate(${trackpadPan.x}px,${trackpadPan.y}px) scale(${next})`;
+    }else if(g.kind==="scroll"){
+      const base=g.previousKind==="scroll"?prev:g.pair;
+      sendInput({t:"wheel",dx:base.x-pair.x,dy:base.y-pair.y,...virtualCursor});
+    }
+    g.previousKind=g.kind;
+  }
+  g.points=points;showTrackpadCursor();
+},{passive:false});
+function endTrackpadTouch(e){
+  if(!trackpadMode)return;
+  e.preventDefault();clearTimeout(trackpadTimer);
+  const g=trackpadGesture;if(!g)return;
+  if(e.type==="touchcancel"){resetTrackpadGesture();return;}
+  // Account for movement delivered only on release, and wait for every finger.
+  if(trackpadPoints(e.changedTouches).some(p=>{
+    const start=g.origins.find(o=>o.id===p.id);
+    return start&&Math.hypot(p.x-start.x,p.y-start.y)>10;
+  }))g.moved=true;
+  if(e.touches.length){g.points=trackpadPoints(e.touches);return;}
+  if(!g.moved&&performance.now()-g.started<=250&&g.max<=2)trackpadClick(g.max===2?2:0);
+  resetTrackpadGesture();showTrackpadCursor();
+}
+canvas.addEventListener("touchend",endTrackpadTouch,{passive:false});
+canvas.addEventListener("touchcancel",endTrackpadTouch,{passive:false});
+window.addEventListener("resize",()=>{if(trackpadMode)showTrackpadCursor();});
+
 canvas.addEventListener("pointermove",(e)=>{
+  if(trackpadMode&&e.pointerType==="touch")return;
   pointerOver=true;
   moveOverlay(e);
   applyCursorMode();
@@ -1443,6 +1573,7 @@ canvas.addEventListener("touchstart",()=>{
   }
 },{passive:true});
 canvas.addEventListener("pointerdown",(e)=>{
+  if(trackpadMode&&e.pointerType==="touch")return;
   if(!pointerInput.down(e))return;
   canvas.focus();
   // Capture failure must not abort the matching release handling on window.
@@ -1452,18 +1583,19 @@ canvas.addEventListener("pointerdown",(e)=>{
   applyCursorMode();
   unlockAudioFromGesture();
 });
-window.addEventListener("pointerup",(e)=>pointerInput.up(e));
+window.addEventListener("pointerup",(e)=>{if(!trackpadMode||e.pointerType!=="touch")pointerInput.up(e);});
 canvas.addEventListener("pointercancel",(e)=>{pointerInput.lost(e);hideDrawnCursor();});
 canvas.addEventListener("lostpointercapture",(e)=>pointerInput.lost(e));
-window.addEventListener("blur",()=>{pointerInput.cancel();hideDrawnCursor();});
-window.addEventListener("pagehide",()=>{pointerInput.cancel();hideDrawnCursor();});
-document.addEventListener("visibilitychange",()=>{if(document.hidden){pointerInput.cancel();hideDrawnCursor();}});
+window.addEventListener("blur",()=>{pointerInput.cancel();resetTrackpadGesture();hideDrawnCursor();});
+window.addEventListener("pagehide",()=>{pointerInput.cancel();resetTrackpadGesture();hideDrawnCursor();});
+document.addEventListener("visibilitychange",()=>{if(document.hidden){pointerInput.cancel();resetTrackpadGesture();hideDrawnCursor();}});
 canvas.addEventListener("pointerenter",(e)=>{
+  if(trackpadMode&&e.pointerType==="touch")return;
   pointerOver=true;
   moveOverlay(e);
   applyCursorMode();
 });
-canvas.addEventListener("pointerleave",leaveCursor);
+canvas.addEventListener("pointerleave",e=>{if(trackpadMode&&e.pointerType==="touch")return;leaveCursor(e);});
 canvas.addEventListener("wheel",(e)=>{
   e.preventDefault();
   const p=pointerNorm(e);
@@ -1591,15 +1723,14 @@ window.addEventListener("message",(event)=>{
     }
     case "getSasState": sasControl.publish(); break;
     case "getStats": postStats(); break;
+    case "touchinput:trackpad": setTouchInputMode("trackpad"); break;
+    case "touchinput:touch": setTouchInputMode("touch"); break;
     // Apps and Sharing stay hidden. Gaming stays noop. Pointer lock is not used.
-    // Gaming stays noop. Pointer lock is not used.
     case "gamepadControl":
     case "requestGamingMode":
     case "sidebarVisibilityChanged":
     case "TOUCH_GAMEPAD_SETUP":
     case "TOUCH_GAMEPAD_VISIBILITY":
-    case "touchinput:trackpad":
-    case "touchinput:touch":
     case "setSynth":
     case "mode":
       break;

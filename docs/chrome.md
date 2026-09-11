@@ -79,6 +79,8 @@ Same-origin `window` messages from the parent shell to `iframe#jolee-core`.
 | `setScaleLocally` | `{value: boolean}` | CSS object-fit contain vs stretch/fill |
 | `setAntiAliasing` | `{value: boolean}` | `ctx.imageSmoothingEnabled` after every canvas size reset |
 | `setUseBrowserCursors` | `{value: boolean}` | original CSS cursors toggle. `true`: overlay hidden, local `default` pointer. `false` (default): hide OS pointer, draw remote overlay |
+| `touchinput:trackpad` | | enable relative mobile cursor, tap clicks, two-finger scroll/right click, and local pinch zoom/pan |
+| `touchinput:touch` | | restore default absolute touch input and reset local zoom |
 | `showVirtualKeyboard` | | focus canvas and hidden `#vk` |
 | `assistKey` | `{e, key, code}` | input envelope `{t:key,...}` from parent `#keyboard-input-assist` |
 | `clipboardUpdateFromUI` | `{text}` | input envelope `{t:clipboard, text}` if connected |
@@ -98,6 +100,7 @@ Core to parent (only when window.parent is not window):
 
 | type | payload |
 | --- | --- |
+| `trackpadModeUpdate` | `{enabled: boolean}` — active touch mode for the stock sidebar |
 | `status` | `{state: waiting | paired | expired | disconnected}` |
 | `clipboardContentUpdate` | `{text}` — viewer saw a frame whose payload is UTF-8 JSON `{"t":"clipboard","text":"..."}`. Hop does not parse it. |
 | `clipboardImageUpdate` | `{mime, data}` — viewer saw a JSON clipboard frame with `mime` starting `image/` and base64 `data`. Sidebar may ignore this. |
@@ -115,7 +118,7 @@ Open `/api/files/?session=SESSION&token=TOKEN`; subsequent navigation uses sessi
 
 ## What's left
 
-**Visible now:** screen and agent-owned encoder preference (default H.264; JPEG fallback) + frame-rate/JPEG-quality settings, PC clipboard text+image, audio playback, microphone capture, file upload/download, webcam JPEG stills, stats gauges, a Ctrl+Alt+Del shortcut, fullscreen, theme, and mobile keyboard. Session print frames open the browser print dialog / preview in the hop viewer (PDF preferred); silent OS spool stays desktop-client only. Paint-over and the other Selkies-only encoder controls stay hidden. Overlay is hop core; CSS cursors is original UI. There is no pixelflux.
+**Visible now:** screen and agent-owned encoder preference (default H.264; JPEG fallback) + frame-rate/JPEG-quality settings, PC clipboard text+image, audio playback, microphone capture, file upload/download, webcam JPEG stills, stats gauges, a Ctrl+Alt+Del shortcut, fullscreen, theme, mobile keyboard, and Trackpad Mode. Session print frames open the browser print dialog / preview in the hop viewer (PDF preferred); silent OS spool stays desktop-client only. Paint-over and the other Selkies-only encoder controls stay hidden. Overlay is hop core; CSS cursors is original UI. There is no pixelflux.
 
 **Hidden until that hop exists** (leftover list):
 
@@ -123,7 +126,9 @@ Open `/api/files/?session=SESSION&token=TOKEN`; subsequent navigation uses sessi
 - Sharing
 - Gaming (out unless asked)
 
-Gaming (gamepads, gaming mode, trackpad, extra player seats) stays hidden. Image clipboard is unlocked: it is a hop JSON path, not a Selkies pixelflux encoder. A leftover postMessage of still-hidden types is ignored so a stale build cannot crash the core.
+Trackpad is in scope and visible; Trackpad ≠ Gaming. One-finger movement controls a relative cursor (1.25× sensitivity); a short tap clicks at that cursor. Two-finger drag scrolls, two-finger tap or a stationary 500 ms one-finger hold right-clicks. Pinch zooms/pans the local canvas (1–4×) without remote input; each two-finger gesture locks to scrolling or pinching after a 10 px threshold. Switching back to touch restores absolute positioning and resets zoom.
+
+Gaming (gamepads, gaming mode, soft buttons, extra player seats) stays hidden. Image clipboard is unlocked: it is a hop JSON path, not a Selkies pixelflux encoder. A leftover postMessage of still-hidden types is ignored so a stale build cannot crash the core.
 
 ```mermaid
 flowchart LR

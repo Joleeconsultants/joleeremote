@@ -18,6 +18,8 @@ export const HANDLED_DASHBOARD_TYPES = [
   "fileUpload",
   "command",
   "getStats",
+  "touchinput:trackpad",
+  "touchinput:touch",
 ] as const;
 
 export const NOOP_DASHBOARD_TYPES = [
@@ -26,8 +28,6 @@ export const NOOP_DASHBOARD_TYPES = [
   "sidebarVisibilityChanged",
   "TOUCH_GAMEPAD_SETUP",
   "TOUCH_GAMEPAD_VISIBILITY",
-  "touchinput:trackpad",
-  "touchinput:touch",
   "setSynth",
   "mode",
 ] as const;
@@ -52,6 +52,8 @@ export type DashboardAction =
   | "fileUpload"
   | "command"
   | "getStats"
+  | "touchinput:trackpad"
+  | "touchinput:touch"
   | "noop"
   | "ignore";
 

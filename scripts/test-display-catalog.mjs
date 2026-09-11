@@ -33,7 +33,7 @@ test('actual viewer sends exact catalog modes, rejects stale catalog and does no
     finishScreenRequest:(...args)=>{results.push(args);c.pendingScreenRequest=null;},
     sessionPaired:true,performance:{now:()=>100},agentStatsReceivedAt:90,agentScreen:{catalog},readDisplayCatalog,
     screenUseCssScaling:true,innerWidth:1365,innerHeight:767,devicePixelRatio:2,
-    pointerInput:{cancel(){}},heldViewerKeys:new Map(),clipboardPaste:{reset(){}},hideDrawnCursor(){},
+    resetTrackpadGesture(){},pointerInput:{cancel(){}},heldViewerKeys:new Map(),clipboardPaste:{reset(){}},hideDrawnCursor(){},
     displayTransition:new DisplayTransition(),sessionState:{stale(){}},
     screenAutoEnabled:true,scheduleScreenResize(){},sendInput:payload=>sent.push(payload)});
   vm.runInContext(html.slice(html.indexOf('function requestCatalogDisplay('),html.indexOf('function scheduleScreenResize(')),c);

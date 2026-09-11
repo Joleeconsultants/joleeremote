@@ -175,7 +175,7 @@ const DEFAULT_H264_PAINTOVER_CRF = 18;
 const DEFAULT_USE_PAINT_OVER_QUALITY = true;
 const DEFAULT_ENCODER = encoderOptions[0];
 const DEFAULT_VIDEO_CRF = 25;
-const DEFAULT_SCALE_LOCALLY = true;
+const DEFAULT_SCALE_LOCALLY = isMobileClient;
 const DEFAULT_ENABLE_BINARY_CLIPBOARD = true;
 const REPO_BASE_URL =
   "https://raw.githubusercontent.com/linuxserver/proot-apps/master/metadata/";

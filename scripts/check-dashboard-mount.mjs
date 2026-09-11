@@ -86,10 +86,10 @@ try {
     window.shortcutKeys=[];
     window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='shortcutKey')window.shortcutKeys.push(e.data.key);});
   });
-  await page.getByRole('button',{name:'Esc',exact:true}).click();
+  assert.equal(await page.locator('#shortcuts-content').getByRole('button',{name:'Esc',exact:true}).count(),0);
   await page.getByRole('button',{name:'F11 (Full Screen)',exact:true}).click();
-  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.shortcutKeys.length===2);
-  assert.deepEqual(await page.frameLocator('#jolee-core').locator('body').evaluate(()=>window.shortcutKeys),['Escape','F11']);
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.shortcutKeys.length===1);
+  assert.deepEqual(await page.frameLocator('#jolee-core').locator('body').evaluate(()=>window.shortcutKeys),['F11']);
   await page.getByText('Shortcuts',{exact:true}).click();
   await page.getByText('Audio Settings', {exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#audioInputSelect')?.textContent.includes('No browser microphone found'));

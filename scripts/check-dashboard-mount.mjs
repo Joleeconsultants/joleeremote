@@ -79,7 +79,7 @@ try {
   // Include asynchronous startup effects and delayed settings delivery.
   await page.waitForTimeout(600);
   assert.deepEqual(errors, [], 'dashboard startup must not throw');
-  assert(await page.locator('#dashboard-root button').count() >= 5, 'original controls must mount');
+  assert(await page.locator('#dashboard-root button').count() >= 4, 'non-beta controls must mount');
   await page.locator('.toggle-handle').click();
   await page.getByText('Shortcuts',{exact:true}).click();
   await page.frameLocator('#jolee-core').locator('body').evaluate(()=>{
@@ -92,7 +92,11 @@ try {
   assert.deepEqual(await page.frameLocator('#jolee-core').locator('body').evaluate(()=>window.shortcutKeys),['F11']);
   await page.getByText('Shortcuts',{exact:true}).click();
   await page.getByText('Audio Settings', {exact:true}).click();
+  assert.equal(await page.locator('#audioInputSelect').count(),0);
+  assert.equal(await page.locator('.beta-label').count(),0);
+  await page.frameLocator('#jolee-core').locator('body').evaluate(()=>parent.postMessage({type:'betaFeatures',microphoneBeta:true,printingBeta:true},location.origin));
   await page.waitForFunction(()=>document.querySelector('#audioInputSelect')?.textContent.includes('No browser microphone found'));
+  assert.match(await page.locator('label[for="audioInputSelect"]').innerText(),/Beta/);
   await page.frameLocator('#jolee-core').locator('body').evaluate(()=>{
     parent.postMessage({type:'pipelineStatusUpdate',microphone:false,error:'NotFoundError'},location.origin);
   });
@@ -168,7 +172,9 @@ try {
   assert.equal(await page.locator('#hidpiToggle').getAttribute('aria-pressed'),hidpiBefore==='true'?'false':'true');
   // Touch users need an actual notice: a hover-only disabled title cannot help.
   await page.setViewportSize({width:390,height:844});
-  assert(await page.getByRole('button',{name:'Microphone forwarding requires a connected PC with confirmed support.',exact:true}).isDisabled());
+  assert.equal(await page.getByRole('button',{name:'Microphone (Beta)',exact:true}).count(),0);
+  await page.frameLocator('#jolee-core').locator('body').evaluate(()=>parent.postMessage({type:'betaFeatures',microphoneBeta:true,printingBeta:true},location.origin));
+  assert(await page.getByRole('button',{name:'Microphone (Beta)',exact:true}).isDisabled());
   await page.getByText('Audio Settings',{exact:true}).click();
   const reportBitrate=()=>page.frameLocator('#jolee-core').locator('body').evaluate(()=>parent.postMessage({type:'statsUpdate',audio_bitrate_supported:true,audio_bitrate_choices:[96000,128000,160000,192000],audio_bitrate_effective:96000},location.origin));
   await reportBitrate();

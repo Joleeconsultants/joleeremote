@@ -66,7 +66,7 @@ let hop=params.get("hop")||"";
 let socket=null, scaleLocally=window.matchMedia("(pointer: coarse)").matches, antiAliasing=true;
 let audioEnabled=true, videoEnabled=true, audioSinkId="";
 // Deferred until a suitable production-signed open-source Windows driver is available.
-const microphoneFeatureEnabled=true;
+let microphoneFeatureEnabled=false, printingFeatureEnabled=false;
 let webcamGen=0,webcamStarting=false;
 let microphoneStream=null, microphoneRecorder=null, microphoneGen=0, microphoneForwarding=false, audioInputDeviceId="", webcamStream=null, webcamTimer=null;
 let frameCount=0, statsStartedAt=performance.now(), bytesSinceStats=0;
@@ -281,6 +281,7 @@ function setStatus(state,expiresAt=null){
   uploadControl.bind(sessionPaired?socket:null,expiresAt);
   sasControl.bind(sessionPaired?socket:null,session,expiresAt===null?null:Number.isSafeInteger(expiresAt)?expiresAt:0);
   if(!sessionPaired){
+    microphoneFeatureEnabled=false;printingFeatureEnabled=false;
     displayTransition.reset();heldViewerKeys.clear();
     for(const job of printJobChunks.values())clearTimeout(job.timer);
     printJobChunks.clear();
@@ -897,6 +898,7 @@ function isPrintableMime(mime){
   return mime==="application/pdf"||(typeof mime==="string"&&mime.indexOf("image/")===0);
 }
 function openPrintPreview(file){
+  if(!printingFeatureEnabled)return;
   if(!isPrintableMime(file.mime)){
     downloadBytes(file);
     return;
@@ -937,6 +939,7 @@ function openPrintPreview(file){
   }
 }
 function handlePrintFrame(pf){
+  if(!printingFeatureEnabled)return;
   if(!sessionPaired||!Number.isInteger(pf.parts)||pf.parts<1||pf.parts>86||
     !Number.isInteger(pf.part)||pf.part<0||pf.part>=pf.parts||
     typeof pf.job!=="string"||pf.job.length>128||typeof pf.name!=="string"||pf.name.length>255||
@@ -945,7 +948,7 @@ function handlePrintFrame(pf){
   let bytes;
   try{bytes=base64ToBytes(pf.data);}catch(e){return;}
   const preview=(file)=>{
-    if(window.parent!==window)window.parent.postMessage({type:"printJob",name:file.name,mime:file.mime},window.location.origin);
+    if(window.parent!==window)window.parent.postMessage({type:"printJob",name:file.name+" (Beta)",mime:file.mime},window.location.origin);
     openPrintPreview(file);
   };
   if(pf.parts<=1){
@@ -1036,7 +1039,13 @@ function connect(opts){
   currentSocket.addEventListener("message",(ev)=>{
     if(socket!==currentSocket)return;
     if(typeof ev.data==="string"){
-      try{const msg=JSON.parse(ev.data);if(msg.type==="status")setStatus(msg.state,msg.expiresAt??null);}catch(e){}
+      try{const msg=JSON.parse(ev.data);if(msg.type==="status"){
+        microphoneFeatureEnabled=msg.betaFeatures?.microphoneBeta===true;
+        printingFeatureEnabled=msg.betaFeatures?.printingBeta===true;
+        if(!microphoneFeatureEnabled)stopMicrophone();
+        if(window.parent!==window)window.parent.postMessage({type:'betaFeatures',printingBeta:printingFeatureEnabled,microphoneBeta:microphoneFeatureEnabled},window.location.origin);
+        setStatus(msg.state,msg.expiresAt??null);
+      }}catch(e){}
       return;
     }
     const env=decodeEnvelope(ev.data);
@@ -1089,6 +1098,9 @@ function connect(opts){
   });
 }
 function sendInput(payload){
+  if(!microphoneFeatureEnabled && (payload.t==='mic' || payload.t==='microphone' ||
+    payload.t==='pipeline' && payload.pipeline==='microphone' && payload.enabled!==false ||
+    payload.t==='audioDevice' && payload.context==='input'))return;
   const diagnosticInput=['pointer','wheel','key'].includes(payload.t);
   if(!displayTransition.allows(payload)){
     if(diagnosticInput)canvas.dataset.inputDispatch='display_transition';
@@ -1098,6 +1110,10 @@ function sendInput(payload){
   if(payload.t==="settings"&&payload.settings&&typeof payload.settings==="object"){
     if(payload.settings.enable_binary_clipboard===false)clipboardPaste.invalidate('cancelled');
     payload={...payload,settings:{...payload.settings,video_protocol:1}};
+    if(!microphoneFeatureEnabled){
+      for(const key of Object.keys(payload.settings))if(/^(microphone|mic)(_|$)/i.test(key))delete payload.settings[key];
+      for(const key of Object.keys(latestSettings))if(/^(microphone|mic)(_|$)/i.test(key))delete latestSettings[key];
+    }
     // A cached DPI choice belongs to the helper that confirmed support.
     // Recheck at the final send boundary, including reconnect replay.
     if(Object.hasOwn(payload.settings,'scaling_dpi')||Object.hasOwn(latestSettings,'scaling_dpi')){
@@ -1344,11 +1360,12 @@ function postStats(){
   stats.active_encoder=observedEncoder||(['jpeg','h264enc'].includes(agentStats.active_encoder)?agentStats.active_encoder:null);
   stats.supported_encoders=Array.isArray(agentStats.supported_encoders)?agentStats.supported_encoders.filter(value=>['jpeg','h264enc'].includes(value)):null;
   const micFresh=sessionPaired&&performance.now()-agentStatsReceivedAt<5000;
-  stats.print_forwarding=printForwardingReading(agentStats.print_forwarding,micFresh);
+  stats.betaFeatures={printingBeta:printingFeatureEnabled,microphoneBeta:microphoneFeatureEnabled};
+  stats.print_forwarding=printingFeatureEnabled?printForwardingReading(agentStats.print_forwarding,micFresh):null;
   if(stats.print_forwarding)canvas.dataset.printFolder=stats.print_forwarding.folder;
   else delete canvas.dataset.printFolder;
   stats.microphone_supported=microphoneFeatureEnabled&&micFresh&&agentStats.microphone_supported===true;
-  const micSetup=micFresh?agentStats.microphone_setup:null;
+  const micSetup=microphoneFeatureEnabled&&micFresh?agentStats.microphone_setup:null;
   stats.microphone_setup=micSetup&&micSetup.component==='vb-cable'&&['not_installed','ready','installing','restart_required','failed'].includes(micSetup.state)?{state:micSetup.state,reason:['waiting_for_user','platform_unsupported'].includes(micSetup.reason)?micSetup.reason:null}:null;
   stats.microphone_formats=microphoneFeatureEnabled&&micFresh&&Array.isArray(agentStats.microphone_formats)?agentStats.microphone_formats.filter(x=>typeof x==='string').slice(0,8):[];
   stats.webcam_supported=micFresh&&typeof agentStats.webcam_supported==='boolean'?agentStats.webcam_supported:null;

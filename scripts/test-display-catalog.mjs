@@ -24,7 +24,7 @@ test('catalog preserves negative origins, disabled Windows modes and preferred r
 test('actual viewer sends exact catalog modes, rejects stale catalog and does not align supported sizes',()=>{
   const html=readFileSync(new URL('../public/viewer.html',import.meta.url),'utf8');
   const sent=[],results=[];
-  const c=vm.createContext({pendingScreenRequest:null,crypto:{randomUUID:()=> 'request'},setTimeout:()=>1,
+  const c=vm.createContext({microphoneFeatureEnabled:false,pendingScreenRequest:null,crypto:{randomUUID:()=> 'request'},setTimeout:()=>1,
     finishScreenRequest:(...args)=>{results.push(args);c.pendingScreenRequest=null;},
     sessionPaired:true,performance:{now:()=>100},agentStatsReceivedAt:90,agentScreen:{catalog},readDisplayCatalog,
     screenUseCssScaling:true,innerWidth:1365,innerHeight:767,devicePixelRatio:2,
@@ -67,7 +67,7 @@ test('display input guard requires matched acknowledgement then fresh paint; tim
 test('actual viewer input boundary blocks queued physical input during display transition',()=>{
   const html=readFileSync(new URL('../public/viewer.html',import.meta.url),'utf8');
   const sent=[],guard=new DisplayTransition();
-  const c=vm.createContext({canvas:{dataset:{}},displayTransition:guard,heldViewerKeys:new Map(),clipboardPaste:{cancel(){}},
+  const c=vm.createContext({microphoneFeatureEnabled:false,canvas:{dataset:{}},displayTransition:guard,heldViewerKeys:new Map(),clipboardPaste:{cancel(){}},
     socket:{readyState:1,send:value=>sent.push(JSON.parse(value))},encodeInput:JSON.stringify,MAX_ENVELOPE_BYTES:1048576});
   vm.runInContext(html.slice(html.indexOf('function sendInput('),html.indexOf('function requestFullscreen(')),c);
   c.sendInput({t:'key',e:'down',key:'Shift',code:'ShiftLeft'});

@@ -79,3 +79,9 @@
   background: currentColor;
   opacity: .65;
 }
+
+/* Match the Files panel's spacing around each action. */
+#shortcuts-content > .resolution-button {
+  margin-top: 5px;
+  margin-bottom: 5px;
+}

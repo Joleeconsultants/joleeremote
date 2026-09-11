@@ -30,6 +30,11 @@ describe("dashboard postMessage protocol", () => {
     expect(classifyDashboardMessage({ type: "getStats" })).toBe("getStats");
   });
 
+  it("handles touch modes independently of gaming", () => {
+    expect(classifyDashboardMessage({ type: "touchinput:trackpad" })).toBe("touchinput:trackpad");
+    expect(classifyDashboardMessage({ type: "touchinput:touch" })).toBe("touchinput:touch");
+  });
+
   it("no-ops chrome that has no hop yet", () => {
     expect(classifyDashboardMessage({ type: "gamepadControl", enabled: true })).toBe("noop");
     expect(classifyDashboardMessage({ type: "requestGamingMode" })).toBe("noop");

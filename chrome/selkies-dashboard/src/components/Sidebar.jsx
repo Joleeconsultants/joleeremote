@@ -4998,8 +4998,6 @@ function Sidebar() {
                 </div>
                 {sectionsOpen.shortcuts && (
                   <div className="sidebar-section-content" id="shortcuts-content">
-                    <button className="resolution-button" title="Send Escape to the remote PC"
-                      onClick={() => postToCore({type:'shortcutKey',key:'Escape'}, window.location.origin)}>Esc</button>
                     <button className="resolution-button" title="Send F11 to toggle full screen in the remote application"
                       onClick={() => postToCore({type:'shortcutKey',key:'F11'}, window.location.origin)}>F11 (Full Screen)</button>
                     <button

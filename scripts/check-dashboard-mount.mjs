@@ -152,6 +152,8 @@ try {
   await page.waitForFunction(()=>document.querySelector('#manualWidthInput').value==='1920');
   assert.equal(await page.locator('#manualHeightInput').inputValue(),'1200');
   assert.equal(await page.locator('#resolutionPresetSelect option[value="7680x4320"]').count(),0);
+  await page.waitForFunction(()=>document.querySelector('#jolee-core').contentWindow.displayRequests.length===1);
+  await page.waitForFunction(()=>!document.querySelector('#resolutionPresetSelect').disabled);
   await page.frameLocator('#jolee-core').locator('body').evaluate(()=>publish('current',false));
   await page.getByText('Resolution changes are temporarily unavailable on this desktop.',{exact:true}).waitFor();
   assert(await page.locator('#resolutionPresetSelect').isDisabled());

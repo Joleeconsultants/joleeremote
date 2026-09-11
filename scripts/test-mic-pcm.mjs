@@ -8,7 +8,7 @@ test('viewer only forwards negotiated bounded PCM with metadata and drops socket
   const start=html.indexOf('    case "micChunk":')+'    case "micChunk":'.length;
   const source=html.slice(start,html.indexOf('      break;',start));
   const sent=[];
-  const c=vm.createContext({sessionPaired:true,microphoneForwarding:true,agentStats:{microphone_supported:true,microphone_formats:[mime]},
+  const c=vm.createContext({microphoneFeatureEnabled:true,sessionPaired:true,microphoneForwarding:true,agentStats:{microphone_supported:true,microphone_formats:[mime]},
     agentStatsReceivedAt:0,performance:{now:()=>0},socket:{bufferedAmount:0},sendInput:m=>sent.push(m),
     msg:{mime,sample_rate:24000,channels:1,sequence:0,data:'A'.repeat(3200)}});
   vm.runInContext(source,c);assert.equal(sent.length,1);assert.equal(sent[0].sequence,0);assert.equal(sent[0].sample_rate,24000);

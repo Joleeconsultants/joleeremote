@@ -1509,6 +1509,14 @@ function Sidebar() {
   const [notifications, setNotifications] = useState([]);
   const notificationTimeouts = useRef({});
   const [microphoneReady, setMicrophoneReady] = useState(false);
+  const [microphoneSetup, setMicrophoneSetup] = useState(null);
+  const microphoneUnavailable = microphoneSetup?.reason === 'waiting_for_user' ? 'Microphone preparation is waiting for one signed-in Windows user.'
+    : microphoneSetup?.reason === 'platform_unsupported' ? 'Microphone forwarding is not supported on this Windows version.'
+    : microphoneSetup?.state === 'installing' ? 'Preparing the PC microphone component…'
+    : microphoneSetup?.state === 'restart_required' ? 'Restart the PC to finish preparing microphone forwarding.'
+    : microphoneSetup?.state === 'failed' ? 'The PC microphone component could not be prepared.'
+    : microphoneSetup?.state === 'not_installed' ? 'The PC microphone component is not installed yet.'
+    : 'Microphone forwarding requires a connected PC with confirmed support.';
   const microphoneSession = useMemo(() => createMicrophoneSession({
     start: startParentMicrophone, stop: stopParentMicrophone, select: setParentMicDeviceId,
     changed: (active, ready) => { setIsMicrophoneActive(active); setMicrophoneReady(ready); },
@@ -1516,11 +1524,12 @@ function Sidebar() {
   }), []);
   useEffect(() => {
     const core = document.getElementById('jolee-core');
-    const reset = () => microphoneSession.reset();
+    const reset = () => { microphoneSession.reset(); setMicrophoneSetup(null); };
     const receive = (event) => {
       if (event.origin !== window.location.origin || event.source !== core?.contentWindow) return;
       if (event.data?.type === 'status') microphoneSession.paired(event.data.state === 'paired');
       if (event.data?.type === 'statsUpdate') {
+        setMicrophoneSetup(event.data.microphone_setup || null);
         const pcm = setParentMicFormats(event.data.microphone_formats);
         microphoneSession.support(event.data.microphone_supported === true && pcm);
       }
@@ -3457,7 +3466,7 @@ function Sidebar() {
                 className={`action-button ${isMicrophoneActive ? "active" : ""}`}
                 onClick={handleMicrophoneToggle}
                 disabled={!microphoneReady && !isMicrophoneActive}
-                title={!microphoneReady ? 'Microphone forwarding requires a connected PC with confirmed support.' : t(
+                title={!microphoneReady ? microphoneUnavailable : t(
                   isMicrophoneActive
                     ? "buttons.microphoneDisableTitle"
                     : "buttons.microphoneEnableTitle"
@@ -4156,7 +4165,7 @@ function Sidebar() {
                       </label>
                       <select
                         id="audioInputSelect"
-                        title={!microphoneReady ? 'Microphone forwarding requires a connected PC with confirmed support.' : undefined}
+                        title={!microphoneReady ? microphoneUnavailable : undefined}
                         value={selectedInputDeviceId}
                         onChange={handleAudioInputChange}
                         disabled={!microphoneReady || isLoadingAudioDevices || !!audioDeviceError}
@@ -4169,7 +4178,8 @@ function Sidebar() {
                         ))}
                       </select>
                     </div>
-                    {(microphoneReady || isMicrophoneActive) && (
+                    {!microphoneReady && microphoneSetup && <p className="device-support-notice">{microphoneUnavailable}</p>}
+                    {(microphoneReady || isMicrophoneActive || microphoneSetup) && (
                       <p className="device-support-notice" data-testid="microphone-driver-notice">
                         Microphone forwarding uses VB-CABLE by VB-Audio.{' '}
                         The origin of VB-CABLE: <a href="https://www.vb-cable.com/" target="_blank" rel="noopener noreferrer">www.vb-cable.com</a>.

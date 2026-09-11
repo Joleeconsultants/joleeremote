@@ -13,7 +13,7 @@ async function setup(paired = true) {
   }
   const issuedAt = Date.now();
   return {stub,sockets,input:{sessionId,requestId:crypto.randomUUID(),revision:1,
-    previousExpiresAt:minted.expiresAt,expiresAt:issuedAt+3_600_000,issuedAt},
+    previousExpiresAt:minted.expiresAt,expiresAt:minted.expiresAt+900_000,issuedAt},
     async close(){ await stub.endOwnedSession(browserToken); }};
 }
 it('commits exact renewal once, survives eviction and ignores old alarm', async()=>{
@@ -48,4 +48,21 @@ it('cannot renew unpaired or expired sessions',async()=>{
     await runInDurableObject(s.stub,(_instance,state)=>state.storage.sql.exec('UPDATE session SET expires_at = ?',Date.now()-1));
     expect(await s.stub.commitRenewal(s.input)).toBe(false);
   }finally{await s.close();}
+});
+
+it('keeps the immutable mint start and privilege expiry across doubling beyond an hour',async()=>{
+ const s=await setup();
+ try {
+  const start=s.input.previousExpiresAt-900000,original=s.input.previousExpiresAt;
+  for(const minutes of [30,60,120,240]) {
+   expect(await s.stub.commitRenewal(s.input)).toBe(true);
+   expect((await s.stub.status())?.sessionStartedAt).toBe(start);
+   expect((await s.stub.status())?.expiresAt).toBe(start+minutes*60000);
+   expect((await s.stub.readOriginalAuthorizationContext())?.expiresAt).toBe(original);
+   s.input={...s.input,requestId:crypto.randomUUID(),revision:s.input.revision+1,
+    previousExpiresAt:s.input.expiresAt,expiresAt:start+2*(s.input.expiresAt-start)};
+  }
+  await runInDurableObject(s.stub,(_instance,state)=>state.storage.sql.exec('UPDATE session SET expires_at = ?',start+1_073_741_824));
+  expect(await s.stub.commitRenewal({...s.input,previousExpiresAt:start+1_073_741_824,expiresAt:start+2_147_483_648})).toBe(false);
+ } finally {await s.close();}
 });

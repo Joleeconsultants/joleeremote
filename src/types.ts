@@ -4,6 +4,7 @@ export type PublicStatus = {
   sessionId: string;
   state: "waiting" | "paired" | "expired";
   expiresAt: number;
+  sessionStartedAt: number;
   browserConnected: boolean;
   agentConnected: boolean;
 };

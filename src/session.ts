@@ -169,6 +169,7 @@ export class Session extends Server<Env> {
       sessionId: row.id,
       state: expired ? "expired" : browserConnected && agentConnected ? "paired" : "waiting",
       expiresAt: row.expires_at,
+      sessionStartedAt: row.created_at,
       browserConnected,
       agentConnected,
     };
@@ -185,7 +186,9 @@ export class Session extends Server<Env> {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.requestId) ||
         ![input.revision,input.previousExpiresAt,input.expiresAt,input.issuedAt].every(Number.isSafeInteger) ||
         input.revision < 1 || input.issuedAt > now || input.expiresAt <= input.previousExpiresAt ||
-        input.expiresAt > input.issuedAt + 3_600_000) return false;
+        input.previousExpiresAt <= row.created_at ||
+        input.expiresAt !== row.created_at + 2 * (input.previousExpiresAt - row.created_at) ||
+        input.expiresAt - row.created_at > 2_147_483_647) return false;
     const prior = this.ctx.storage.sql.exec<{ revision:number; request_id:string;
       previous_expiry:number; expiry:number; issued_at:number; original_expiry:number }>(
       'SELECT * FROM session_renewal WHERE session_id = ?',row.id).toArray()[0];
@@ -584,6 +587,7 @@ export class Session extends Server<Env> {
       sessionId: row.id,
       state: expired ? "expired" : browserConnected && agentConnected ? "paired" : "waiting",
       expiresAt: row.expires_at,
+      sessionStartedAt: row.created_at,
       browserConnected,
       agentConnected,
     };

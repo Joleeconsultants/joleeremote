@@ -5,12 +5,12 @@ const gen='A'.repeat(32), id='12345678-1234-4123-8123-123456789abc';
 const message=(extra={})=>({t:'secure_desktop_status',v:1,session_id:'session',generation:gen,id,sequence:1,status:'warning',code:'input_partial',...extra});
 function harness(expiry=100000) {
   let clock=1000, serial=0;
-  const connection={}, reports=[], sent=[], timers=new Map();
-  const control=new SasControl({send:m=>sent.push(m), changed(){}, report(){},secureReport:m=>reports.push(m),now:()=>clock,makeId:()=>id,
+  const connection={}, reports=[], active=[], sent=[], timers=new Map();
+  const control=new SasControl({send:m=>sent.push(m), changed(){}, report(){},secureReport:m=>reports.push(m),secureActive:value=>active.push(value),now:()=>clock,makeId:()=>id,
     schedule:(fn,delay)=>{timers.set(++serial,{fn,at:clock+delay});return serial;},unschedule:id=>timers.delete(id)});
   const cap=(extra={})=>({t:'control_capabilities',v:1,session_id:'session',generation:gen,expires_at:expiry,sas:{available:true,reason:null},...extra});
   control.bind(connection,'session',expiry);control.consume(cap(),connection);
-  return {control,connection,reports,sent,cap,consume:m=>control.consume(m,connection),
+  return {control,connection,reports,active,sent,cap,consume:m=>control.consume(m,connection),
     advance(ms){clock+=ms; for(const [key,t] of [...timers])if(t.at<=clock){timers.delete(key);t.fn();}}};
 }
 test('secure status accepts only exact schema and bounded typed vocabulary',()=>{
@@ -72,4 +72,15 @@ test('prepared deadline cannot widen and completed return does not later report 
   assert.equal(h.control.observations.get(id).deadline,80000);
   h.consume(message({sequence:3,status:'returned',code:'normal_frame_received',secureExpiresAt:80000}));
   h.advance(80000);assert.deepEqual(h.reports,[{status:'returned',code:'normal_frame_received'}]);
+});
+
+
+test('cursor activity requires correlated secure frame and clears on terminal, expiry and invalidation',()=>{
+  for(const end of [h=>h.consume(message({sequence:3,status:'returned',code:'normal_frame_received'})),h=>h.consume(message({sequence:3,status:'failed',code:'helper_lost'})),h=>h.advance(45000),h=>h.control.invalidate(),h=>h.consume(h.cap({generation:'B'.repeat(32)}))]){
+    const h=harness();h.control.request();
+    h.consume(message({status:'active',code:'secure_frame_received',session_id:'wrong'}));assert.equal(h.active.at(-1),false);
+    h.consume(message({status:'observing',code:'helper_ready'}));assert.equal(h.active.at(-1),false);
+    h.consume(message({sequence:2,status:'active',code:'secure_frame_received'}));assert.equal(h.active.at(-1),true);
+    end(h);assert.equal(h.active.at(-1),false);
+  }
 });

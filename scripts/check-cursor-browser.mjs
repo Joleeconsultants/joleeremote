@@ -7,7 +7,7 @@ try{
  const page=await browser.newPage();
  await page.setContent('<canvas id="surface"></canvas><div id="stage"></div><img id="cursor">');
  await page.addScriptTag({content:`const canvas=document.querySelector('#surface'),stage=document.querySelector('#stage'),cursorEl=document.querySelector('#cursor');
- let useBrowserCursors=true,nativeCursor='default',pointerOver=true,agentCursorVisible=true,cursorHx=1,cursorHy=1,cursorPosition=null;
+ let secureCursorActive=false,useBrowserCursors=true,nativeCursor='default',pointerOver=true,agentCursorVisible=true,cursorHx=1,cursorHy=1,cursorPosition=null;
  const DEFAULT_CURSOR_SVG='',DEFAULT_CURSOR_HX=1,DEFAULT_CURSOR_HY=1,parseJsonFrameObject=x=>x;
  ${html.slice(html.indexOf('function applyCursorMode('),html.indexOf('let sessionPaired='))}
  ${html.slice(html.indexOf('function cursorFromFrame('),html.indexOf('function contentBox('))}
@@ -16,6 +16,15 @@ try{
  for(const css of ['text','pointer','ew-resize','ns-resize','wait','default'])assert.equal((await page.evaluate(css=>window.shape(css),css)).cursor,css);
  const custom=await page.evaluate(()=>window.shape());assert.equal(custom.cursor,'default');assert.match(custom.source,/^data:image\/png;base64,/);assert.equal(custom.overlay,'none');
  assert.equal(await page.evaluate(()=>window.drawn()),'block');
+ for(const native of [true,false]){
+  const result=await page.evaluate(native=>{
+   useBrowserCursors=native;secureCursorActive=true;applyCursorFrame({visible:false});
+   const secure=[canvas.style.cursor,cursorEl.style.display];
+   secureCursorActive=false;applyCursorMode();
+   return {secure,returned:[canvas.style.cursor,cursorEl.style.display]};
+  },native);
+  assert.deepEqual(result.secure,['default','none']);assert.deepEqual(result.returned,['none','none']);
+ }
  const size=await page.evaluate(async()=>{const image=document.querySelector('#cursor');await image.decode();return [image.naturalWidth,image.naturalHeight];});assert.deepEqual(size,[32,32]);
  console.log('Edge native stock shapes, local arrow fallback and unchanged drawn dimensions PASS; OS cursor/drag acceptance still requires installed session.');
 }finally{await browser.close();}

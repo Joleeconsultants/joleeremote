@@ -7,7 +7,7 @@ const html=readFileSync(new URL('../public/viewer.html',import.meta.url),'utf8')
 function fixture(){
   const c=vm.createContext({Uint8Array,DataView,atob,Number,parseJsonFrameObject:x=>x,
     canvas:{style:{}},cursorEl:{style:{},src:'fallback'},stage:{addEventListener(){},getBoundingClientRect:()=>({left:10,top:20})},
-    useBrowserCursors:false,nativeCursor:'default',pointerOver:true,agentCursorVisible:true,cursorHx:1,cursorHy:1,cursorPosition:null,
+    secureCursorActive:false,useBrowserCursors:false,nativeCursor:'default',pointerOver:true,agentCursorVisible:true,cursorHx:1,cursorHy:1,cursorPosition:null,
     DEFAULT_CURSOR_SVG:'fallback',DEFAULT_CURSOR_HX:1,DEFAULT_CURSOR_HY:1});
   vm.runInContext(html.slice(html.indexOf('function applyCursorMode('),html.indexOf('let sessionPaired='))+
     html.slice(html.indexOf('function cursorFromFrame('),html.indexOf('function contentBox('))+
@@ -68,4 +68,19 @@ test('a stationary pointer updates its hotspot and session reset clears the old 
   const f=fixture();f.moveOverlay({clientX:100,clientY:80});f.applyCursorFrame(f.cursorFromFrame(cursor(32,32,10,12)));
   assert.equal(f.cursorEl.style.transform,'translate(80px,48px)');
   f.resetRemoteCursor();assert.equal(f.cursorEl.src,'fallback');assert.equal(f.cursorHx,1);assert.equal(f.cursorPosition,null);
+});
+
+
+test('secure hidden cursor uses one local arrow and restores remote shapes and ordinary hiding',()=>{
+  const f=fixture();
+  for(const native of [false,true]){
+    f.useBrowserCursors=native;f.secureCursorActive=true;
+    f.applyCursorFrame({visible:false});
+    assert.equal(f.canvas.style.cursor,'default');assert.equal(f.cursorEl.style.display,'none');
+    f.applyCursorFrame(f.cursorFromFrame({...cursor(),css:'text'}));
+    assert.equal(f.canvas.style.cursor,native?'text':'none');assert.equal(f.cursorEl.style.display,native?'none':'block');
+    f.applyCursorFrame({visible:false});f.secureCursorActive=false;f.applyCursorMode();
+    assert.equal(f.canvas.style.cursor,'none');assert.equal(f.cursorEl.style.display,'none');
+  }
+  f.secureCursorActive=true;f.resetRemoteCursor();assert.equal(f.secureCursorActive,false);
 });

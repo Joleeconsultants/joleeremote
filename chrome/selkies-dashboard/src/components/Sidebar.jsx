@@ -4011,7 +4011,9 @@ function Sidebar() {
                         </button>
                       </div>
                     )}
-                    {(renderableSettings.uiScaling ?? true) && (
+                    {(renderableSettings.uiScaling ?? true) && agentCapabilities.dpi_scaling_supported === true
+                      && serverSettings?.scaling_dpi?.allowed?.length > 1
+                      && serverSettings.scaling_dpi.overridden !== true && (
                       <div className="dev-setting-item">
                         <label htmlFor="uiScalingSelect">
                           {t("sections.screen.uiScalingLabel", "UI Scaling")}

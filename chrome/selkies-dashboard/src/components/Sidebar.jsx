@@ -5054,8 +5054,20 @@ function Sidebar() {
                       )}
                       disabled={!sasState.available || sasState.pending}
                       title={sasFailure || (sasState.pending ? 'Waiting for the PC response' : sasState.available
-                        ? 'Send Ctrl+Alt+Del to the remote PC' : sasState.reason === 'rdp_session_unsupported'
-                          ? 'Ctrl+Alt+Delete is not supported in RDP sessions yet.' : 'Ctrl+Alt+Delete is unavailable for this session')}
+                        ? 'Send Ctrl+Alt+Del to the remote PC' : ({
+                          rdp_session_unsupported: 'Ctrl+Alt+Delete is not supported in RDP sessions yet.',
+                          unsupported: 'The PC has not confirmed Ctrl+Alt+Delete support for this connection.',
+                          unauthorized: 'This session does not have permission to send Ctrl+Alt+Delete.',
+                          expired: 'Ctrl+Alt+Delete permission has expired. Start a new session.',
+                          unpaired: 'Waiting for the PC to connect.',
+                          policy_denied: 'Windows policy on the PC does not allow remote Ctrl+Alt+Delete.',
+                          policy_unreadable: 'The PC could not read its Windows Ctrl+Alt+Delete policy.',
+                          service_required: 'Ctrl+Alt+Delete requires the LetLeeIn Windows service.',
+                          session_unavailable: 'The PC has not confirmed secure-screen readiness for this session.',
+                          session_changed: 'The Windows sign-in session changed. Start a new remote session.',
+                          audit_unavailable: 'The PC could not record the Ctrl+Alt+Delete request.',
+                          native_unavailable: 'The Windows Ctrl+Alt+Delete service command is unavailable.',
+                        })[sasState.reason] || 'Ctrl+Alt+Delete is unavailable for this session')}
                     >
                       Ctrl + Alt + Del
                     </button>

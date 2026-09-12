@@ -6,7 +6,7 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
  if(!connectionBox)box.style.cssText='position:absolute;top:16px;left:50%;transform:translateX(-50%);max-width:calc(100% - 48px);padding:12px 16px;border:1px solid #75839a;border-radius:8px;background:#222833;color:#e6ebf3;font:16px system-ui;z-index:5;text-align:center';
  const text=document.createElement('span'),button=document.createElement('button');button.type='button';button.className='session-action';button.hidden=true;text.dataset.renewalText='';box.append(text,button);if(!connectionBox)root.append(box);
  box.style.pointerEvents='auto';
- let supported=false,checked=false,checking=false,restartPath=null,lastState='',expiredNotified=false,inspectAttempts=0,retryTimer,identityGeneration=0,recoverySince=null,recoveryTimer;
+ let supported=false,checked=false,checking=false,restartPath=null,lastState='',expiredNotified=false,inspectAttempts=0,retryTimer,identityGeneration=0,recoverySince=null,recoveryTimer,restarting=false;
  async function call(payload){
   const response=await fetch('/api/session-renewal',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',cache:'no-store',
    signal:AbortSignal.timeout(4000),body:JSON.stringify({...payload,browserToken})});
@@ -20,6 +20,15 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
   }catch{}
  }
  restoreRestart();
+ async function restart(){
+  if(restarting||!restartPath)return;restarting=true;button.disabled=true;button.textContent='Starting new session…';
+  try{
+   const response=await fetch('/sessions/'+encodeURIComponent(sessionId)+'/end',{method:'POST',headers:{authorization:'Bearer '+browserToken},
+    credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(4000)});
+   if(!response.ok&&response.status!==404)throw Error('restart_unavailable');
+   window.top.location.assign(restartPath);
+  }catch{restarting=false;if(model.session)model.publish();else render({});}
+ }
  const awaitingScreen=()=>['connecting','waiting','disconnected'].includes(lastState)||
   (lastState==='paired'&&box.dataset.connectionVisible==='true');
  function syncRecovery(){
@@ -40,8 +49,8 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
   text.textContent=ended?(lastState==='expired'||state.expired?'Session expired. The last screen is not live.':'Session ended. The last screen is not live.'):state.pending?'Confirming session extension…':state.error||'Session expires in '+Math.max(1,Math.ceil((state.expiresAt-Date.now())/60000))+' minutes.';
   button.textContent=ended||recovering?'Restart session':'Keep session active';button.hidden=ended?!restartPath:false;
   if(!ended&&awaitingScreen())button.hidden=!recovering||recoverySince===null||Date.now()-recoverySince<15000;
-  button.disabled=ended||recovering?false:!state.canRenew;
-  button.onclick=()=>{if((ended||recovering)&&restartPath)window.top.location.assign(restartPath);else void model.renew();};
+  button.disabled=restarting||(ended||recovering?false:!state.canRenew);
+  button.onclick=()=>{if(ended||recovering)void restart();else void model.renew();};
   if(state.expired&&!expiredNotified){expiredNotified=true;onExpired();}
  };
  const model=new SessionRenewal({request:async payload=>{
@@ -63,7 +72,7 @@ export function mountRenewalUi({sessionId,browserToken,onExpired,root=document.b
   if(identity&&(identity.sessionId!==sessionId||identity.browserToken!==browserToken)){
    identityGeneration++;clearTimeout(retryTimer);clearTimeout(recoveryTimer);recoverySince=null;model.reset();
    sessionId=identity.sessionId;browserToken=identity.browserToken;
-   supported=false;checked=false;checking=false;inspectAttempts=0;restartPath=null;expiredNotified=false;restoreRestart();
+   supported=false;checked=false;checking=false;inspectAttempts=0;restartPath=null;expiredNotified=false;restarting=false;restoreRestart();
   }
   if(state==='paired'&&lastState!=='paired'&&!supported){checked=false;inspectAttempts=0;}
   lastState=state;

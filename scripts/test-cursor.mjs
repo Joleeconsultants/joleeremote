@@ -44,14 +44,11 @@ test('experimental I-beam flag exists and is off (disabled after look-wrong feed
   assert.match(html,/const EXPERIMENTAL_IBEAM_CONTRAST=false/);
   assert.match(html,/Set EXPERIMENTAL_IBEAM_CONTRAST=false/);
   const f=fixture();
-  const svg=vm.runInContext('EXPERIMENTAL_IBEAM_SVG',f);
-  const hx=vm.runInContext('EXPERIMENTAL_IBEAM_HX',f);
-  const hy=vm.runInContext('EXPERIMENTAL_IBEAM_HY',f);
   f.applyCursorFrame(f.cursorFromFrame({...cursor(),css:'text'}));
-  assert.equal(f.cursorEl.src,svg);
+  assert.match(f.cursorEl.src,/^data:image\/png;base64,/);
   assert.equal(f.nativeCursor,'text');
-  assert.equal(f.cursorHx,hx);
-  assert.equal(f.cursorHy,hy);
+  assert.equal(f.cursorHx,2);
+  assert.equal(f.cursorHy,3);
   f.applyCursorFrame(f.cursorFromFrame({...cursor(),css:'pointer'}));
   assert.match(f.cursorEl.src,/^data:image\/png;base64,/);
 });

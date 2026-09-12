@@ -6,9 +6,13 @@ const notice=viewer.match(/<div id="connection-status"[^>]*>.*?<\/div>/)[0];
 const stateInit=viewer.slice(viewer.indexOf('const sessionState=new SessionState('),viewer.indexOf('const renewalUi='));
 const browser=await chromium.launch({channel:'msedge',headless:true});
 try{
- const page=await browser.newPage();page.on('pageerror',e=>console.log('PAGE ERROR',e.message));let starts=0,request,unsupported=false,inspections=0,freshOnLoad=true;
+  const page=await browser.newPage();page.on('pageerror',e=>console.log('PAGE ERROR',e.message));let starts=0,ends=0,request,unsupported=false,inspections=0,freshOnLoad=true;
  await page.route('https://renewal.test/**',async route=>{
-  const path=new URL(route.request().url()).pathname;
+   const path=new URL(route.request().url()).pathname;
+   if(path==='/sessions/session/end'){
+    assert.equal(route.request().method(),'POST');assert.equal(route.request().headers().authorization,'Bearer browser');ends++;
+    return route.fulfill({status:204,body:''});
+   }
   if(path==='/api/session-renewal'){
    const body=route.request().postDataJSON();
    if(unsupported)return route.fulfill({status:409,body:'{}'});
@@ -85,7 +89,15 @@ try{
  assert.equal(await page.getByRole('button',{name:'Restart session'}).isVisible(),false);
  await keep.click();await page.waitForFunction(()=>document.querySelector('[role=status]').hidden);
  assert.equal(starts,3);
- unsupported=true;await page.reload();await page.waitForFunction(()=>!!window.ui);
- assert.equal(await keep.isVisible(),false);
- console.log('Edge explicit renewal, committed confirmation, expiry/restart and unsupported-agent hiding PASS.');
+  unsupported=true;await page.reload();await page.waitForFunction(()=>!!window.ui);
+  assert.equal(await keep.isVisible(),false);
+  // A user-requested recovery is an actual owner-authorized replacement: end
+  // the broken session, then navigate once through the normal mint route.
+  unsupported=false;freshOnLoad=false;await page.reload();await page.waitForFunction(()=>!!window.ui);
+  await page.evaluate(()=>{window.sessionState.set('waiting');window.ui.bind('waiting');});
+  await page.clock.fastForward(15000);
+  const replacement=page.waitForRequest(request=>new URL(request.url()).searchParams.get('clientId')==='client');
+  await page.getByRole('button',{name:'Restart session'}).click();await replacement;
+  assert.equal(ends,1);
+  console.log('Edge explicit renewal, owner-authorized replacement, expiry/restart and unsupported-agent hiding PASS.');
 }finally{await browser.close();}

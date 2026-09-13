@@ -140,6 +140,13 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
       return false;
     }
   }
+  function isPortraitOrientation() {
+    try {
+      return window.matchMedia("(orientation: portrait)").matches;
+    } catch (e) {
+      return (window.innerHeight || 0) >= (window.innerWidth || 0);
+    }
+  }
   function restoreKeyboardViewport() {
     if (!iframe) return;
     iframe.style.inset = "";
@@ -153,7 +160,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
   }
   function syncKeyboardViewport() {
     if (!MOBILE_KEYBOARD_VIEWPORT_SHIFT || !iframe) return;
-    if (!isCoarsePointerClient()) {
+    if (!isCoarsePointerClient() || !isPortraitOrientation()) {
       restoreKeyboardViewport();
       return;
     }

@@ -184,12 +184,16 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
     try { document.documentElement.classList.add("jolee-kbd-open"); } catch (e) {}
   }
   var kbdViewportTimer = null;
+  var streamGestureActive = false;
   function scheduleKeyboardViewportSync() {
     if (!MOBILE_KEYBOARD_VIEWPORT_SHIFT) return;
+    // Do not reflow the iframe mid-trackpad gesture (layout jump breaks deltas).
+    if (streamGestureActive) return;
     if (kbdViewportTimer) clearTimeout(kbdViewportTimer);
     // iOS animates the keyboard; debounce a couple frames.
     kbdViewportTimer = setTimeout(function () {
       kbdViewportTimer = null;
+      if (streamGestureActive) return;
       syncKeyboardViewport();
     }, 50);
   }
@@ -200,11 +204,8 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
   window.addEventListener("resize", scheduleKeyboardViewportSync);
   window.addEventListener("orientationchange", scheduleKeyboardViewportSync);
   assist.addEventListener("focus", scheduleKeyboardViewportSync);
-  assist.addEventListener("blur", function () {
-    // After dismiss animation, restore full layout.
-    setTimeout(scheduleKeyboardViewportSync, 120);
-    setTimeout(scheduleKeyboardViewportSync, 320);
-  });
+  // Restore comes from visualViewport resize as the OSK animates away — not
+  // from assist blur (that races the first trackpad touch and breaks gestures).
 
   window.addEventListener("requestFileUpload", function () {
     fileUpload.click();
@@ -217,7 +218,13 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
   window.addEventListener("message", function (event) {
     if (event.origin !== location.origin || event.source !== iframe.contentWindow) return;
     var msg = event.data;
-    if (!msg || typeof msg !== "object" || msg.type !== "statsUpdate") return;
+    if (!msg || typeof msg !== "object") return;
+    if (msg.type === "streamGesture") {
+      streamGestureActive = !!msg.active;
+      if (!streamGestureActive) scheduleKeyboardViewportSync();
+      return;
+    }
+    if (msg.type !== "statsUpdate") return;
     window.system_stats = msg.system_stats || {};
     window.gpu_stats = msg.gpu_stats || null;
     window.fps = Number.isFinite(msg.fps) ? msg.fps : 0;

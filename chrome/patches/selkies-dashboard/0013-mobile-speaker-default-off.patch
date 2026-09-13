@@ -1,0 +1,15 @@
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index 0000000..0000000 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -1501,7 +1501,10 @@ function Sidebar() {
+   const [hoveredItem, setHoveredItem] = useState(null);
+   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+   const [isVideoActive, setIsVideoActive] = useState(true);
+-  const [isAudioActive, setIsAudioActive] = useState(true);
++  // Touch/mobile: speaker off by default (no localStorage; session only).
++  // Core starts the same way via coarse-pointer default in viewer.html.
++  const [isAudioActive, setIsAudioActive] = useState(() => !isMobileClient);
+   const [isMicrophoneActive, setIsMicrophoneActive] = useState(false);
+   const [isWebcamActive, setIsWebcamActive] = useState(false);
+   const [isGamepadEnabled, setIsGamepadEnabled] = useState(true);

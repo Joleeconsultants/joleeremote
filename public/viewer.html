@@ -1180,6 +1180,9 @@ const MOBILE_KEYBOARD_VIEWPORT_SHIFT=(()=>{
 const viewerEmbedded=params.get("embedded")==="1";
 if(MOBILE_KEYBOARD_VIEWPORT_SHIFT){try{canvas.tabIndex=-1;}catch{}}
 const mainEl=document.querySelector("main");
+// Baseline visible height (pre-OSK). Avoid innerHeight-only compare — mobile Chrome
+// often shrinks innerHeight with the OSK so that check never fires.
+let viewerKbdBaselineH=0;
 function restoreViewerKeyboardViewport(){
   if(!mainEl)return;
   mainEl.style.transform="";
@@ -1198,10 +1201,25 @@ function syncViewerKeyboardViewport(){
   if(!coarse||!portrait){restoreViewerKeyboardViewport();return;}
   const vv=window.visualViewport;
   if(!vv)return;
-  const layoutH=window.innerHeight||document.documentElement.clientHeight||0;
-  if(!layoutH)return;
-  const keyboardLikely=vv.height<layoutH*0.85||(layoutH-vv.height-vv.offsetTop)>80;
-  if(!keyboardLikely){restoreViewerKeyboardViewport();return;}
+  const innerH=window.innerHeight||0;
+  const clientH=(document.documentElement&&document.documentElement.clientHeight)||0;
+  const vvCover=vv.height+(vv.offsetTop||0);
+  const assistFocused=!!(vk&&document.activeElement===vk);
+  const shrinkVsBaseline=viewerKbdBaselineH>0&&(
+    (viewerKbdBaselineH-vv.height-(vv.offsetTop||0))>80||
+    vv.height<viewerKbdBaselineH*0.85
+  );
+  const keyboardLikely=assistFocused||shrinkVsBaseline;
+  if(!keyboardLikely){
+    const candidate=Math.max(vvCover,innerH,clientH);
+    if(candidate>0)viewerKbdBaselineH=Math.max(viewerKbdBaselineH,candidate);
+    restoreViewerKeyboardViewport();
+    return;
+  }
+  if(!viewerKbdBaselineH){
+    const seed=Math.max(vvCover,innerH,clientH);
+    if(seed>0)viewerKbdBaselineH=seed;
+  }
   mainEl.style.transform="";
   mainEl.style.position="fixed";
   mainEl.style.top=Math.max(0,vv.offsetTop)+"px";

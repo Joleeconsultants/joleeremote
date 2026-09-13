@@ -126,8 +126,8 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
   });
   // Mobile OSK: pin #jolee-core to visualViewport (portrait mobile) so trackpad
   // sits in the area above the keyboard. Restores when keyboard dismisses.
-  // Feature flag default ON. Disable with ?kbd_shift=0 (or enable with =1).
-  var MOBILE_KEYBOARD_VIEWPORT_SHIFT = true;
+  // Feature flag default OFF until validated. Enable with ?kbd_shift=1 (disable with =0).
+  var MOBILE_KEYBOARD_VIEWPORT_SHIFT = false;
   try {
     var kbdFlag = new URLSearchParams(location.search).get("kbd_shift");
     if (kbdFlag === "0" || kbdFlag === "false") MOBILE_KEYBOARD_VIEWPORT_SHIFT = false;

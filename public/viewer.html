@@ -1199,15 +1199,14 @@ function syncViewerKeyboardViewport(){
   if(!vv)return;
   const layoutH=window.innerHeight||document.documentElement.clientHeight||0;
   if(!layoutH)return;
-  const kb=Math.max(0,Math.round(layoutH-vv.height-vv.offsetTop));
-  if(kb<80){restoreViewerKeyboardViewport();return;}
-  // Elevate — keep size; translate so trackpad hit-testing stays stable.
-  mainEl.style.position="";
-  mainEl.style.top="";
-  mainEl.style.left="";
-  mainEl.style.width="";
-  mainEl.style.height="";
-  mainEl.style.transform="translateY(-"+kb+"px)";
+  const keyboardLikely=vv.height<layoutH*0.85||(layoutH-vv.height-vv.offsetTop)>80;
+  if(!keyboardLikely){restoreViewerKeyboardViewport();return;}
+  mainEl.style.transform="";
+  mainEl.style.position="fixed";
+  mainEl.style.top=Math.max(0,vv.offsetTop)+"px";
+  mainEl.style.left="0";
+  mainEl.style.width="100%";
+  mainEl.style.height=Math.max(1,Math.floor(vv.height))+"px";
   try{document.documentElement.classList.add("jolee-kbd-open");}catch{}
 }
 let viewerKbdTimer=null;
@@ -1572,7 +1571,17 @@ canvas.addEventListener("touchstart",e=>{
   if(!trackpadMode)return;
   e.preventDefault();
   if(!sessionPaired||displayTransition.blocked)return;
-  canvas.focus();unlockAudioFromGesture();showTrackpadCursor();
+  // Keep parent OSK up while using trackpad (flag on): do not focus canvas.
+  if(MOBILE_KEYBOARD_VIEWPORT_SHIFT){
+    try{canvas.blur();}catch{}
+    try{
+      const a=window.parent!==window&&window.parent.document.getElementById("keyboard-input-assist");
+      if(a)a.focus({preventScroll:true});
+    }catch{}
+  }else{
+    canvas.focus();
+  }
+  unlockAudioFromGesture();showTrackpadCursor();
   const points=trackpadPoints(e.touches);
   clearTimeout(trackpadTimer);
   if(!trackpadGesture){

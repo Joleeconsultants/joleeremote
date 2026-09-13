@@ -1167,6 +1167,64 @@ function showVirtualKeyboard(){
   // Parent shell owns #keyboard-input-assist + OSK (Selkies). Do not steal
   // focus to canvas/vk — that was the mobile keyboard regression.
 }
+// Standalone viewer only: when embedded, parent index.html owns viewport shift.
+// Flag default ON; ?kbd_shift=0 disables.
+const MOBILE_KEYBOARD_VIEWPORT_SHIFT=(()=>{
+  try{
+    const v=params.get("kbd_shift");
+    if(v==="0"||v==="false")return false;
+    if(v==="1"||v==="true")return true;
+  }catch{}
+  return true;
+})();
+const viewerEmbedded=params.get("embedded")==="1";
+const mainEl=document.querySelector("main");
+function restoreViewerKeyboardViewport(){
+  if(!mainEl)return;
+  mainEl.style.position="";
+  mainEl.style.top="";
+  mainEl.style.left="";
+  mainEl.style.width="";
+  mainEl.style.height="";
+  try{document.documentElement.classList.remove("jolee-kbd-open");}catch{}
+}
+function syncViewerKeyboardViewport(){
+  if(!MOBILE_KEYBOARD_VIEWPORT_SHIFT||viewerEmbedded||!mainEl)return;
+  let coarse=false;
+  try{coarse=window.matchMedia("(pointer: coarse)").matches||window.matchMedia("(hover: none)").matches;}catch{}
+  if(!coarse){restoreViewerKeyboardViewport();return;}
+  const vv=window.visualViewport;
+  if(!vv)return;
+  const layoutH=window.innerHeight||document.documentElement.clientHeight||0;
+  if(!layoutH)return;
+  const keyboardLikely=vv.height<layoutH*0.85||(layoutH-vv.height-vv.offsetTop)>80;
+  if(!keyboardLikely){restoreViewerKeyboardViewport();return;}
+  mainEl.style.position="fixed";
+  mainEl.style.top=Math.max(0,vv.offsetTop)+"px";
+  mainEl.style.left="0";
+  mainEl.style.width="100%";
+  mainEl.style.height=Math.max(1,Math.floor(vv.height))+"px";
+  try{document.documentElement.classList.add("jolee-kbd-open");}catch{}
+}
+let viewerKbdTimer=null;
+function scheduleViewerKeyboardViewportSync(){
+  if(!MOBILE_KEYBOARD_VIEWPORT_SHIFT||viewerEmbedded)return;
+  if(viewerKbdTimer)clearTimeout(viewerKbdTimer);
+  viewerKbdTimer=setTimeout(()=>{viewerKbdTimer=null;syncViewerKeyboardViewport();},50);
+}
+if(MOBILE_KEYBOARD_VIEWPORT_SHIFT&&!viewerEmbedded&&window.visualViewport){
+  window.visualViewport.addEventListener("resize",scheduleViewerKeyboardViewportSync);
+  window.visualViewport.addEventListener("scroll",scheduleViewerKeyboardViewportSync);
+  window.addEventListener("resize",scheduleViewerKeyboardViewportSync);
+  window.addEventListener("orientationchange",scheduleViewerKeyboardViewportSync);
+  if(vk){
+    vk.addEventListener("focus",scheduleViewerKeyboardViewportSync);
+    vk.addEventListener("blur",()=>{
+      setTimeout(scheduleViewerKeyboardViewportSync,120);
+      setTimeout(scheduleViewerKeyboardViewportSync,320);
+    });
+  }
+}
 function clipboardUpdateFromUI(text){
   const {id}=beginClipboardRequest('text');
   const maxChars=Number.isInteger(agentStats.clipboard_max_chars)&&agentStats.clipboard_max_chars>0?Math.min(16384,agentStats.clipboard_max_chars):16384;

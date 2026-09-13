@@ -1190,9 +1190,10 @@ function restoreViewerKeyboardViewport(){
 }
 function syncViewerKeyboardViewport(){
   if(!MOBILE_KEYBOARD_VIEWPORT_SHIFT||viewerEmbedded||!mainEl)return;
-  let coarse=false;
+  let coarse=false,portrait=false;
   try{coarse=window.matchMedia("(pointer: coarse)").matches||window.matchMedia("(hover: none)").matches;}catch{}
-  if(!coarse){restoreViewerKeyboardViewport();return;}
+  try{portrait=window.matchMedia("(orientation: portrait)").matches;}catch{portrait=(window.innerHeight||0)>=(window.innerWidth||0);}
+  if(!coarse||!portrait){restoreViewerKeyboardViewport();return;}
   const vv=window.visualViewport;
   if(!vv)return;
   const layoutH=window.innerHeight||document.documentElement.clientHeight||0;

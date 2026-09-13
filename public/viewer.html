@@ -1175,7 +1175,7 @@ const MOBILE_KEYBOARD_VIEWPORT_SHIFT=(()=>{
     if(v==="0"||v==="false")return false;
     if(v==="1"||v==="true")return true;
   }catch{}
-  return true;
+  return false; // default OFF until validated
 })();
 const viewerEmbedded=params.get("embedded")==="1";
 const mainEl=document.querySelector("main");

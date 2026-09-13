@@ -1685,12 +1685,7 @@ canvas.addEventListener("pointerdown",(e)=>{
 window.addEventListener("pointerup",(e)=>{if(!trackpadMode||e.pointerType!=="touch")pointerInput.up(e);});
 canvas.addEventListener("pointercancel",(e)=>{pointerInput.lost(e);hideDrawnCursor();});
 canvas.addEventListener("lostpointercapture",(e)=>pointerInput.lost(e));
-window.addEventListener("blur",()=>{
-  pointerInput.cancel();resetTrackpadGesture();
-  // Parent OSK focus blurs this iframe; keep the trackpad cursor visible.
-  if(trackpadMode)showTrackpadCursor();
-  else hideDrawnCursor();
-});
+window.addEventListener("blur",()=>{pointerInput.cancel();resetTrackpadGesture();hideDrawnCursor();});
 window.addEventListener("pagehide",()=>{pointerInput.cancel();resetTrackpadGesture();hideDrawnCursor();});
 document.addEventListener("visibilitychange",()=>{if(document.hidden){pointerInput.cancel();resetTrackpadGesture();hideDrawnCursor();}});
 canvas.addEventListener("pointerenter",(e)=>{

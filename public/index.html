@@ -186,11 +186,16 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
     try { document.documentElement.classList.add("jolee-kbd-open"); } catch (e) {}
   }
   var kbdViewportTimer = null;
+  var keepOskUntil = 0;
+  var streamGestureActive = false;
   function scheduleKeyboardViewportSync() {
     if (!MOBILE_KEYBOARD_VIEWPORT_SHIFT) return;
+    // Avoid pin reflow mid-trackpad gesture (layout jump breaks deltas).
+    if (streamGestureActive) return;
     if (kbdViewportTimer) clearTimeout(kbdViewportTimer);
     kbdViewportTimer = setTimeout(function () {
       kbdViewportTimer = null;
+      if (streamGestureActive) return;
       syncKeyboardViewport();
     }, 50);
   }
@@ -201,6 +206,19 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
   window.addEventListener("resize", scheduleKeyboardViewportSync);
   window.addEventListener("orientationchange", scheduleKeyboardViewportSync);
   assist.addEventListener("focus", scheduleKeyboardViewportSync);
+  // Trackpad touch blurs assist (touch outside input). Reclaim focus briefly so OSK stays.
+  assist.addEventListener("blur", function () {
+    if (!MOBILE_KEYBOARD_VIEWPORT_SHIFT) return;
+    if (Date.now() > keepOskUntil) return;
+    setTimeout(function () {
+      if (!MOBILE_KEYBOARD_VIEWPORT_SHIFT) return;
+      if (Date.now() > keepOskUntil) return;
+      if (document.activeElement === assist) return;
+      try { assist.focus({ preventScroll: true }); } catch (e) {
+        try { assist.focus(); } catch (e2) {}
+      }
+    }, 0);
+  });
 
   window.addEventListener("requestFileUpload", function () {
     fileUpload.click();
@@ -213,7 +231,18 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
   window.addEventListener("message", function (event) {
     if (event.origin !== location.origin || event.source !== iframe.contentWindow) return;
     var msg = event.data;
-    if (!msg || typeof msg !== "object" || msg.type !== "statsUpdate") return;
+    if (!msg || typeof msg !== "object") return;
+    if (msg.type === "streamGesture") {
+      if (!MOBILE_KEYBOARD_VIEWPORT_SHIFT) return;
+      streamGestureActive = !!msg.active;
+      if (streamGestureActive) keepOskUntil = Date.now() + 800;
+      else {
+        keepOskUntil = Date.now() + 100;
+        scheduleKeyboardViewportSync();
+      }
+      return;
+    }
+    if (msg.type !== "statsUpdate") return;
     window.system_stats = msg.system_stats || {};
     window.gpu_stats = msg.gpu_stats || null;
     window.fps = Number.isFinite(msg.fps) ? msg.fps : 0;

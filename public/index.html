@@ -124,8 +124,8 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
     assist.addEventListener("input", function (e) {
       if (!composing && !e.isComposing) commitAssistText();
   });
-  // Mobile OSK: elevate #jolee-core (translateY) by keyboard height so trackpad
-  // stays usable above the keyboard. Restores when keyboard dismisses.
+  // Mobile OSK: pin #jolee-core to visualViewport (portrait mobile) so trackpad
+  // sits in the area above the keyboard. Restores when keyboard dismisses.
   // Feature flag default ON. Disable with ?kbd_shift=0 (or enable with =1).
   var MOBILE_KEYBOARD_VIEWPORT_SHIFT = true;
   try {
@@ -169,22 +169,20 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
     if (!vv) return;
     var layoutH = window.innerHeight || document.documentElement.clientHeight || 0;
     if (!layoutH) return;
-    // OSK height: layout viewport minus visible visual viewport.
-    var kb = Math.max(0, Math.round(layoutH - vv.height - vv.offsetTop));
-    if (kb < 80) {
+    // Pin exactly to the visible viewport (same as earlier — looked right).
+    var keyboardLikely = vv.height < layoutH * 0.85 || (layoutH - vv.height - vv.offsetTop) > 80;
+    if (!keyboardLikely) {
       restoreKeyboardViewport();
       return;
     }
-    // Elevate (translate) — keep full iframe size so trackpad hit-testing stays stable.
-    // Shrinking height was breaking trackpad; lift instead.
-    iframe.style.inset = "";
-    iframe.style.top = "";
-    iframe.style.left = "";
-    iframe.style.right = "";
-    iframe.style.bottom = "";
-    iframe.style.width = "";
-    iframe.style.height = "";
-    iframe.style.transform = "translateY(-" + kb + "px)";
+    iframe.style.transform = "";
+    iframe.style.inset = "auto";
+    iframe.style.top = Math.max(0, vv.offsetTop) + "px";
+    iframe.style.left = "0";
+    iframe.style.right = "0";
+    iframe.style.bottom = "auto";
+    iframe.style.width = "100%";
+    iframe.style.height = Math.max(1, Math.floor(vv.height)) + "px";
     try { document.documentElement.classList.add("jolee-kbd-open"); } catch (e) {}
   }
   var kbdViewportTimer = null;

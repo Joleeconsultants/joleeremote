@@ -96,7 +96,8 @@ try {
   assert.equal(await page.locator('.beta-label').count(),0);
   await page.frameLocator('#jolee-core').locator('body').evaluate(()=>parent.postMessage({type:'betaFeatures',microphoneBeta:true,printingBeta:true},location.origin));
   await page.waitForFunction(()=>document.querySelector('#audioInputSelect')?.textContent.includes('No browser microphone found'));
-  assert.match(await page.locator('label[for="audioInputSelect"]').innerText(),/Beta/);
+  assert.equal(await page.locator('.beta-label').count(),0);
+  assert.doesNotMatch(await page.locator('label[for="audioInputSelect"]').innerText(),/Beta/);
   await page.frameLocator('#jolee-core').locator('body').evaluate(()=>{
     parent.postMessage({type:'pipelineStatusUpdate',microphone:false,error:'NotFoundError'},location.origin);
   });
@@ -181,9 +182,9 @@ try {
   assert.equal(await page.locator('#hidpiToggle').getAttribute('aria-pressed'),hidpiBefore==='true'?'false':'true');
   // Touch users need an actual notice: a hover-only disabled title cannot help.
   await page.setViewportSize({width:390,height:844});
-  assert.equal(await page.getByRole('button',{name:'Microphone (Beta)',exact:true}).count(),0);
+  assert.equal(await page.getByRole('button',{name:'Microphone',exact:true}).count(),0);
   await page.frameLocator('#jolee-core').locator('body').evaluate(()=>parent.postMessage({type:'betaFeatures',microphoneBeta:true,printingBeta:true},location.origin));
-  assert(await page.getByRole('button',{name:'Microphone (Beta)',exact:true}).isDisabled());
+  assert(await page.getByRole('button',{name:'Microphone',exact:true}).isDisabled());
   await page.getByText('Audio Settings',{exact:true}).click();
   const reportBitrate=()=>page.frameLocator('#jolee-core').locator('body').evaluate(()=>parent.postMessage({type:'statsUpdate',audio_bitrate_supported:true,audio_bitrate_choices:[96000,128000,160000,192000],audio_bitrate_effective:96000},location.origin));
   await reportBitrate();

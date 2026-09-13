@@ -69,7 +69,7 @@ index 3416a14..dd257b2 100644
          {(showCoreButtons || showKeyboardTile || showTrackpadTile) && (
            <div className="sidebar-action-buttons">
              {showCoreButtons && (renderableSettings.videoToggle ?? true) && (
-@@ -3469,10 +3479,11 @@ function Sidebar() {
+@@ -3469,18 +3479,19 @@ function Sidebar() {
                  <SpeakerIcon />
                </button>
              )}
@@ -78,16 +78,15 @@ index 3416a14..dd257b2 100644
                <button
                  className={`action-button ${isMicrophoneActive ? "active" : ""}`}
                  onClick={handleMicrophoneToggle}
-+                aria-label="Microphone (Beta)"
++                aria-label="Microphone"
                  disabled={!microphoneReady && !isMicrophoneActive}
                  title={!microphoneReady ? microphoneUnavailable : t(
                    isMicrophoneActive
-@@ -3480,7 +3491,7 @@ function Sidebar() {
+                     ? "buttons.microphoneDisableTitle"
                      : "buttons.microphoneEnableTitle"
                  )}
                >
--                <MicrophoneIcon />
-+                <MicrophoneIcon /><span className="beta-label">Beta</span>
+                 <MicrophoneIcon />
                </button>
              )}
              {showCoreButtons && (renderableSettings.webcamToggle ?? true) && (
@@ -98,8 +97,7 @@ index 3416a14..dd257b2 100644
 -                    <div className="dev-setting-item">
 +                    {microphoneBeta && <div className="dev-setting-item">
                        <label htmlFor="audioInputSelect">
--                        {t("sections.audio.inputLabel")}
-+                        {t("sections.audio.inputLabel")} (Beta)
+                         {t("sections.audio.inputLabel")}
                        </label>
                        <select
                          id="audioInputSelect"

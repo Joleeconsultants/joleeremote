@@ -3517,7 +3517,7 @@ function Sidebar() {
               <button
                 className={`action-button ${isMicrophoneActive ? "active" : ""}`}
                 onClick={handleMicrophoneToggle}
-                aria-label="Microphone (Beta)"
+                aria-label="Microphone"
                 disabled={!microphoneReady && !isMicrophoneActive}
                 title={!microphoneReady ? microphoneUnavailable : t(
                   isMicrophoneActive
@@ -3525,7 +3525,7 @@ function Sidebar() {
                     : "buttons.microphoneEnableTitle"
                 )}
               >
-                <MicrophoneIcon /><span className="beta-label">Beta</span>
+                <MicrophoneIcon />
               </button>
             )}
             {showCoreButtons && (renderableSettings.webcamToggle ?? true) && (
@@ -4217,7 +4217,7 @@ function Sidebar() {
                     )}
                     {microphoneBeta && <div className="dev-setting-item">
                       <label htmlFor="audioInputSelect">
-                        {t("sections.audio.inputLabel")} (Beta)
+                        {t("sections.audio.inputLabel")}
                       </label>
                       <select
                         id="audioInputSelect"

@@ -2,7 +2,7 @@
 
 <img src="docs/assets/jolee-remote.png" alt="Jolee Remote" width="128" />
 
-Build a remote desktop browser↔agent session pairing on Cloudflare Durable Objects.
+Build a remote desktop browser↔agent session pairing on Cloudflare Durable Objects and Selkies UI.
 
 Mint a session, pair one browser WebSocket with one outbound agent WebSocket, forward opaque `frame` / `input` bytes, hibernate, and tear down on TTL or peer drop.
 

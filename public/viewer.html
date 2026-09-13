@@ -1181,6 +1181,7 @@ const viewerEmbedded=params.get("embedded")==="1";
 const mainEl=document.querySelector("main");
 function restoreViewerKeyboardViewport(){
   if(!mainEl)return;
+  mainEl.style.transform="";
   mainEl.style.position="";
   mainEl.style.top="";
   mainEl.style.left="";
@@ -1198,13 +1199,15 @@ function syncViewerKeyboardViewport(){
   if(!vv)return;
   const layoutH=window.innerHeight||document.documentElement.clientHeight||0;
   if(!layoutH)return;
-  const keyboardLikely=vv.height<layoutH*0.85||(layoutH-vv.height-vv.offsetTop)>80;
-  if(!keyboardLikely){restoreViewerKeyboardViewport();return;}
-  mainEl.style.position="fixed";
-  mainEl.style.top=Math.max(0,vv.offsetTop)+"px";
-  mainEl.style.left="0";
-  mainEl.style.width="100%";
-  mainEl.style.height=Math.max(1,Math.floor(vv.height))+"px";
+  const kb=Math.max(0,Math.round(layoutH-vv.height-vv.offsetTop));
+  if(kb<80){restoreViewerKeyboardViewport();return;}
+  // Elevate — keep size; translate so trackpad hit-testing stays stable.
+  mainEl.style.position="";
+  mainEl.style.top="";
+  mainEl.style.left="";
+  mainEl.style.width="";
+  mainEl.style.height="";
+  mainEl.style.transform="translateY(-"+kb+"px)";
   try{document.documentElement.classList.add("jolee-kbd-open");}catch{}
 }
 let viewerKbdTimer=null;
@@ -1569,14 +1572,7 @@ canvas.addEventListener("touchstart",e=>{
   if(!trackpadMode)return;
   e.preventDefault();
   if(!sessionPaired||displayTransition.blocked)return;
-  // When kbd_shift feature is on, skip canvas.focus() so parent OSK stays up.
-  // Flag off restores stock focus behavior.
-  if(MOBILE_KEYBOARD_VIEWPORT_SHIFT){
-    unlockAudioFromGesture();showTrackpadCursor();
-    if(window.parent!==window)window.parent.postMessage({type:"streamGesture",active:true},window.location.origin);
-  }else{
-    canvas.focus();unlockAudioFromGesture();showTrackpadCursor();
-  }
+  canvas.focus();unlockAudioFromGesture();showTrackpadCursor();
   const points=trackpadPoints(e.touches);
   clearTimeout(trackpadTimer);
   if(!trackpadGesture){
@@ -1641,11 +1637,7 @@ function endTrackpadTouch(e){
   if(!trackpadMode)return;
   e.preventDefault();clearTimeout(trackpadTimer);
   const g=trackpadGesture;if(!g)return;
-  if(e.type==="touchcancel"){
-    resetTrackpadGesture();
-    if(MOBILE_KEYBOARD_VIEWPORT_SHIFT&&window.parent!==window)window.parent.postMessage({type:"streamGesture",active:false},window.location.origin);
-    return;
-  }
+  if(e.type==="touchcancel"){resetTrackpadGesture();return;}
   // Account for movement delivered only on release, and wait for every finger.
   if(trackpadPoints(e.changedTouches).some(p=>{
     const start=g.origins.find(o=>o.id===p.id);
@@ -1654,7 +1646,6 @@ function endTrackpadTouch(e){
   if(e.touches.length){g.points=trackpadPoints(e.touches);return;}
   if(!g.moved&&performance.now()-g.started<=250&&g.max<=2)trackpadClick(g.max===2?2:0);
   resetTrackpadGesture();showTrackpadCursor();
-  if(MOBILE_KEYBOARD_VIEWPORT_SHIFT&&window.parent!==window)window.parent.postMessage({type:"streamGesture",active:false},window.location.origin);
 }
 canvas.addEventListener("touchend",endTrackpadTouch,{passive:false});
 canvas.addEventListener("touchcancel",endTrackpadTouch,{passive:false});

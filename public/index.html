@@ -147,6 +147,9 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
       return (window.innerHeight || 0) >= (window.innerWidth || 0);
     }
   }
+  // Baseline visible height (pre-OSK). Do not compare vv to innerHeight alone:
+  // on iOS/Android Chrome, innerHeight often shrinks with the OSK so that check never fires.
+  var kbdBaselineH = 0;
   function restoreKeyboardViewport() {
     if (!iframe) return;
     iframe.style.transform = "";
@@ -167,13 +170,26 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden}
     }
     var vv = window.visualViewport;
     if (!vv) return;
-    var layoutH = window.innerHeight || document.documentElement.clientHeight || 0;
-    if (!layoutH) return;
-    // Pin exactly to the visible viewport (same as earlier — looked right).
-    var keyboardLikely = vv.height < layoutH * 0.85 || (layoutH - vv.height - vv.offsetTop) > 80;
+    var innerH = window.innerHeight || 0;
+    var clientH = (document.documentElement && document.documentElement.clientHeight) || 0;
+    var vvCover = vv.height + (vv.offsetTop || 0);
+    var assistFocused = document.activeElement === assist;
+    var keepOsk = Date.now() <= keepOskUntil;
+    var shrinkVsBaseline = kbdBaselineH > 0 && (
+      (kbdBaselineH - vv.height - (vv.offsetTop || 0)) > 80 ||
+      vv.height < kbdBaselineH * 0.85
+    );
+    // Open if assist focused / keep-OSK reclaim window, OR visible area shrunk vs baseline.
+    var keyboardLikely = assistFocused || keepOsk || shrinkVsBaseline;
     if (!keyboardLikely) {
+      var candidate = Math.max(vvCover, innerH, clientH);
+      if (candidate > 0) kbdBaselineH = Math.max(kbdBaselineH, candidate);
       restoreKeyboardViewport();
       return;
+    }
+    if (!kbdBaselineH) {
+      var seed = Math.max(vvCover, innerH, clientH);
+      if (seed > 0) kbdBaselineH = seed;
     }
     iframe.style.transform = "";
     iframe.style.inset = "auto";

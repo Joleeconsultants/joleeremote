@@ -1569,10 +1569,14 @@ canvas.addEventListener("touchstart",e=>{
   if(!trackpadMode)return;
   e.preventDefault();
   if(!sessionPaired||displayTransition.blocked)return;
-  // Do not canvas.focus() — that blurs parent #keyboard-input-assist and
-  // dismisses the OSK mid-gesture (breaks trackpad-with-keyboard).
-  unlockAudioFromGesture();showTrackpadCursor();
-  if(window.parent!==window)window.parent.postMessage({type:"streamGesture",active:true},window.location.origin);
+  // When kbd_shift feature is on, skip canvas.focus() so parent OSK stays up.
+  // Flag off restores stock focus behavior.
+  if(MOBILE_KEYBOARD_VIEWPORT_SHIFT){
+    unlockAudioFromGesture();showTrackpadCursor();
+    if(window.parent!==window)window.parent.postMessage({type:"streamGesture",active:true},window.location.origin);
+  }else{
+    canvas.focus();unlockAudioFromGesture();showTrackpadCursor();
+  }
   const points=trackpadPoints(e.touches);
   clearTimeout(trackpadTimer);
   if(!trackpadGesture){
@@ -1639,7 +1643,7 @@ function endTrackpadTouch(e){
   const g=trackpadGesture;if(!g)return;
   if(e.type==="touchcancel"){
     resetTrackpadGesture();
-    if(window.parent!==window)window.parent.postMessage({type:"streamGesture",active:false},window.location.origin);
+    if(MOBILE_KEYBOARD_VIEWPORT_SHIFT&&window.parent!==window)window.parent.postMessage({type:"streamGesture",active:false},window.location.origin);
     return;
   }
   // Account for movement delivered only on release, and wait for every finger.
@@ -1650,7 +1654,7 @@ function endTrackpadTouch(e){
   if(e.touches.length){g.points=trackpadPoints(e.touches);return;}
   if(!g.moved&&performance.now()-g.started<=250&&g.max<=2)trackpadClick(g.max===2?2:0);
   resetTrackpadGesture();showTrackpadCursor();
-  if(window.parent!==window)window.parent.postMessage({type:"streamGesture",active:false},window.location.origin);
+  if(MOBILE_KEYBOARD_VIEWPORT_SHIFT&&window.parent!==window)window.parent.postMessage({type:"streamGesture",active:false},window.location.origin);
 }
 canvas.addEventListener("touchend",endTrackpadTouch,{passive:false});
 canvas.addEventListener("touchcancel",endTrackpadTouch,{passive:false});

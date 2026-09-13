@@ -1501,7 +1501,9 @@ function Sidebar() {
   const [hoveredItem, setHoveredItem] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [isVideoActive, setIsVideoActive] = useState(true);
-  const [isAudioActive, setIsAudioActive] = useState(true);
+  // Touch/mobile: speaker off by default (no localStorage; session only).
+  // Core starts the same way via coarse-pointer default in viewer.html.
+  const [isAudioActive, setIsAudioActive] = useState(() => !isMobileClient);
   const [isMicrophoneActive, setIsMicrophoneActive] = useState(false);
   const [isWebcamActive, setIsWebcamActive] = useState(false);
   const [isGamepadEnabled, setIsGamepadEnabled] = useState(true);

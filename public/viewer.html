@@ -70,7 +70,7 @@ let session=params.get("session")||"";
 let token=hashParams.get("token")||params.get("token")||"";
 let hop=params.get("hop")||"";
 let socket=null, scaleLocally=window.matchMedia("(pointer: coarse)").matches, antiAliasing=true;
-let audioEnabled=true, videoEnabled=true, audioSinkId="";
+let audioEnabled=!window.matchMedia("(pointer: coarse)").matches, videoEnabled=true, audioSinkId="";
 // Deferred until a suitable production-signed open-source Windows driver is available.
 let microphoneFeatureEnabled=false, printingFeatureEnabled=false;
 let webcamGen=0,webcamStarting=false;
@@ -681,6 +681,7 @@ class RemoteAudioPlayer {
   }
 }
 const remoteAudio=new RemoteAudioPlayer();
+remoteAudio.enabled=audioEnabled;
 let audioCodecState={choices:[],effective:null};
 const negotiatedAudio=new NegotiatedAudioDecoder({output:data=>remoteAudio.decodedAudio(data),fallback:()=>audioControl.pcm()});
 const audioControl=new AudioControl({send:message=>sendInput(message),
@@ -1777,6 +1778,7 @@ const uploadControl=new UploadControl({
 applyScale();
 applySmoothing();
 applyCursorMode();
+setAudioEnabled(audioEnabled);
 window.addEventListener('resize',scheduleScreenResize);
 if(isTouchPrimaryClient()){
   syncTrackpadForOrientation();

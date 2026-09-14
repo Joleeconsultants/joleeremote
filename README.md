@@ -2,8 +2,6 @@
 
 <img src="docs/assets/jolee-remote.png" alt="Jolee Remote" width="128" />
 
-<img src="docs/assets/session-ui.png" alt="Jolee Remote session UI" width="100%" />
-
 Build a remote desktop browser↔agent session pairing on Cloudflare Durable Objects and Selkies UI.
 
 Mint a session, pair one browser WebSocket with one outbound agent WebSocket, forward opaque `frame` / `input` bytes, hibernate, and tear down on TTL or peer drop.
@@ -11,6 +9,12 @@ Mint a session, pair one browser WebSocket with one outbound agent WebSocket, fo
 You bring auth, devices, and capture/agent logic. There is no hosted demo — deploy the Worker to your own Cloudflare account.
 
 **Selkies chrome** at `/` is the product session UI (modified Selkies dashboard chrome, not the Selkies streaming stack). `/viewer.html` is the canvas hole that chrome iframes.
+
+### Session UI
+
+Live session chrome: always-on sidebar (stats, settings, input/clipboard, files, audio), remote desktop canvas, and agent-drawn cursor overlay. Apps / Sharing / Gaming stay out of scope until wired.
+
+<img src="docs/assets/session-ui.png" alt="Jolee Remote session UI — Selkies chrome sidebar and remote desktop canvas" width="720" />
 
 ## Quick start
 

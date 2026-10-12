@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "js-yaml": "^5.2.3",
+    "js-yaml": "^5.4.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
